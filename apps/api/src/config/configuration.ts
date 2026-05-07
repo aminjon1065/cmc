@@ -1,0 +1,46 @@
+import { z } from "zod";
+
+/**
+ * Centralised env-driven configuration. Validated at startup so the process
+ * fails fast on misconfiguration rather than at first use.
+ */
+const EnvSchema = z.object({
+  NODE_ENV: z
+    .enum(["development", "test", "production"])
+    .default("development"),
+  PORT: z.coerce.number().int().positive().default(3001),
+  LOG_LEVEL: z
+    .enum(["error", "warn", "info", "debug", "verbose"])
+    .default("info"),
+
+  CORS_ORIGINS: z
+    .string()
+    .default("http://localhost:3000")
+    .transform((v) => v.split(",").map((s) => s.trim()).filter(Boolean)),
+
+  DATABASE_URL: z.string().url(),
+  REDIS_URL: z.string().url(),
+
+  S3_ENDPOINT: z.string().url(),
+  S3_REGION: z.string().default("us-east-1"),
+  S3_ACCESS_KEY: z.string().min(1),
+  S3_SECRET_KEY: z.string().min(1),
+  S3_BUCKET_FILES: z.string().min(1),
+  S3_FORCE_PATH_STYLE: z
+    .string()
+    .default("true")
+    .transform((v) => v.toLowerCase() === "true"),
+});
+
+export type AppConfig = z.infer<typeof EnvSchema>;
+
+export function loadConfig(): AppConfig {
+  const parsed = EnvSchema.safeParse(process.env);
+  if (!parsed.success) {
+    const errors = parsed.error.errors
+      .map((e) => `  ${e.path.join(".")}: ${e.message}`)
+      .join("\n");
+    throw new Error(`Invalid environment configuration:\n${errors}`);
+  }
+  return parsed.data;
+}

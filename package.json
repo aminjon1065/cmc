@@ -1,0 +1,31 @@
+{
+  "name": "cmc",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Unified Enterprise Operational Intelligence Platform — monorepo root",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=9"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
+    "infra:up": "docker compose -f infra/docker-compose.yml --env-file infra/.env up -d",
+    "infra:down": "docker compose -f infra/docker-compose.yml --env-file infra/.env down",
+    "infra:logs": "docker compose -f infra/docker-compose.yml --env-file infra/.env logs -f",
+    "infra:reset": "docker compose -f infra/docker-compose.yml --env-file infra/.env down -v",
+    "infra:ps": "docker compose -f infra/docker-compose.yml --env-file infra/.env ps"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2",
+    "prettier": "^3.4.2",
+    "@types/node": "^22.10.2"
+  }
+}
