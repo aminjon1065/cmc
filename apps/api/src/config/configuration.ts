@@ -30,6 +30,18 @@ const EnvSchema = z.object({
     .string()
     .default("true")
     .transform((v) => v.toLowerCase() === "true"),
+
+  // --- Auth / JWT ---
+  JWT_SECRET: z.string().min(32, "JWT_SECRET must be at least 32 characters"),
+  JWT_EXPIRES_IN: z.string().default("1d"),
+  JWT_ISSUER: z.string().default("cmc"),
+
+  // --- Seed (only required when running `pnpm seed`) ---
+  SEED_TENANT_SLUG: z.string().default("default"),
+  SEED_TENANT_NAME: z.string().default("Default Tenant"),
+  SEED_ADMIN_EMAIL: z.string().email().default("admin@cmc.local"),
+  SEED_ADMIN_PASSWORD: z.string().min(8).default("admin123456"),
+  SEED_ADMIN_NAME: z.string().default("Platform Admin"),
 });
 
 export type AppConfig = z.infer<typeof EnvSchema>;

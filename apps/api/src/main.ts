@@ -1,4 +1,9 @@
 import "reflect-metadata";
+// Load .env before any code reads process.env. Without this, the validation
+// in main.ts (which runs before NestJS's ConfigModule) sees empty env vars.
+import { config as loadDotenv } from "dotenv";
+loadDotenv();
+
 import { NestFactory } from "@nestjs/core";
 import { Logger, ValidationPipe } from "@nestjs/common";
 import { AppModule } from "./app.module";
