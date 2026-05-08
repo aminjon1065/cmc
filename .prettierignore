@@ -14,6 +14,9 @@ coverage/
 # Generated
 **/migrations/meta/
 pnpm-lock.yaml
+**/test-results/
+**/playwright-report/
+**/.last-run.json
 
 # Don't reformat ToR — it's a long-form spec, prose-managed by hand.
 docs/ToR.md

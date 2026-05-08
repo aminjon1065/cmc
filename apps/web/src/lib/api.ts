@@ -23,12 +23,20 @@ export async function apiFetch<T>(
   init: RequestInit = {},
 ): Promise<T> {
   const url = `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
+
+  // IMPORTANT: spreading a `Headers` object via `{...init.headers}` silently
+  // drops every header (Headers stores entries internally, not as own enumerable
+  // properties). Build the final Headers via the `Headers` constructor and
+  // .set so callers can pass any HeadersInit shape — plain object, array of
+  // tuples, or Headers — without losing what they set.
+  const headers = new Headers(init.headers ?? {});
+  if (!headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
   const res = await fetch(url, {
     ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...init.headers,
-    },
+    headers,
     cache: init.cache ?? "no-store",
   });
 
@@ -40,6 +48,16 @@ export async function apiFetch<T>(
       // ignore parse errors; body stays undefined
     }
     throw new ApiError(res.status, `API ${res.status} on ${path}`, body);
+  }
+
+  // 204 No Content (and friends — empty Content-Length) carry no body;
+  // calling res.json() throws "Unexpected end of JSON input".
+  if (
+    res.status === 204 ||
+    res.status === 205 ||
+    res.headers.get("content-length") === "0"
+  ) {
+    return undefined as T;
   }
 
   return res.json() as Promise<T>;
