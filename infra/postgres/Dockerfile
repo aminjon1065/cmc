@@ -1,4 +1,4 @@
-FROM postgis/postgis:16-3.4
+FROM postgis/postgis:17-3.5
 
 # Add pgvector to the PostGIS-enabled base image so a single Postgres instance
 # covers OLTP, spatial, and vector workloads (per ADR-0001).
