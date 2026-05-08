@@ -14,10 +14,14 @@ out/
 coverage/
 .nyc_output/
 
-# Env / secrets
+# Env / secrets — every flavour, except the *.example templates that we
+# keep checked in.
 .env
 .env.local
 .env.*.local
+.env.test
+.env.production
+.env.development
 infra/.env
 
 # Logs

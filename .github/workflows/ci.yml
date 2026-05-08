@@ -51,10 +51,10 @@ jobs:
       - name: Build
         run: pnpm build
 
-  migrations:
-    name: Migrations + seed (against fresh Postgres)
+  integration:
+    name: Integration (migrations + seed + e2e tests)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -71,13 +71,15 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      # We can't use GitHub Actions' `services:` block here — our Postgres
-      # image is built locally from infra/postgres/Dockerfile (PostGIS +
-      # pgvector + init scripts). Build it then run by hand.
-      - name: Build custom Postgres image
+      # ---------- Postgres ----------
+      # Custom image built from infra/postgres/Dockerfile (PostGIS +
+      # pgvector + init scripts that create the cmc_app role on first
+      # boot). Can't use GHA services: directly because services don't
+      # accept a Dockerfile.
+      - name: Build Postgres image
         run: docker build -t cmc-postgres:ci ./infra/postgres
 
-      - name: Start Postgres (with init scripts mounted)
+      - name: Start Postgres
         run: |
           docker run -d --name cmc-postgres-ci \
             -e POSTGRES_USER=cmc \
@@ -88,24 +90,49 @@ jobs:
             cmc-postgres:ci
           for i in {1..30}; do
             if docker exec cmc-postgres-ci pg_isready -U cmc -d cmc >/dev/null 2>&1; then
-              echo "Postgres ready after ${i} attempts"
-              exit 0
+              echo "Postgres ready after ${i} attempts"; exit 0
             fi
             sleep 2
           done
-          echo "Postgres did not become ready in time"
-          docker logs cmc-postgres-ci
-          exit 1
+          echo "Postgres did not become ready"; docker logs cmc-postgres-ci; exit 1
 
-      - name: Build workspace packages required by migrate/seed
+      # ---------- MinIO ----------
+      # Documents-lifecycle e2e tests do real PUT/GET against MinIO via
+      # pre-signed URLs, so we run a real instance. Bucket is created
+      # via mc to mirror the dev infra behaviour.
+      - name: Start MinIO
+        run: |
+          docker run -d --name cmc-minio-ci \
+            -e MINIO_ROOT_USER=cmc-admin \
+            -e MINIO_ROOT_PASSWORD=cmc_dev_minio_change_me \
+            -p 9000:9000 -p 9001:9001 \
+            minio/minio:RELEASE.2024-12-18T13-15-44Z \
+            server /data --console-address ":9001"
+          for i in {1..30}; do
+            if curl -fsS http://localhost:9000/minio/health/live >/dev/null 2>&1; then
+              echo "MinIO ready after ${i} attempts"; exit 0
+            fi
+            sleep 1
+          done
+          echo "MinIO did not become ready"; docker logs cmc-minio-ci; exit 1
+
+      - name: Create cmc-files bucket
+        run: |
+          docker run --rm --network host \
+            -e MC_HOST_local=http://cmc-admin:cmc_dev_minio_change_me@localhost:9000 \
+            minio/mc:RELEASE.2024-11-21T17-21-54Z \
+            mb --ignore-existing local/cmc-files
+
+      # ---------- Migrations + seed (against the cmc DB) ----------
+      - name: Build workspace packages
         run: pnpm --filter @cmc/contracts --filter @cmc/db build
 
-      - name: Apply migrations
+      - name: Apply migrations to cmc
         env:
           DATABASE_OWNER_URL: postgresql://cmc:cmc_dev_password_change_me@localhost:5432/cmc
         run: pnpm --filter @cmc/db migrate
 
-      - name: Schema sanity check
+      - name: Schema sanity (policies + roles)
         run: |
           docker exec cmc-postgres-ci psql -U cmc -d cmc -c "\dt"
           docker exec cmc-postgres-ci psql -U cmc -d cmc -c \
@@ -113,19 +140,16 @@ jobs:
           docker exec cmc-postgres-ci psql -U cmc -d cmc -c \
             "SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname IN ('cmc', 'cmc_app');"
 
-      - name: Run seed
+      - name: Seed
         env:
-          # Seed connects with the owner URL; the loadConfig validator
-          # however still asserts every other URL is well-formed, so we
-          # supply dummy-but-shaped values for the unused ones.
           DATABASE_URL: postgresql://cmc_app:cmc_app_dev_password_change_me@localhost:5432/cmc
           DATABASE_OWNER_URL: postgresql://cmc:cmc_dev_password_change_me@localhost:5432/cmc
           REDIS_URL: redis://localhost:6379
           S3_ENDPOINT: http://localhost:9000
           S3_PUBLIC_ENDPOINT: http://localhost:9000
           S3_REGION: us-east-1
-          S3_ACCESS_KEY: ci-key
-          S3_SECRET_KEY: ci-secret
+          S3_ACCESS_KEY: cmc-admin
+          S3_SECRET_KEY: cmc_dev_minio_change_me
           S3_BUCKET_FILES: cmc-files
           S3_FORCE_PATH_STYLE: "true"
           JWT_SECRET: ci-test-jwt-secret-must-be-at-least-32-characters
@@ -137,11 +161,14 @@ jobs:
           DOCUMENTS_DOWNLOAD_URL_TTL_SEC: "300"
         run: pnpm --filter @cmc/api seed
 
-      - name: Verify seeded rows
-        run: |
-          docker exec cmc-postgres-ci psql -U cmc -d cmc -c "SELECT slug FROM tenants;"
-          docker exec cmc-postgres-ci psql -U cmc -d cmc -c "SELECT email FROM users;"
+      # ---------- e2e tests (Jest creates and uses cmc_test) ----------
+      - name: Provision .env.test for jest
+        run: cp apps/api/.env.test.example apps/api/.env.test
+
+      - name: Run e2e tests
+        run: pnpm --filter @cmc/api test
 
       - name: Tear down
         if: always()
-        run: docker rm -f cmc-postgres-ci 2>/dev/null || true
+        run: |
+          docker rm -f cmc-postgres-ci cmc-minio-ci 2>/dev/null || true

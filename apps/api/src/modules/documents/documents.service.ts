@@ -317,8 +317,11 @@ export class DocumentsService {
   // ---------- internal ----------
 
   private async markFailed(id: string, reason: string) {
-    await this.tenantDb.run((tx) =>
-      tx
+    // The caller throws right after this returns, which rolls back the
+    // request transaction. The status update has to survive that rollback,
+    // so write it through a fresh autonomous transaction.
+    await this.tenantDb.runPrivileged((privTx) =>
+      privTx
         .update(schema.documents)
         .set({
           status: "failed",
