@@ -7,21 +7,27 @@ import { NextResponse } from "next/server";
  * Anything under `/dashboard` requires an authenticated session;
  * unauthenticated visitors are redirected to /login with a `next` param so
  * we can return them after sign-in.
+ *
+ * Sessions whose JWT callback set `error` (refresh failed → API token is
+ * dead) are also bounced to /login: even if Auth.js's own session cookie
+ * is still valid, requests would fail with 401 once they hit the API.
  */
 export default auth((req) => {
   const { nextUrl } = req;
-  const isAuthed = !!req.auth;
+  const session = req.auth;
+  const isAuthed = !!session && !session.error;
 
-  const isProtected =
-    nextUrl.pathname.startsWith("/dashboard");
+  const isProtected = nextUrl.pathname.startsWith("/dashboard");
 
   if (isProtected && !isAuthed) {
     const loginUrl = new URL("/login", nextUrl);
     loginUrl.searchParams.set("next", nextUrl.pathname + nextUrl.search);
+    if (session?.error) {
+      loginUrl.searchParams.set("reason", session.error);
+    }
     return NextResponse.redirect(loginUrl);
   }
 
-  // If a logged-in user hits /login, send them straight to the dashboard.
   if (nextUrl.pathname === "/login" && isAuthed) {
     return NextResponse.redirect(new URL("/dashboard", nextUrl));
   }
@@ -30,6 +36,5 @@ export default auth((req) => {
 });
 
 export const config = {
-  // Skip Next.js internals and static assets so middleware only runs on pages.
   matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
 };

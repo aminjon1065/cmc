@@ -2,11 +2,14 @@ import { Global, Module, Logger, OnModuleDestroy } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { createDatabase, type Database } from "@cmc/db";
 import type { AppConfig } from "../../config/configuration";
+import { DB } from "./database.tokens";
+import { TenantDatabaseService } from "./tenant-database.service";
+import { TenantTransactionInterceptor } from "./tenant-transaction.interceptor";
 
-/**
- * Token used for DI of the Drizzle database. Inject with `@Inject(DB)`.
- */
-export const DB = Symbol("CMC_DB");
+// Re-export so existing `import { DB } from "./database.module"` code keeps
+// working. The actual symbol lives in database.tokens.ts to break the
+// circular import with TenantDatabaseService.
+export { DB };
 
 class DatabaseLifecycle implements OnModuleDestroy {
   private readonly logger = new Logger("Database");
@@ -19,10 +22,6 @@ class DatabaseLifecycle implements OnModuleDestroy {
   }
 }
 
-/**
- * Global database module. The Drizzle client is created once at app boot and
- * reused across all modules. Injection token: `DB`.
- */
 @Global()
 @Module({
   providers: [
@@ -39,7 +38,9 @@ class DatabaseLifecycle implements OnModuleDestroy {
       inject: [DB],
       useFactory: (database: Database) => new DatabaseLifecycle(database),
     },
+    TenantDatabaseService,
+    TenantTransactionInterceptor,
   ],
-  exports: [DB],
+  exports: [DB, TenantDatabaseService, TenantTransactionInterceptor],
 })
 export class DatabaseModule {}

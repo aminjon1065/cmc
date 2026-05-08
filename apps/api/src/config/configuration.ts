@@ -33,7 +33,12 @@ const EnvSchema = z.object({
 
   // --- Auth / JWT ---
   JWT_SECRET: z.string().min(32, "JWT_SECRET must be at least 32 characters"),
-  JWT_EXPIRES_IN: z.string().default("1d"),
+  JWT_ACCESS_TTL: z.string().default("15m"),
+  JWT_REFRESH_TTL_SEC: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(60 * 60 * 24 * 30), // 30 days
   JWT_ISSUER: z.string().default("cmc"),
 
   // --- Seed (only required when running `pnpm seed`) ---

@@ -25,12 +25,33 @@ export const AuthUserSchema = z.object({
 });
 export type AuthUser = z.infer<typeof AuthUserSchema>;
 
-export const LoginResponseSchema = z.object({
-  user: AuthUserSchema,
+/**
+ * Token bundle issued by /auth/login and /auth/refresh.
+ * - `accessToken` is short-lived (≈15 min) and goes on every API call.
+ * - `refreshToken` is long-lived (≈30 days), single-use, rotated on /auth/refresh.
+ */
+export const TokenBundleSchema = z.object({
   accessToken: z.string(),
-  expiresAt: z.string().datetime(),
+  accessTokenExpiresAt: z.string().datetime(),
+  refreshToken: z.string(),
+  refreshTokenExpiresAt: z.string().datetime(),
+});
+export type TokenBundle = z.infer<typeof TokenBundleSchema>;
+
+export const LoginResponseSchema = TokenBundleSchema.extend({
+  user: AuthUserSchema,
 });
 export type LoginResponse = z.infer<typeof LoginResponseSchema>;
+
+// ---------- Refresh ----------
+
+export const RefreshRequestSchema = z.object({
+  refreshToken: z.string().min(20).max(512),
+});
+export type RefreshRequest = z.infer<typeof RefreshRequestSchema>;
+
+export const RefreshResponseSchema = TokenBundleSchema;
+export type RefreshResponse = z.infer<typeof RefreshResponseSchema>;
 
 // ---------- /auth/me ----------
 
@@ -39,12 +60,31 @@ export const MeResponseSchema = z.object({
 });
 export type MeResponse = z.infer<typeof MeResponseSchema>;
 
+// ---------- Sessions ----------
+
+export const SessionSummarySchema = z.object({
+  id: z.string().uuid(),
+  ip: z.string().nullable(),
+  userAgent: z.string().nullable(),
+  createdAt: z.string().datetime(),
+  lastUsedAt: z.string().datetime(),
+  expiresAt: z.string().datetime(),
+  current: z.boolean(),
+});
+export type SessionSummary = z.infer<typeof SessionSummarySchema>;
+
+export const SessionsListResponseSchema = z.object({
+  sessions: z.array(SessionSummarySchema),
+});
+export type SessionsListResponse = z.infer<typeof SessionsListResponseSchema>;
+
 // ---------- JWT claims (internal but typed) ----------
 
 export const JwtClaimsSchema = z.object({
   sub: z.string().uuid(), // user id
   tid: z.string().uuid(), // tenant id
   ts: z.string(), // tenant slug (for human-friendly logs)
+  sid: z.string().uuid(), // session id
   email: z.string().email(),
   iat: z.number().int(),
   exp: z.number().int(),

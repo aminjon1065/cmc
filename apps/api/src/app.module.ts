@@ -1,7 +1,9 @@
 import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
+import { APP_INTERCEPTOR } from "@nestjs/core";
 import { ConfigModule } from "@nestjs/config";
 import { HealthModule } from "./modules/health/health.module";
 import { DatabaseModule } from "./modules/database/database.module";
+import { TenantTransactionInterceptor } from "./modules/database/tenant-transaction.interceptor";
 import { AuditModule } from "./modules/audit/audit.module";
 import { TenantsModule } from "./modules/tenants/tenants.module";
 import { UsersModule } from "./modules/users/users.module";
@@ -28,16 +30,20 @@ import { loadConfig } from "./config/configuration";
     TenantsModule,
     UsersModule,
     AuthModule,
-    // Each new bounded context gets its own module under src/modules/<name>/
-    // and is added here. Modules must not import each other's internals;
-    // cross-module collaboration goes through public services or events.
+  ],
+  providers: [
+    // Global interceptor: every authenticated HTTP handler runs inside a
+    // tenant-scoped transaction with `SET LOCAL app.tenant_id`. RLS does
+    // the rest. Anonymous requests (no tenantContext) skip the wrapper
+    // and use whatever scope the handler chooses (usually privileged).
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: TenantTransactionInterceptor,
+    },
   ],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    // Run on every route — establishes tenant context if a valid JWT is
-    // present, else passes through anonymously. Guards on individual routes
-    // enforce auth where required.
     consumer.apply(TenantContextMiddleware).forRoutes("*");
   }
 }

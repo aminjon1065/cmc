@@ -8,6 +8,20 @@
       "when": 1778182836247,
       "tag": "0000_initial",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1778184565866,
+      "tag": "0001_sessions",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778204456653,
+      "tag": "0002_rls_policies",
+      "breakpoints": true
     }
   ]
 }

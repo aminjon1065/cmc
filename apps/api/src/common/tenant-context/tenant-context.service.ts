@@ -10,6 +10,8 @@ export type TenantContext = {
   tenantId: string;
   tenantSlug: string;
   email: string;
+  /** Session id (`sid` claim on the access JWT). */
+  sessionId: string;
 };
 
 /**

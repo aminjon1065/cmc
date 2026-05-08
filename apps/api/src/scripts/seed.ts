@@ -4,11 +4,15 @@
  * Idempotent — running twice is safe; existing rows are left untouched.
  *
  * Run with:  pnpm --filter @cmc/api seed
+ *
+ * RLS bypass: this script uses the postgres `cmc` role (owner of the
+ * tables) which BYPASS RLS automatically; that's intentional — bootstrap
+ * has to run before any tenant context exists.
  */
 import "reflect-metadata";
 import { config as loadEnv } from "dotenv";
 import { resolve } from "node:path";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { createDatabase, schema } from "@cmc/db";
 import { loadConfig } from "../config/configuration";
 import { AuthService } from "../modules/auth/auth.service";
@@ -20,6 +24,10 @@ async function main() {
   const { db, close } = createDatabase(config.DATABASE_URL, { max: 4 });
 
   try {
+    // Mark this connection as a privileged session so RLS policies (once
+    // they exist) allow the cross-tenant inserts the seed performs.
+    await db.execute(sql.raw(`SET app.bypass_rls = 'on'`));
+
     // 1. Default tenant.
     let tenant = (
       await db
