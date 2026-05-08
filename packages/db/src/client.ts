@@ -11,10 +11,13 @@ export type Database = ReturnType<typeof createDatabase>;
  * In NestJS this is wired through a provider so the same instance is reused
  * across the request lifecycle.
  */
-export function createDatabase(connectionString: string, opts?: {
-  max?: number;
-  idleTimeout?: number;
-}) {
+export function createDatabase(
+  connectionString: string,
+  opts?: {
+    max?: number;
+    idleTimeout?: number;
+  },
+) {
   const client = postgres(connectionString, {
     max: opts?.max ?? 20,
     idle_timeout: opts?.idleTimeout ?? 30,

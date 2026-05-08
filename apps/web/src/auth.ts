@@ -116,7 +116,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
       // Subsequent calls (every session read): refresh if the access
       // token is close to expiring.
-      if (!token.accessToken || !token.accessTokenExpiresAt || !token.refreshToken) {
+      if (
+        !token.accessToken ||
+        !token.accessTokenExpiresAt ||
+        !token.refreshToken
+      ) {
         return token;
       }
 

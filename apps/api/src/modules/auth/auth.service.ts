@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  UnauthorizedException,
-} from "@nestjs/common";
+import { Injectable, Logger, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import * as argon2 from "argon2";
@@ -201,7 +197,13 @@ export class AuthService {
     // Look up tenant + user to fill the new access JWT.
     const tenant = await this.tenants.findById(session.tenantId);
     const user = await this.users.findById(session.userId);
-    if (!tenant || !user || tenant.deletedAt || user.deletedAt || !user.isActive) {
+    if (
+      !tenant ||
+      !user ||
+      tenant.deletedAt ||
+      user.deletedAt ||
+      !user.isActive
+    ) {
       await this.sessions.revoke(session.id, "admin");
       await this.audit.record({
         tenantId: session.tenantId,

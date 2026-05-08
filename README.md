@@ -46,19 +46,20 @@ Then:
 
 ## Common commands
 
-| Command | Purpose |
-|---|---|
-| `pnpm dev` | Start web + api in dev with hot reload |
-| `pnpm build` | Build all workspaces |
-| `pnpm typecheck` | TypeScript check across workspaces |
-| `pnpm lint` | Lint across workspaces |
-| `pnpm test` | Run all test suites |
-| `pnpm format` | Prettier-format all files |
-| `pnpm infra:up` | Start dev infrastructure containers |
-| `pnpm infra:down` | Stop containers (data preserved) |
-| `pnpm infra:reset` | Stop **and delete volumes** (fresh state) |
-| `pnpm infra:logs` | Tail logs from all infra containers |
-| `pnpm infra:ps` | Status of infra containers |
+| Command             | Purpose                                   |
+| ------------------- | ----------------------------------------- |
+| `pnpm dev`          | Start web + api in dev with hot reload    |
+| `pnpm build`        | Build all workspaces                      |
+| `pnpm typecheck`    | TypeScript check across workspaces        |
+| `pnpm lint`         | Lint across workspaces                    |
+| `pnpm test`         | Run all test suites                       |
+| `pnpm format`       | Prettier-format all files                 |
+| `pnpm format:check` | Verify formatting without writing (CI)    |
+| `pnpm infra:up`     | Start dev infrastructure containers       |
+| `pnpm infra:down`   | Stop containers (data preserved)          |
+| `pnpm infra:reset`  | Stop **and delete volumes** (fresh state) |
+| `pnpm infra:logs`   | Tail logs from all infra containers       |
+| `pnpm infra:ps`     | Status of infra containers                |
 
 ## Project conventions
 
@@ -69,6 +70,31 @@ Then:
 - **Idempotency.** All command handlers and event consumers are idempotent.
 - **Audit by default.** State-mutating actions append to the audit log.
 - **No paid third-party runtime dependencies** (see ToR §20.1 principle 11).
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push and PR to `main`. Two jobs:
+
+- **`verify`** — `pnpm install` (frozen lockfile, pnpm cache), then
+  `format:check`, `lint`, `typecheck`, `build` across the whole monorepo.
+- **`migrations`** — builds `infra/postgres/Dockerfile` (the PostGIS +
+  pgvector image), starts a fresh container with the init scripts mounted,
+  applies every Drizzle migration end-to-end, sanity-checks that RLS
+  policies and the `cmc_app` role were created, and runs the seed script.
+
+Per-branch concurrency cancels in-flight runs when a new commit lands on
+the same ref.
+
+After pushing the repo to GitHub, drop a status badge into this README:
+
+```markdown
+![CI](https://github.com/<owner>/<repo>/actions/workflows/ci.yml/badge.svg)
+```
+
+Dependabot (`.github/dependabot.yml`) opens weekly PRs for npm,
+GitHub Actions, and Docker base-image updates, grouped by ecosystem
+(NestJS, Next.js, Drizzle, AWS SDK, etc.) so a quiet week produces a
+small handful of PRs rather than dozens.
 
 ## Status
 

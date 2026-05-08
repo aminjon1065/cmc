@@ -8,8 +8,7 @@ loadEnv({ path: resolve(__dirname, "../../apps/api/.env") });
 
 // Drizzle-kit uses this URL for `generate` and `studio`. Both should run
 // with full DDL privileges, so prefer the owner URL when both are set.
-const databaseUrl =
-  process.env.DATABASE_OWNER_URL ?? process.env.DATABASE_URL;
+const databaseUrl = process.env.DATABASE_OWNER_URL ?? process.env.DATABASE_URL;
 if (!databaseUrl) {
   throw new Error(
     "DATABASE_OWNER_URL (or DATABASE_URL) is not set. Copy apps/api/.env.example to apps/api/.env or export it.",

@@ -14,9 +14,13 @@ export type ActionResult<T> =
   | { ok: true; data: T }
   | { ok: false; error: string };
 
-export async function initUploadAction(
-  input: UploadInitRequest,
-): Promise<ActionResult<{ documentId: string; uploadUrl: string; headers: Record<string, string> }>> {
+export async function initUploadAction(input: UploadInitRequest): Promise<
+  ActionResult<{
+    documentId: string;
+    uploadUrl: string;
+    headers: Record<string, string>;
+  }>
+> {
   const parsed = UploadInitRequestSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: "Invalid upload metadata." };

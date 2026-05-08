@@ -31,20 +31,20 @@ export class TenantTransactionInterceptor implements NestInterceptor {
     }
 
     return from(
-      this.tenantDb.runForTenant(tc.tenantId, () =>
-        // Bridge the rxjs handler back into the promise the transaction
-        // is awaiting — first emission resolves, errors reject.
-        new Promise<unknown[]>((resolve, reject) => {
-          const collected: unknown[] = [];
-          next.handle().subscribe({
-            next: (v) => collected.push(v),
-            error: reject,
-            complete: () => resolve(collected),
-          });
-        }),
+      this.tenantDb.runForTenant(
+        tc.tenantId,
+        () =>
+          // Bridge the rxjs handler back into the promise the transaction
+          // is awaiting — first emission resolves, errors reject.
+          new Promise<unknown[]>((resolve, reject) => {
+            const collected: unknown[] = [];
+            next.handle().subscribe({
+              next: (v) => collected.push(v),
+              error: reject,
+              complete: () => resolve(collected),
+            });
+          }),
       ),
-    ).pipe(
-      switchMap((collected) => from(collected as unknown[])),
-    );
+    ).pipe(switchMap((collected) => from(collected as unknown[])));
   }
 }

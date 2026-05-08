@@ -56,9 +56,10 @@ export class SessionsService {
 
   // ---------- CRUD ----------
 
-  async create(
-    input: CreateSessionInput,
-  ): Promise<{ session: typeof schema.sessions.$inferSelect; plainRefreshToken: string }> {
+  async create(input: CreateSessionInput): Promise<{
+    session: typeof schema.sessions.$inferSelect;
+    plainRefreshToken: string;
+  }> {
     const { plain, hash } = SessionsService.mintRefreshToken();
     const familyId = input.parent?.familyId ?? crypto.randomUUID();
     const parentId = input.parent?.parentSessionId ?? null;
@@ -150,7 +151,9 @@ export class SessionsService {
       tx
         .update(schema.sessions)
         .set({ revokedAt: sql`now()`, revokedReason: reason })
-        .where(and(eq(schema.sessions.id, id), isNull(schema.sessions.revokedAt))),
+        .where(
+          and(eq(schema.sessions.id, id), isNull(schema.sessions.revokedAt)),
+        ),
     );
   }
 
@@ -241,9 +244,7 @@ export class SessionsService {
 
       // Mint successor.
       const { plain, hash: newHash } = SessionsService.mintRefreshToken();
-      const newExpires = new Date(
-        Date.now() + refreshTokenLifetimeSec * 1000,
-      );
+      const newExpires = new Date(Date.now() + refreshTokenLifetimeSec * 1000);
 
       const [successor] = await tx
         .insert(schema.sessions)

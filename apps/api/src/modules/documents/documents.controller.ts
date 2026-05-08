@@ -83,9 +83,7 @@ export class DocumentsController {
 
   @Post("upload-init")
   @HttpCode(HttpStatus.CREATED)
-  async initUpload(
-    @Body() body: UploadInitDto,
-  ): Promise<UploadInitResponse> {
+  async initUpload(@Body() body: UploadInitDto): Promise<UploadInitResponse> {
     const { document, upload } = await this.documents.initUpload({
       name: body.name,
       mimeType: body.mimeType,
@@ -126,9 +124,7 @@ export class DocumentsController {
 
   @Delete(":id")
   @HttpCode(HttpStatus.NO_CONTENT)
-  async remove(
-    @Param("id", new ParseUUIDPipe()) id: string,
-  ): Promise<void> {
+  async remove(@Param("id", new ParseUUIDPipe()) id: string): Promise<void> {
     await this.documents.softDelete(id);
   }
 }

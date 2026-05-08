@@ -72,10 +72,7 @@ export const sessions = pgTable(
     tenantIdx: index("sessions_tenant_idx").on(t.tenantId),
     userIdx: index("sessions_user_idx").on(t.userId),
     familyIdx: index("sessions_family_idx").on(t.familyId),
-    activeUserIdx: index("sessions_active_user_idx").on(
-      t.userId,
-      t.revokedAt,
-    ),
+    activeUserIdx: index("sessions_active_user_idx").on(t.userId, t.revokedAt),
   }),
 );
 

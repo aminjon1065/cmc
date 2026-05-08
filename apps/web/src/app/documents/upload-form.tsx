@@ -30,9 +30,14 @@ export function UploadForm() {
 
     setState({ phase: "uploading", name: file.name, progress: 0 });
     try {
-      await uploadWithProgress(init.data.uploadUrl, init.data.headers, file, (p) => {
-        setState({ phase: "uploading", name: file.name, progress: p });
-      });
+      await uploadWithProgress(
+        init.data.uploadUrl,
+        init.data.headers,
+        file,
+        (p) => {
+          setState({ phase: "uploading", name: file.name, progress: p });
+        },
+      );
     } catch (err) {
       setState({
         phase: "error",

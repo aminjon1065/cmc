@@ -14,8 +14,7 @@ export const metadata: Metadata = {
 };
 
 async function fetchDocuments(): Promise<
-  | { ok: true; data: ListDocumentsResponse }
-  | { ok: false; error: string }
+  { ok: true; data: ListDocumentsResponse } | { ok: false; error: string }
 > {
   try {
     const raw = await authedApiFetch<unknown>("/documents");
@@ -74,7 +73,9 @@ export default async function DocumentsPage() {
         </h2>
         {!result.ok ? (
           <div className="m-6 rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm">
-            <p className="font-medium text-destructive">Couldn&apos;t load documents</p>
+            <p className="font-medium text-destructive">
+              Couldn&apos;t load documents
+            </p>
             <p className="mt-1 text-muted-foreground">{result.error}</p>
           </div>
         ) : result.data.documents.length === 0 ? (

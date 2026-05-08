@@ -1,0 +1,72 @@
+version: 2
+
+# Weekly dependency updates. Dependabot is GitHub-native and free —
+# satisfies the "no paid runtime/CI dependencies" rule from ADR-0001 §11.
+#
+# Updates are batched per ecosystem so a quiet week produces a small
+# number of PRs rather than one PR per package.
+
+updates:
+  # Root + all workspaces (pnpm).
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "07:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    versioning-strategy: increase
+    labels:
+      - "dependencies"
+      - "javascript"
+    groups:
+      nestjs:
+        patterns:
+          - "@nestjs/*"
+      next:
+        patterns:
+          - "next"
+          - "next-auth"
+          - "@auth/*"
+          - "react"
+          - "react-dom"
+          - "@types/react*"
+      drizzle:
+        patterns:
+          - "drizzle-orm"
+          - "drizzle-kit"
+          - "postgres"
+      aws:
+        patterns:
+          - "@aws-sdk/*"
+      types:
+        patterns:
+          - "@types/*"
+        exclude-patterns:
+          - "@types/react*"
+      typescript-eslint:
+        patterns:
+          - "@typescript-eslint/*"
+          - "eslint"
+          - "eslint-*"
+
+  # GitHub Actions versions.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "ci"
+
+  # Dockerfile base images.
+  - package-ecosystem: "docker"
+    directory: "/infra/postgres"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "docker"

@@ -10,7 +10,7 @@ The skeleton from ADR-0001 has no notion of "who is calling." Before any
 domain module can be built, we need:
 
 1. A way to authenticate users and prove identity to the API.
-2. A way to derive *tenant scope* from that identity — every business row
+2. A way to derive _tenant scope_ from that identity — every business row
    the platform touches carries `tenant_id`, and the platform must reject
    cross-tenant access by construction (ToR §3.2, principle of structural
    tenant isolation).
@@ -33,7 +33,7 @@ The API issues a single signed access token on `POST /auth/login`:
 - No refresh token, no server-side session table — yet.
 
 **Why HS256, not RS256:** at this stage the API is the only token issuer
-*and* the only verifier. Asymmetric signing pays off when there are
+_and_ the only verifier. Asymmetric signing pays off when there are
 multiple verifiers (e.g., independent services) that should not share the
 issuing key. We don't have that yet. RS256 + key rotation is added when
 the first independent service is extracted.
@@ -71,7 +71,7 @@ Auth.js (`next-auth@5.0.0-beta.25`) handles the browser session:
 - Credentials provider posts the user's email/password to the API's
   `/auth/login`.
 - The API JWT is captured in the `authorize()` return value.
-- Auth.js wraps it in its own *session* JWT (encrypted with `AUTH_SECRET`)
+- Auth.js wraps it in its own _session_ JWT (encrypted with `AUTH_SECRET`)
   and stores that in an HTTP-only cookie.
 - Server components / Route Handlers use `auth()` to read the session and
   forward `Authorization: Bearer <api jwt>` to the API via `authedApiFetch`.
@@ -111,6 +111,7 @@ packages compile before consumers.
 ## Consequences
 
 **Positive:**
+
 - One coherent identity surface across web + api.
 - Tenant scope is structural — domain services cannot accidentally serve
   cross-tenant data.
@@ -119,6 +120,7 @@ packages compile before consumers.
   reference for any future auth-touching feature.
 
 **Negative / known gaps (queued for follow-up auth iteration):**
+
 - **No revocation.** A stolen JWT remains valid until expiry. Mitigated
   by 1-day lifetime; resolved when sessions table + refresh tokens land.
 - **No MFA.** TOTP and WebAuthn are queued.

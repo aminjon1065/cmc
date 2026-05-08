@@ -10,8 +10,7 @@ export const metadata: Metadata = {
 };
 
 async function fetchMe(): Promise<
-  | { ok: true; data: MeResponse }
-  | { ok: false; error: string }
+  { ok: true; data: MeResponse } | { ok: false; error: string }
 > {
   try {
     const raw = await authedApiFetch<unknown>("/auth/me");
@@ -62,7 +61,9 @@ export default async function DashboardPage() {
       </nav>
 
       <section className="rounded-lg border bg-card p-6">
-        <h2 className="mb-4 text-lg font-medium">/auth/me (server-side fetch)</h2>
+        <h2 className="mb-4 text-lg font-medium">
+          /auth/me (server-side fetch)
+        </h2>
         {me.ok ? (
           <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs">
             {JSON.stringify(me.data, null, 2)}

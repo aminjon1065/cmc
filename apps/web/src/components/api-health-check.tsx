@@ -2,8 +2,7 @@ import { apiFetch, ApiError } from "@/lib/api";
 import type { HealthCheckResponse } from "@cmc/contracts";
 
 async function fetchHealth(): Promise<
-  | { ok: true; data: HealthCheckResponse }
-  | { ok: false; error: string }
+  { ok: true; data: HealthCheckResponse } | { ok: false; error: string }
 > {
   try {
     const data = await apiFetch<HealthCheckResponse>("/health");
@@ -39,9 +38,7 @@ export async function ApiHealthCheck() {
     <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
       <div>
         <dt className="text-muted-foreground">Status</dt>
-        <dd className="font-medium text-emerald-600">
-          {result.data.status}
-        </dd>
+        <dd className="font-medium text-emerald-600">{result.data.status}</dd>
       </div>
       <div>
         <dt className="text-muted-foreground">Version</dt>

@@ -227,10 +227,7 @@ export class DocumentsService {
         .select()
         .from(schema.documents)
         .where(
-          and(
-            eq(schema.documents.id, id),
-            isNull(schema.documents.deletedAt),
-          ),
+          and(eq(schema.documents.id, id), isNull(schema.documents.deletedAt)),
         )
         .limit(1),
     );

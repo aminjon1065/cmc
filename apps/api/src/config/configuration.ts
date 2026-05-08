@@ -16,7 +16,12 @@ const EnvSchema = z.object({
   CORS_ORIGINS: z
     .string()
     .default("http://localhost:3000")
-    .transform((v) => v.split(",").map((s) => s.trim()).filter(Boolean)),
+    .transform((v) =>
+      v
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+    ),
 
   DATABASE_URL: z.string().url(),
   /** Owner connection (superuser) — only used by the seed script. */
@@ -40,11 +45,7 @@ const EnvSchema = z.object({
     .int()
     .positive()
     .default(100 * 1024 * 1024),
-  DOCUMENTS_UPLOAD_URL_TTL_SEC: z.coerce
-    .number()
-    .int()
-    .positive()
-    .default(300),
+  DOCUMENTS_UPLOAD_URL_TTL_SEC: z.coerce.number().int().positive().default(300),
   DOCUMENTS_DOWNLOAD_URL_TTL_SEC: z.coerce
     .number()
     .int()

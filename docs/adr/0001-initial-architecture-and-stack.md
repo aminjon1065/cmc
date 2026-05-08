@@ -14,7 +14,7 @@ two hard constraints that diverge from the original ToR:
    principle 11).
 
 Platform feature scope from ToR remains intact as the long-term target. The constraints
-above only narrow the *infrastructure and operational complexity*, not the product surface.
+above only narrow the _infrastructure and operational complexity_, not the product surface.
 
 ## Decision
 
@@ -39,20 +39,20 @@ cmc/
 
 ### Stack
 
-| Layer | Choice | Rationale |
-|---|---|---|
-| Frontend / BFF | **Next.js 15** (App Router, RSC, Server Actions) | Single full-stack framework reduces solo-dev surface area |
-| Backend | **NestJS 10** (modular monolith) | Matches ToR; module boundaries enforceable via lint rules |
-| Language | TypeScript 5.x strict everywhere | One language across the stack |
-| ORM | **Drizzle ORM** | Closer to SQL, better PostGIS ergonomics than Prisma |
-| OLTP DB | **PostgreSQL 16** with **PostGIS 3.4** and **pgvector** | One DB covers OLTP + spatial + vector for the foreseeable future |
-| Cache / queues | Redis 7 | Standard, low-friction |
-| Object storage | MinIO single-node | S3-compatible, replaceable with cloud S3 with no code change |
-| Auth (web) | **Auth.js (NextAuth)** | Sessions + OAuth providers; offloads session UI |
-| Auth (api) | NestJS guard validating JWT issued by Auth.js | Standard JWT bearer pattern |
-| Build orchestration | Turborepo | Incremental builds across workspace |
-| Container runtime | Docker Compose | Single-host orchestration, no K8s |
-| Reverse proxy / TLS | Caddy (added at deploy step) | Automatic Let's Encrypt |
+| Layer               | Choice                                                  | Rationale                                                        |
+| ------------------- | ------------------------------------------------------- | ---------------------------------------------------------------- |
+| Frontend / BFF      | **Next.js 15** (App Router, RSC, Server Actions)        | Single full-stack framework reduces solo-dev surface area        |
+| Backend             | **NestJS 10** (modular monolith)                        | Matches ToR; module boundaries enforceable via lint rules        |
+| Language            | TypeScript 5.x strict everywhere                        | One language across the stack                                    |
+| ORM                 | **Drizzle ORM**                                         | Closer to SQL, better PostGIS ergonomics than Prisma             |
+| OLTP DB             | **PostgreSQL 16** with **PostGIS 3.4** and **pgvector** | One DB covers OLTP + spatial + vector for the foreseeable future |
+| Cache / queues      | Redis 7                                                 | Standard, low-friction                                           |
+| Object storage      | MinIO single-node                                       | S3-compatible, replaceable with cloud S3 with no code change     |
+| Auth (web)          | **Auth.js (NextAuth)**                                  | Sessions + OAuth providers; offloads session UI                  |
+| Auth (api)          | NestJS guard validating JWT issued by Auth.js           | Standard JWT bearer pattern                                      |
+| Build orchestration | Turborepo                                               | Incremental builds across workspace                              |
+| Container runtime   | Docker Compose                                          | Single-host orchestration, no K8s                                |
+| Reverse proxy / TLS | Caddy (added at deploy step)                            | Automatic Let's Encrypt                                          |
 
 ### Deferred (added when a module first needs it)
 
@@ -72,12 +72,14 @@ cmc/
 ## Consequences
 
 **Positive:**
+
 - One developer can hold the whole architecture in their head.
 - One `docker compose up` reproduces the full dev environment.
 - Migration path to multi-server / K8s / managed services is preserved by keeping
   module boundaries and event contracts clean from day one.
 
 **Negative:**
+
 - Single-host deployment is a single point of failure until DR is added.
 - Vertical scaling ceiling: ~one strong VPS or dedicated server.
 - Some ToR features (multi-region active-active, sovereign multi-DC) require a
@@ -86,6 +88,7 @@ cmc/
 ## Migration triggers
 
 Trigger a re-evaluation of this ADR when **any** of the following becomes true:
+
 - Concurrent users > 1000.
 - Postgres single-instance write throughput becomes the bottleneck.
 - Team grows past 3 engineers.

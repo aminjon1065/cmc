@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+.next/
+.turbo/
+dist/
+build/
+out/
+coverage/
+*.tsbuildinfo
+
+# Generated
+**/migrations/meta/
+pnpm-lock.yaml
+
+# Don't reformat ToR — it's a long-form spec, prose-managed by hand.
+docs/ToR.md
+
+# Env files (we have .env.example as the canonical template)
+.env
+.env.*
+
+# OS / IDE
+.DS_Store

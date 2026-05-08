@@ -42,13 +42,14 @@ within the next request, even though it's still cryptographically valid.
 ### 2. Refresh-token rotation with replay detection
 
 Login issues a token bundle:
+
 - **Access token** — JWT, 15 min, carries `sid`.
 - **Refresh token** — 48 random bytes (URL-safe), single-use, 30-day
   expiry, stored as SHA-256 hash.
 
 `POST /auth/refresh` rotates: the presented refresh is invalidated, a
-new session row is inserted in the same `family_id`, and a fresh access
-+ refresh pair is returned. Old session goes to
+new session row is inserted in the same `family_id`, and a fresh
+access/refresh pair is returned. The old session row is updated with
 `revoked_reason = 'rotation_superseded'`.
 
 **Replay detection:** if the presented refresh hash points at an
@@ -96,12 +97,12 @@ already refreshed.
 A new migration (`0002_rls_policies.sql`) enables RLS on every
 tenant-scoped table:
 
-| Table       | Policy                                              |
-|-------------|-----------------------------------------------------|
-| `users`     | `tenant_id = current_setting('app.tenant_id')` OR bypass |
-| `sessions`  | same                                                |
+| Table       | Policy                                                                                                  |
+| ----------- | ------------------------------------------------------------------------------------------------------- |
+| `users`     | `tenant_id = current_setting('app.tenant_id')` OR bypass                                                |
+| `sessions`  | same                                                                                                    |
 | `audit_log` | INSERT permissive (anonymous failures); SELECT scoped; UPDATE/DELETE blocked except in privileged scope |
-| `tenants`   | no RLS — source-of-truth, queried by id/slug only   |
+| `tenants`   | no RLS — source-of-truth, queried by id/slug only                                                       |
 
 `FORCE ROW LEVEL SECURITY` is set so the application's role (the table
 owner) is also subject to policies — without that, owners would silently
@@ -117,12 +118,12 @@ automatically.
 Services no longer hold a reference to a raw Drizzle client. They
 inject **`TenantDatabaseService`** and call:
 
-| Method | Purpose |
-|---|---|
-| `tenantDb.run(fn)` | Run a query against the active request's tenant tx. Throws if no tx is active. |
-| `tenantDb.runForTenant(id, fn)` | Open a new tenant-scoped tx (used by the interceptor; tests/jobs use this directly). |
-| `tenantDb.runPrivileged(fn)` | Open a tx with `app.bypass_rls = 'on'`. Used by login (cross-tenant user lookup), refresh (cross-tenant session lookup), audit's failure path, and the family-burn. **Try/finally resets the GUC so the bypass cannot leak via a Postgres SET-LOCAL-into-savepoint footgun.** |
-| `tenantDb.unsafeRoot()` | Returns the unwrapped Drizzle client. Loud warning logged on every call — only legitimate use is bootstrap/seed. |
+| Method                          | Purpose                                                                                                                                                                                                                                                                       |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tenantDb.run(fn)`              | Run a query against the active request's tenant tx. Throws if no tx is active.                                                                                                                                                                                                |
+| `tenantDb.runForTenant(id, fn)` | Open a new tenant-scoped tx (used by the interceptor; tests/jobs use this directly).                                                                                                                                                                                          |
+| `tenantDb.runPrivileged(fn)`    | Open a tx with `app.bypass_rls = 'on'`. Used by login (cross-tenant user lookup), refresh (cross-tenant session lookup), audit's failure path, and the family-burn. **Try/finally resets the GUC so the bypass cannot leak via a Postgres SET-LOCAL-into-savepoint footgun.** |
+| `tenantDb.unsafeRoot()`         | Returns the unwrapped Drizzle client. Loud warning logged on every call — only legitimate use is bootstrap/seed.                                                                                                                                                              |
 
 ### 8. Audit durability
 
@@ -135,6 +136,7 @@ with the action they record.
 ## Consequences
 
 **Positive:**
+
 - 15-minute window for any stolen access token. Logout is real.
 - Refresh-token theft is detected and confined: the attacker gets one
   rotation before the family burns down.
@@ -143,6 +145,7 @@ with the action they record.
 - Audit log is durable for the events that matter most (denials).
 
 **Negative / known gaps:**
+
 - **No Redis cache** for session-validity lookup yet. Every authenticated
   request does one indexed Postgres lookup on `sessions.id` — fine at
   current scale, will need caching when QPS rises.
