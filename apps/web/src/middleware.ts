@@ -17,7 +17,9 @@ export default auth((req) => {
   const session = req.auth;
   const isAuthed = !!session && !session.error;
 
-  const isProtected = nextUrl.pathname.startsWith("/dashboard");
+  const isProtected =
+    nextUrl.pathname.startsWith("/dashboard") ||
+    nextUrl.pathname.startsWith("/documents");
 
   if (isProtected && !isAuthed) {
     const loginUrl = new URL("/login", nextUrl);

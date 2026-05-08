@@ -6,10 +6,13 @@ import { resolve } from "node:path";
 // migration generation/execution). Override with the environment if already set.
 loadEnv({ path: resolve(__dirname, "../../apps/api/.env") });
 
-const databaseUrl = process.env.DATABASE_URL;
+// Drizzle-kit uses this URL for `generate` and `studio`. Both should run
+// with full DDL privileges, so prefer the owner URL when both are set.
+const databaseUrl =
+  process.env.DATABASE_OWNER_URL ?? process.env.DATABASE_URL;
 if (!databaseUrl) {
   throw new Error(
-    "DATABASE_URL is not set. Copy apps/api/.env.example to apps/api/.env or export DATABASE_URL.",
+    "DATABASE_OWNER_URL (or DATABASE_URL) is not set. Copy apps/api/.env.example to apps/api/.env or export it.",
   );
 }
 

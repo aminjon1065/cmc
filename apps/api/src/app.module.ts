@@ -8,6 +8,8 @@ import { AuditModule } from "./modules/audit/audit.module";
 import { TenantsModule } from "./modules/tenants/tenants.module";
 import { UsersModule } from "./modules/users/users.module";
 import { AuthModule } from "./modules/auth/auth.module";
+import { StorageModule } from "./modules/storage/storage.module";
+import { DocumentsModule } from "./modules/documents/documents.module";
 import { TenantContextModule } from "./common/tenant-context/tenant-context.module";
 import { TenantContextMiddleware } from "./common/tenant-context/tenant-context.middleware";
 import { loadConfig } from "./config/configuration";
@@ -24,12 +26,14 @@ import { loadConfig } from "./config/configuration";
     DatabaseModule,
     TenantContextModule,
     AuditModule,
+    StorageModule,
 
     // --- Domain modules ---
     HealthModule,
     TenantsModule,
     UsersModule,
     AuthModule,
+    DocumentsModule,
   ],
   providers: [
     // Global interceptor: every authenticated HTTP handler runs inside a

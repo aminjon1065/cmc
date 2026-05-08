@@ -21,11 +21,15 @@ loadEnv({ path: resolve(__dirname, "../../.env") });
 
 async function main() {
   const config = loadConfig();
-  const { db, close } = createDatabase(config.DATABASE_URL, { max: 4 });
+  // Seed connects as the owner (`cmc`) — that role legitimately bypasses
+  // RLS and has the privileges needed to bootstrap rows pre-tenant.
+  const ownerUrl = config.DATABASE_OWNER_URL ?? config.DATABASE_URL;
+  const { db, close } = createDatabase(ownerUrl, { max: 4 });
 
   try {
-    // Mark this connection as a privileged session so RLS policies (once
-    // they exist) allow the cross-tenant inserts the seed performs.
+    // Belt-and-suspenders: even owner connections will respect a SET if
+    // we ever switch to a non-superuser owner. This makes the bypass
+    // explicit and visible in audit/logs.
     await db.execute(sql.raw(`SET app.bypass_rls = 'on'`));
 
     // 1. Default tenant.

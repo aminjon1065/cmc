@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { auth } from "@/auth";
 import { authedApiFetch, ApiError } from "@/lib/server-api";
 import { type MeResponse, MeResponseSchema } from "@cmc/contracts";
@@ -50,6 +51,15 @@ export default async function DashboardPage() {
         </div>
         <SignOutButton />
       </header>
+
+      <nav className="flex flex-wrap gap-3">
+        <Link
+          href="/documents"
+          className="rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
+        >
+          Documents →
+        </Link>
+      </nav>
 
       <section className="rounded-lg border bg-card p-6">
         <h2 className="mb-4 text-lg font-medium">/auth/me (server-side fetch)</h2>

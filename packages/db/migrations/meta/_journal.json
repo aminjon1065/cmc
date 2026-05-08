@@ -22,6 +22,20 @@
       "when": 1778204456653,
       "tag": "0002_rls_policies",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1778212009149,
+      "tag": "0003_documents",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1778212013285,
+      "tag": "0004_documents_rls",
+      "breakpoints": true
     }
   ]
 }
