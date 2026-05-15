@@ -21,25 +21,49 @@ const API_BASE_URL =
  */
 const REFRESH_EARLY_MS = 60_000;
 
-async function refreshApiToken(refreshToken: string): Promise<{
+type RefreshResult = {
   accessToken: string;
   accessTokenExpiresAt: string;
   refreshToken: string;
   refreshTokenExpiresAt: string;
-} | null> {
-  try {
-    const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refreshToken }),
-    });
-    if (!res.ok) return null;
-    const json = await res.json();
-    const parsed = RefreshResponseSchema.safeParse(json);
-    return parsed.success ? parsed.data : null;
-  } catch {
-    return null;
-  }
+} | null;
+
+/**
+ * In-flight refresh deduplication.
+ *
+ * NextAuth's `jwt` callback runs on every server-side session read. When a
+ * page issues two parallel API calls near the refresh boundary, both
+ * invocations would race to /auth/refresh — the API's replay detection
+ * (single-use refresh tokens) would treat the second call as theft and
+ * revoke the entire session family. Cache the in-flight promise keyed by
+ * the presented refresh token so concurrent callers await the same rotation.
+ */
+const refreshInFlight = new Map<string, Promise<RefreshResult>>();
+
+async function refreshApiToken(refreshToken: string): Promise<RefreshResult> {
+  const cached = refreshInFlight.get(refreshToken);
+  if (cached) return cached;
+
+  const promise = (async (): Promise<RefreshResult> => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
+      });
+      if (!res.ok) return null;
+      const json = await res.json();
+      const parsed = RefreshResponseSchema.safeParse(json);
+      return parsed.success ? parsed.data : null;
+    } catch {
+      return null;
+    } finally {
+      refreshInFlight.delete(refreshToken);
+    }
+  })();
+
+  refreshInFlight.set(refreshToken, promise);
+  return promise;
 }
 
 /**
@@ -158,6 +182,30 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         | undefined;
       session.error = token.error as string | undefined;
       return session;
+    },
+  },
+  events: {
+    // Revoke the server-side session when the cookie is cleared. The local
+    // cookie is gone either way; we only ask the API to invalidate its half
+    // of the credential so a copy of the (now-cleared) refresh token cannot
+    // be used to mint new access tokens elsewhere.
+    async signOut(message) {
+      const token =
+        "token" in message && message.token
+          ? (message.token as { accessToken?: string })
+          : null;
+      if (!token?.accessToken) return;
+      try {
+        await fetch(`${API_BASE_URL}/auth/logout`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token.accessToken}`,
+            "Content-Type": "application/json",
+          },
+        });
+      } catch {
+        // Best-effort; the local sign-out has already proceeded.
+      }
     },
   },
 });

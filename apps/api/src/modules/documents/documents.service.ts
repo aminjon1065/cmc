@@ -89,6 +89,7 @@ export class DocumentsService {
       bucket,
       key: storageKey,
       contentType: input.mimeType,
+      contentLength: input.sizeBytes,
       ttlSec: ttl,
     });
 
@@ -188,7 +189,13 @@ export class DocumentsService {
       eq(schema.documents.status, "ready"),
     ];
     if (params.q) {
-      const pattern = `%${params.q}%`;
+      // Escape LIKE wildcards from user input so the search is a literal
+      // substring match, not a pattern. `\` itself must be escaped first.
+      const escaped = params.q
+        .replace(/\\/g, "\\\\")
+        .replace(/%/g, "\\%")
+        .replace(/_/g, "\\_");
+      const pattern = `%${escaped}%`;
       filters.push(
         or(
           ilike(schema.documents.name, pattern),
@@ -320,6 +327,11 @@ export class DocumentsService {
     // The caller throws right after this returns, which rolls back the
     // request transaction. The status update has to survive that rollback,
     // so write it through a fresh autonomous transaction.
+    //
+    // Defense in depth: this path bypasses RLS, so we add an explicit
+    // tenant_id predicate using the current context — a bug elsewhere
+    // cannot trick this into mutating another tenant's row.
+    const ctx = this.tenantContext.requireCurrent();
     await this.tenantDb.runPrivileged((privTx) =>
       privTx
         .update(schema.documents)
@@ -330,7 +342,12 @@ export class DocumentsService {
           })}::jsonb`,
           updatedAt: sql`now()`,
         })
-        .where(eq(schema.documents.id, id)),
+        .where(
+          and(
+            eq(schema.documents.id, id),
+            eq(schema.documents.tenantId, ctx.tenantId),
+          ),
+        ),
     );
   }
 
@@ -340,5 +357,6 @@ export class DocumentsService {
 }
 
 function clamp(n: number, min: number, max: number) {
+  if (!Number.isFinite(n)) return min;
   return Math.min(max, Math.max(min, n));
 }

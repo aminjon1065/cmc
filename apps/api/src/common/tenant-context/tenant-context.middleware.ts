@@ -1,9 +1,11 @@
 import { Injectable, Logger, NestMiddleware } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import type { Request, Response, NextFunction } from "express";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { schema } from "@cmc/db";
 import type { JwtClaims } from "@cmc/contracts";
+import type { AppConfig } from "../../config/configuration";
 import {
   TenantContextService,
   type TenantContext,
@@ -31,6 +33,7 @@ export class TenantContextMiddleware implements NestMiddleware {
     private readonly jwt: JwtService,
     private readonly tenantContext: TenantContextService,
     private readonly tenantDb: TenantDatabaseService,
+    private readonly config: ConfigService<AppConfig, true>,
   ) {}
 
   async use(req: Request, _res: Response, next: NextFunction) {
@@ -44,7 +47,13 @@ export class TenantContextMiddleware implements NestMiddleware {
 
     let claims: JwtClaims;
     try {
-      claims = this.jwt.verify<JwtClaims>(token);
+      // Pin algorithm + issuer so a future use of JWT_SECRET for any other
+      // token type (e.g. signup invite, share link) is not silently accepted
+      // as an access token.
+      claims = this.jwt.verify<JwtClaims>(token, {
+        algorithms: ["HS256"],
+        issuer: this.config.get("JWT_ISSUER", { infer: true }),
+      });
     } catch (err) {
       this.logger.debug(
         `Discarding invalid bearer token on ${req.method} ${req.url}: ${

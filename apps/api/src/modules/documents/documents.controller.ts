@@ -35,6 +35,16 @@ type DocumentRow = {
   updatedAt: Date;
 };
 
+// Reject non-numeric / negative / non-integer values from the query string
+// rather than letting them flow through `Number()` → `NaN` → `LIMIT NaN`
+// (which produces a 500). Service-side clamps the upper bound.
+function parsePositiveInt(raw: string | undefined): number | undefined {
+  if (raw == null || raw === "") return undefined;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) return undefined;
+  return n;
+}
+
 function toContract(row: DocumentRow): Document {
   return {
     id: row.id,
@@ -64,8 +74,8 @@ export class DocumentsController {
   ): Promise<ListDocumentsResponse> {
     const result = await this.documents.list({
       q: q?.trim() || undefined,
-      limit: limit ? Number(limit) : undefined,
-      offset: offset ? Number(offset) : undefined,
+      limit: parsePositiveInt(limit),
+      offset: parsePositiveInt(offset),
     });
     return {
       documents: result.items.map(toContract),

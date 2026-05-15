@@ -4,6 +4,13 @@ import { sql } from "drizzle-orm";
 import type { Database } from "@cmc/db";
 import { DB } from "./database.tokens";
 
+// Belt-and-suspenders even though `set_config(...)` is parameterised:
+// reject any tenantId that's not a canonical UUID before it touches the
+// database. Closes the door on every future caller that might pass a
+// less-validated value.
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * The Drizzle transaction handle as exposed inside `db.transaction(...)`.
  * We type it loosely as the runtime shape of the root db; Drizzle's tx
@@ -69,8 +76,17 @@ export class TenantDatabaseService {
     tenantId: string,
     fn: (tx: TenantTx) => Promise<T>,
   ): Promise<T> {
+    if (!UUID_RE.test(tenantId)) {
+      // RLS is the *only* tenant boundary. Refuse to open a scope on a
+      // value that the rest of the system would not recognise as a tenant.
+      throw new Error(`runForTenant called with non-UUID tenantId`);
+    }
     return this.database.db.transaction(async (tx) => {
-      await tx.execute(sql.raw(`SET LOCAL app.tenant_id = '${tenantId}'`));
+      // Use `set_config(name, value, is_local := true)` instead of raw
+      // `SET LOCAL ... = '${x}'` so the value flows through a bind
+      // parameter. SET syntax doesn't accept binds; set_config does and is
+      // semantically identical for string GUCs.
+      await tx.execute(sql`select set_config('app.tenant_id', ${tenantId}, true)`);
       return this.txStorage.run(tx, () => fn(tx));
     });
   }
@@ -92,12 +108,14 @@ export class TenantDatabaseService {
    */
   async runPrivileged<T>(fn: (tx: TenantTx) => Promise<T>): Promise<T> {
     return this.database.db.transaction(async (tx) => {
-      await tx.execute(sql.raw(`SET LOCAL app.bypass_rls = 'on'`));
+      await tx.execute(sql`select set_config('app.bypass_rls', 'on', true)`);
       try {
         return await this.txStorage.run(tx, () => fn(tx));
       } finally {
         try {
-          await tx.execute(sql.raw(`SET LOCAL app.bypass_rls = 'off'`));
+          await tx.execute(
+            sql`select set_config('app.bypass_rls', 'off', true)`,
+          );
         } catch {
           // Tx may already be aborted on the error path; nothing to do.
         }

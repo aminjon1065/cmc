@@ -53,17 +53,27 @@ export class StorageService {
     bucket: string;
     key: string;
     contentType: string;
-    contentLengthRange?: { min?: number; max?: number };
+    /** Exact size, in bytes. Embedded in the signature so the client cannot
+     *  upload more bytes than declared at upload-init. Without this S3 will
+     *  accept any size, and finalize() only catches it after the bytes are
+     *  already on disk. */
+    contentLength?: number;
     ttlSec: number;
   }): Promise<PresignedPut> {
     const cmd = new PutObjectCommand({
       Bucket: input.bucket,
       Key: input.key,
       ContentType: input.contentType,
+      ContentLength: input.contentLength,
     });
     const url = await getSignedUrl(this.publicClient, cmd, {
       expiresIn: input.ttlSec,
     });
+    // Content-Length is bound into the signature server-side; we do NOT
+    // return it as a client-set header. Browsers forbid setting
+    // Content-Length via XHR/fetch (they set it automatically from the
+    // body), and S3 will validate the auto-set value against the signed
+    // length on receipt.
     return {
       url,
       method: "PUT",

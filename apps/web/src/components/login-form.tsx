@@ -4,10 +4,23 @@ import { useState, type FormEvent } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 
+/**
+ * Only accept a same-origin path: must start with `/` and not `//` (which
+ * is a protocol-relative URL and would let an attacker redirect off-site
+ * via `?next=//evil.example/clone`).
+ */
+function safeNext(raw: string | null): string {
+  if (!raw) return "/dashboard";
+  if (!raw.startsWith("/") || raw.startsWith("//") || raw.startsWith("/\\")) {
+    return "/dashboard";
+  }
+  return raw;
+}
+
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const next = searchParams.get("next") ?? "/dashboard";
+  const next = safeNext(searchParams.get("next"));
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -36,21 +49,31 @@ export function LoginForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-4">
-      <label className="flex flex-col gap-1.5">
-        <span className="text-sm font-medium">Email</span>
+    <form onSubmit={onSubmit} className="flex flex-col gap-3">
+      <div>
+        <label className="cmc-label mb-1.5 block">Email or username</label>
         <input
           type="email"
           autoComplete="email"
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="rounded-md border border-input bg-background px-3 py-2 text-sm outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
-          placeholder="admin@cmc.local"
+          className="cmc-input cmc-input-lg"
+          placeholder="rustam.aliyev@cdtj.gov"
         />
-      </label>
-      <label className="flex flex-col gap-1.5">
-        <span className="text-sm font-medium">Password</span>
+      </div>
+
+      <div>
+        <div className="mb-1.5 flex items-center justify-between">
+          <label className="cmc-label">Password</label>
+          <button
+            type="button"
+            className="text-[10px]"
+            style={{ color: "var(--c-accent)" }}
+          >
+            Need help?
+          </button>
+        </div>
         <input
           type="password"
           autoComplete="current-password"
@@ -58,12 +81,20 @@ export function LoginForm() {
           minLength={8}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="rounded-md border border-input bg-background px-3 py-2 text-sm outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          className="cmc-input cmc-input-lg"
+          placeholder="••••••••••"
         />
-      </label>
+      </div>
 
       {error && (
-        <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+        <p
+          className="rounded-md px-3 py-2 text-[12px]"
+          style={{
+            color: "var(--c-sev-1)",
+            background: "var(--c-sev-1-soft)",
+            border: "0.5px solid color-mix(in srgb, var(--c-sev-1) 30%, transparent)",
+          }}
+        >
           {error}
         </p>
       )}
@@ -71,9 +102,9 @@ export function LoginForm() {
       <button
         type="submit"
         disabled={pending}
-        className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+        className="cmc-btn cmc-btn-primary cmc-btn-lg mt-1.5 w-full justify-center disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {pending ? "Signing in…" : "Sign in"}
+        {pending ? "Signing in…" : "Continue"}
       </button>
     </form>
   );

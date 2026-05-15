@@ -2,59 +2,223 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================
+   CMC · Operational Intelligence Platform — design tokens
+   Dark-first, Linear/Vercel-derived cool blue neutrals.
+   Ported from the Claude Design handoff bundle.
+   ============================================================ */
+
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 240 5.9% 10%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 240 10% 3.9%;
+    /* Design tokens (hex) — used directly in `var(--c-*)`. */
+    --c-bg-0: #07090d;
+    --c-bg-1: #0b0e14;
+    --c-bg-2: #0f131b;
+    --c-bg-3: #141923;
+    --c-bg-4: #1a2030;
+
+    --c-line-1: #1c2230;
+    --c-line-2: #232a3a;
+    --c-line-3: #2e3648;
+
+    --c-fg-1: #e7ecf3;
+    --c-fg-2: #a3acba;
+    --c-fg-3: #6f7989;
+    --c-fg-4: #4a5263;
+
+    --c-accent: #5b8def;
+    --c-accent-2: #3d6dd8;
+    --c-accent-soft: rgba(91, 141, 239, 0.14);
+    --c-accent-line: rgba(91, 141, 239, 0.4);
+
+    --c-sev-1: #ef4861;
+    --c-sev-1-soft: rgba(239, 72, 97, 0.14);
+    --c-sev-2: #f59e0b;
+    --c-sev-2-soft: rgba(245, 158, 11, 0.14);
+    --c-sev-3: #eab308;
+    --c-sev-3-soft: rgba(234, 179, 8, 0.14);
+    --c-ok: #2dd4a8;
+    --c-ok-soft: rgba(45, 212, 168, 0.14);
+    --c-info: #38bdf8;
+    --c-info-soft: rgba(56, 189, 248, 0.14);
+    --c-violet: #a78bfa;
+    --c-violet-soft: rgba(167, 139, 250, 0.14);
+
+    --c-chart-1: #5b8def;
+    --c-chart-2: #2dd4a8;
+    --c-chart-3: #f59e0b;
+    --c-chart-4: #a78bfa;
+    --c-chart-5: #f472b6;
+    --c-chart-6: #38bdf8;
+    --c-chart-7: #84cc16;
+    --c-chart-8: #fb7185;
+
+    /* shadcn/ui HSL tokens — mapped to the design palette so existing
+       shadcn-styled components ride the same system. Dark by default. */
+    --background: 222 28% 5%;          /* ≈ --c-bg-0 */
+    --foreground: 217 25% 93%;         /* ≈ --c-fg-1 */
+    --card: 220 28% 8%;                /* ≈ --c-bg-2 */
+    --card-foreground: 217 25% 93%;
+    --popover: 220 28% 8%;
+    --popover-foreground: 217 25% 93%;
+    --primary: 220 82% 65%;            /* ≈ --c-accent */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 25% 11%;          /* ≈ --c-bg-3 */
+    --secondary-foreground: 217 25% 93%;
+    --muted: 222 28% 15%;              /* ≈ --c-bg-4 */
+    --muted-foreground: 217 11% 49%;   /* ≈ --c-fg-3 */
+    --accent: 222 28% 15%;
+    --accent-foreground: 217 25% 93%;
+    --destructive: 351 86% 58%;        /* ≈ --c-sev-1 */
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 26% 15%;             /* ≈ --c-line-1 */
+    --input: 220 28% 15%;
+    --ring: 220 82% 65%;
     --radius: 0.5rem;
   }
 
-  .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 240 5.9% 10%;
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 240 4.9% 83.9%;
-  }
-}
-
-@layer base {
   * {
     @apply border-border;
   }
+
+  html, body {
+    background: var(--c-bg-0);
+    color: var(--c-fg-1);
+  }
+
   body {
-    @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
+    font-family: var(--font-ui, "Onest", system-ui, sans-serif);
+    font-size: 13.5px;
+    line-height: 1.45;
+    letter-spacing: -0.003em;
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* ============================================================
+   Design-system primitives (chips, dots, cards, labels)
+   ============================================================ */
+@layer components {
+  .cmc-label {
+    @apply text-[10.5px] font-medium uppercase;
+    letter-spacing: 0.12em;
+    color: var(--c-fg-3);
+  }
+
+  .cmc-eyebrow {
+    @apply text-[10.5px] font-medium uppercase;
+    letter-spacing: 0.04em;
+    color: var(--c-fg-3);
+  }
+
+  .cmc-mono {
+    font-family: var(--font-mono, "JetBrains Mono", ui-monospace, monospace);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0;
+  }
+
+  .cmc-display {
+    font-family: var(--font-display, "Geist", "Onest", system-ui, sans-serif);
+    letter-spacing: -0.012em;
+  }
+
+  /* Status dot */
+  .cmc-dot {
+    @apply inline-block h-1.5 w-1.5 shrink-0 rounded-full;
+  }
+  .cmc-dot-pulse {
+    animation: cmc-dot-pulse 1.6s cubic-bezier(0.2, 0.7, 0.3, 1) infinite;
+  }
+  @keyframes cmc-dot-pulse {
+    0%, 100% {
+      box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 60%, transparent);
+    }
+    50% {
+      box-shadow: 0 0 0 6px color-mix(in srgb, currentColor 0%, transparent);
+    }
+  }
+
+  /* Severity / status chip */
+  .cmc-chip {
+    @apply inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[10.5px] font-medium;
+    background: var(--c-bg-3);
+    border: 0.5px solid var(--c-line-2);
+    color: var(--c-fg-2);
+    white-space: nowrap;
+  }
+  .cmc-chip-sev1  { color: var(--c-sev-1); background: var(--c-sev-1-soft); border-color: color-mix(in srgb, var(--c-sev-1) 30%, transparent); }
+  .cmc-chip-sev2  { color: var(--c-sev-2); background: var(--c-sev-2-soft); border-color: color-mix(in srgb, var(--c-sev-2) 30%, transparent); }
+  .cmc-chip-sev3  { color: var(--c-sev-3); background: var(--c-sev-3-soft); border-color: color-mix(in srgb, var(--c-sev-3) 30%, transparent); }
+  .cmc-chip-ok    { color: var(--c-ok);    background: var(--c-ok-soft);    border-color: color-mix(in srgb, var(--c-ok) 30%, transparent); }
+  .cmc-chip-info  { color: var(--c-info);  background: var(--c-info-soft);  border-color: color-mix(in srgb, var(--c-info) 30%, transparent); }
+  .cmc-chip-ai    { color: var(--c-violet);background: var(--c-violet-soft);border-color: color-mix(in srgb, var(--c-violet) 30%, transparent); }
+  .cmc-chip-accent{ color: var(--c-accent);background: var(--c-accent-soft);border-color: var(--c-accent-line); }
+
+  /* Card surface */
+  .cmc-card {
+    background: var(--c-bg-2);
+    border: 0.5px solid var(--c-line-2);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .cmc-card-header {
+    @apply flex h-9 items-center gap-2 px-3 text-[11.5px] font-medium;
+    border-bottom: 0.5px solid var(--c-line-2);
+    color: var(--c-fg-2);
+  }
+
+  /* Buttons */
+  .cmc-btn {
+    @apply inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[11.5px] font-medium transition-colors;
+    background: var(--c-bg-3);
+    border: 0.5px solid var(--c-line-2);
+    color: var(--c-fg-1);
+  }
+  .cmc-btn:hover { background: var(--c-bg-4); border-color: var(--c-line-3); }
+  .cmc-btn-primary {
+    background: var(--c-accent);
+    color: #fff;
+    border-color: var(--c-accent-2);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.18) inset, 0 1px 2px rgba(0,0,0,0.5);
+  }
+  .cmc-btn-primary:hover { background: var(--c-accent-2); }
+  .cmc-btn-ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--c-fg-2);
+  }
+  .cmc-btn-ghost:hover { background: var(--c-bg-3); color: var(--c-fg-1); }
+  .cmc-btn-lg { @apply h-9 px-3.5 text-[13.5px]; }
+
+  /* Input */
+  .cmc-input {
+    @apply h-8 w-full rounded-md px-2.5 text-[11.5px] outline-none transition-colors;
+    background: var(--c-bg-2);
+    border: 0.5px solid var(--c-line-2);
+    color: var(--c-fg-1);
+  }
+  .cmc-input::placeholder { color: var(--c-fg-4); }
+  .cmc-input:focus {
+    border-color: var(--c-accent-line);
+    background: var(--c-bg-3);
+  }
+  .cmc-input-lg { @apply h-10 px-3 text-sm; }
+
+  /* Keyboard hint */
+  .cmc-kbd {
+    @apply inline-flex items-center rounded px-1.5 py-0 text-[10.5px];
+    font-family: var(--font-mono, "JetBrains Mono", ui-monospace, monospace);
+    background: var(--c-bg-2);
+    color: var(--c-fg-3);
+    border: 0.5px solid var(--c-line-2);
+  }
+
+  /* Avatar */
+  .cmc-av {
+    @apply inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10.5px] font-semibold;
+    background: var(--c-bg-4);
+    color: var(--c-fg-1);
+    border: 0.5px solid var(--c-line-2);
   }
 }

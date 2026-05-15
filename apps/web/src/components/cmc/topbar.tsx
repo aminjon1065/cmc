@@ -1,0 +1,97 @@
+import { Bell, ChevronRight, Search } from "lucide-react";
+import { SignOutButton } from "@/components/sign-out-button";
+
+export function Topbar({
+  crumbs = [],
+  tenant,
+}: {
+  crumbs?: string[];
+  tenant?: string | null;
+}) {
+  return (
+    <div
+      className="flex h-11 shrink-0 items-center gap-3 px-3.5"
+      style={{
+        background: "var(--c-bg-1)",
+        borderBottom: "0.5px solid var(--c-line-2)",
+      }}
+    >
+      <div className="flex items-center gap-1.5 text-[12px]">
+        <span style={{ color: "var(--c-fg-3)" }}>Operations</span>
+        {crumbs.map((c, i) => (
+          <span key={i} className="flex items-center gap-1.5">
+            <ChevronRight
+              size={12}
+              strokeWidth={1.6}
+              style={{ color: "var(--c-fg-4)" }}
+            />
+            <span
+              style={{
+                color:
+                  i === crumbs.length - 1 ? "var(--c-fg-1)" : "var(--c-fg-2)",
+              }}
+            >
+              {c}
+            </span>
+          </span>
+        ))}
+      </div>
+
+      <div className="ml-4 max-w-sm flex-1">
+        <div
+          className="flex h-6 items-center gap-2 rounded-md px-2.5 text-[11.5px]"
+          style={{
+            background: "var(--c-bg-2)",
+            border: "0.5px solid var(--c-line-2)",
+            color: "var(--c-fg-4)",
+          }}
+        >
+          <Search size={12} strokeWidth={1.6} style={{ color: "var(--c-fg-3)" }} />
+          <span className="flex-1">Search anything…</span>
+          <span className="cmc-kbd">⌘K</span>
+        </div>
+      </div>
+
+      <div className="flex-1" />
+
+      <div className="flex items-center gap-2.5">
+        <div
+          className="flex items-center gap-1.5 text-[11px]"
+          style={{ color: "var(--c-fg-2)" }}
+        >
+          <span
+            className="cmc-dot cmc-dot-pulse"
+            style={{
+              background: "var(--c-ok)",
+              color: "var(--c-ok)",
+            }}
+          />
+          Realtime
+        </div>
+        <span
+          className="h-4 w-px"
+          style={{ background: "var(--c-line-2)" }}
+        />
+        {tenant && (
+          <>
+            <span className="cmc-chip cmc-chip-accent">{tenant}</span>
+            <span
+              className="h-4 w-px"
+              style={{ background: "var(--c-line-2)" }}
+            />
+          </>
+        )}
+        <Bell
+          size={14}
+          strokeWidth={1.6}
+          style={{ color: "var(--c-fg-3)" }}
+        />
+        <span
+          className="h-4 w-px"
+          style={{ background: "var(--c-line-2)" }}
+        />
+        <SignOutButton />
+      </div>
+    </div>
+  );
+}
