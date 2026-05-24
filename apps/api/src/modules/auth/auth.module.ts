@@ -4,6 +4,7 @@ import { JwtModule } from "@nestjs/jwt";
 import { AuthService } from "./auth.service";
 import { AuthController } from "./auth.controller";
 import { SessionsService } from "./sessions.service";
+import { AuthRateLimitSpecs } from "./auth-rate-limit.specs";
 import { UsersModule } from "../users/users.module";
 import { TenantsModule } from "../tenants/tenants.module";
 import type { AppConfig } from "../../config/configuration";
@@ -26,7 +27,7 @@ import type { AppConfig } from "../../config/configuration";
       global: true,
     }),
   ],
-  providers: [AuthService, SessionsService],
+  providers: [AuthService, SessionsService, AuthRateLimitSpecs],
   controllers: [AuthController],
   exports: [AuthService, SessionsService],
 })

@@ -23,10 +23,12 @@ import type {
 } from "@cmc/contracts";
 import { AuthService } from "./auth.service";
 import { SessionsService } from "./sessions.service";
+import { AuthRateLimitSpecs } from "./auth-rate-limit.specs";
 import { LoginDto } from "./dto/login.dto";
 import { RefreshDto } from "./dto/refresh.dto";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
+import { RateLimitService } from "../../common/rate-limit/rate-limit.service";
 import type { TenantContext } from "../../common/tenant-context/tenant-context.service";
 
 @Controller("auth")
@@ -34,6 +36,8 @@ export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly sessions: SessionsService,
+    private readonly rateLimit: RateLimitService,
+    private readonly rateLimitSpecs: AuthRateLimitSpecs,
   ) {}
 
   @Post("login")
@@ -43,11 +47,24 @@ export class AuthController {
     @Ip() ip: string,
     @Req() req: Request,
   ): Promise<LoginResponse> {
+    // Rate-limit BEFORE credentials check so a flood of failed-credential
+    // attempts cannot bypass throttling. Per ADR-0009: both per-IP and
+    // per-email counters fire; the breach (whichever first) throws
+    // RateLimitExceededError → HttpExceptionFilter → 429 + Retry-After.
+    const userAgent = req.headers["user-agent"] ?? null;
+    await this.rateLimit.enforce(
+      this.rateLimitSpecs.loginSpecs({
+        ip: ip ?? null,
+        email: body.email,
+        userAgent,
+      }),
+    );
+
     return this.auth.login({
       email: body.email,
       password: body.password,
       ip: ip ?? null,
-      userAgent: req.headers["user-agent"] ?? null,
+      userAgent,
     });
   }
 
@@ -58,10 +75,15 @@ export class AuthController {
     @Ip() ip: string,
     @Req() req: Request,
   ): Promise<RefreshResponse> {
+    const userAgent = req.headers["user-agent"] ?? null;
+    await this.rateLimit.enforce(
+      this.rateLimitSpecs.refreshSpecs({ ip: ip ?? null, userAgent }),
+    );
+
     return this.auth.refresh({
       refreshToken: body.refreshToken,
       ip: ip ?? null,
-      userAgent: req.headers["user-agent"] ?? null,
+      userAgent,
     });
   }
 

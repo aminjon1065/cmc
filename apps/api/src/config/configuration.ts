@@ -62,6 +62,26 @@ const EnvSchema = z.object({
     .default(60 * 60 * 24 * 30), // 30 days
   JWT_ISSUER: z.string().default("cmc"),
 
+  // --- Auth rate limits (P0.1 / ADR-0009) ---
+  // Per-IP and per-email fixed-window counters guarding POST /auth/login
+  // and POST /auth/refresh from online brute-force. Defaults are
+  // OWASP-aligned; a tenant under a stricter policy can override.
+  AUTH_LOGIN_IP_LIMIT: z.coerce.number().int().positive().default(30),
+  AUTH_LOGIN_IP_WINDOW_SEC: z.coerce.number().int().positive().default(300),
+  AUTH_LOGIN_EMAIL_LIMIT: z.coerce.number().int().positive().default(5),
+  AUTH_LOGIN_EMAIL_WINDOW_SEC: z.coerce.number().int().positive().default(900),
+  AUTH_REFRESH_IP_LIMIT: z.coerce.number().int().positive().default(60),
+  AUTH_REFRESH_IP_WINDOW_SEC: z.coerce.number().int().positive().default(300),
+
+  // --- Session-active cache (P0.4 / ADR-0011) ---
+  // TTL for the Redis-backed "is this sid active?" cache that
+  // short-circuits the per-request DB lookup in
+  // `TenantContextMiddleware`. Recommended: set equal (or close) to
+  // the access-token lifetime — a failed cache DEL then adds zero
+  // exposure beyond the JWT's natural expiry. Default 900 s ≈ 15 min,
+  // matching the JWT_ACCESS_TTL default.
+  SESSION_CACHE_TTL_SEC: z.coerce.number().int().positive().default(900),
+
   // --- Seed (only required when running `pnpm seed`) ---
   SEED_TENANT_SLUG: z.string().default("default"),
   SEED_TENANT_NAME: z.string().default("Default Tenant"),

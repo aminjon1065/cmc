@@ -96,6 +96,24 @@ jobs:
           done
           echo "Postgres did not become ready"; docker logs cmc-postgres-ci; exit 1
 
+      # ---------- Redis ----------
+      # Required by the API at boot (tier-1 dependency per ADR-0008).
+      # Password matches the dev `infra/.env.example` default so the same
+      # REDIS_URL works locally and in CI without a fork.
+      - name: Start Redis
+        run: |
+          docker run -d --name cmc-redis-ci \
+            -p 6379:6379 \
+            redis:7-alpine \
+            redis-server --requirepass cmc_dev_redis_change_me --appendonly yes
+          for i in {1..30}; do
+            if docker exec cmc-redis-ci redis-cli -a cmc_dev_redis_change_me --no-auth-warning ping 2>/dev/null | grep -q PONG; then
+              echo "Redis ready after ${i} attempts"; exit 0
+            fi
+            sleep 1
+          done
+          echo "Redis did not become ready"; docker logs cmc-redis-ci; exit 1
+
       # ---------- MinIO ----------
       # Documents-lifecycle e2e tests do real PUT/GET against MinIO via
       # pre-signed URLs, so we run a real instance. Bucket is created
@@ -144,7 +162,7 @@ jobs:
         env:
           DATABASE_URL: postgresql://cmc_app:cmc_app_dev_password_change_me@localhost:5432/cmc
           DATABASE_OWNER_URL: postgresql://cmc:cmc_dev_password_change_me@localhost:5432/cmc
-          REDIS_URL: redis://localhost:6379
+          REDIS_URL: redis://:cmc_dev_redis_change_me@localhost:6379
           S3_ENDPOINT: http://localhost:9000
           S3_PUBLIC_ENDPOINT: http://localhost:9000
           S3_REGION: us-east-1
@@ -196,7 +214,7 @@ jobs:
           # pick these up (so Playwright config doesn't need a CI fork).
           DATABASE_URL: postgresql://cmc_app:cmc_app_dev_password_change_me@localhost:5432/cmc_test
           DATABASE_OWNER_URL: postgresql://cmc:cmc_dev_password_change_me@localhost:5432/cmc_test
-          REDIS_URL: redis://localhost:6379
+          REDIS_URL: redis://:cmc_dev_redis_change_me@localhost:6379
           S3_ENDPOINT: http://localhost:9000
           S3_PUBLIC_ENDPOINT: http://localhost:9000
           S3_REGION: us-east-1
@@ -233,4 +251,4 @@ jobs:
       - name: Tear down
         if: always()
         run: |
-          docker rm -f cmc-postgres-ci cmc-minio-ci 2>/dev/null || true
+          docker rm -f cmc-postgres-ci cmc-redis-ci cmc-minio-ci 2>/dev/null || true

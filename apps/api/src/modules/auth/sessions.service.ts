@@ -3,6 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { and, eq, isNull, lt, not, sql } from "drizzle-orm";
 import { schema } from "@cmc/db";
 import { TenantDatabaseService } from "../database/tenant-database.service";
+import { SessionCacheService } from "../../common/session-cache/session-cache.service";
 
 export type CreateSessionInput = {
   tenantId: string;
@@ -36,7 +37,10 @@ export type RevokeReason =
 export class SessionsService {
   private readonly logger = new Logger(SessionsService.name);
 
-  constructor(private readonly tenantDb: TenantDatabaseService) {}
+  constructor(
+    private readonly tenantDb: TenantDatabaseService,
+    private readonly sessionCache: SessionCacheService,
+  ) {}
 
   // ---------- Token generation ----------
 
@@ -155,10 +159,16 @@ export class SessionsService {
           and(eq(schema.sessions.id, id), isNull(schema.sessions.revokedAt)),
         ),
     );
+    // Invalidate the session-active cache so the next request for this
+    // sid falls through to DB (which now shows revoked_at set) and is
+    // rejected. Best-effort: failure is bounded by the cache TTL.
+    await this.sessionCache.del(id);
   }
 
   async revokeFamily(familyId: string, reason: RevokeReason): Promise<void> {
-    await this.tenantDb.run((tx) =>
+    // RETURNING the ids so the cache invalidation is precise — we DEL
+    // exactly the sids whose `revoked_at` we just set, no more, no less.
+    const rows = await this.tenantDb.run((tx) =>
       tx
         .update(schema.sessions)
         .set({ revokedAt: sql`now()`, revokedReason: reason })
@@ -167,8 +177,12 @@ export class SessionsService {
             eq(schema.sessions.familyId, familyId),
             isNull(schema.sessions.revokedAt),
           ),
-        ),
+        )
+        .returning({ id: schema.sessions.id }),
     );
+    if (rows.length > 0) {
+      await this.sessionCache.delMany(rows.map((r) => r.id));
+    }
   }
 
   async touchLastUsed(id: string): Promise<void> {
@@ -218,8 +232,11 @@ export class SessionsService {
       // fresh connection) instead of the caller's tx.
       if (session.revokedAt) {
         const familyId = session.familyId;
-        await this.tenantDb.runPrivileged(async (privTx) => {
-          await privTx
+        // RETURNING the burned ids so the session-active cache (P0.4)
+        // can be invalidated precisely. Without this DEL, the burned
+        // sids could remain "active" in cache up to TTL.
+        const burned = await this.tenantDb.runPrivileged(async (privTx) => {
+          return privTx
             .update(schema.sessions)
             .set({
               revokedAt: sql`now()`,
@@ -230,8 +247,12 @@ export class SessionsService {
                 eq(schema.sessions.familyId, familyId),
                 isNull(schema.sessions.revokedAt),
               ),
-            );
+            )
+            .returning({ id: schema.sessions.id });
         });
+        if (burned.length > 0) {
+          await this.sessionCache.delMany(burned.map((r) => r.id));
+        }
         this.logger.warn(
           `Refresh-token replay detected; revoked family ${session.familyId}`,
         );
@@ -269,6 +290,13 @@ export class SessionsService {
         })
         .where(eq(schema.sessions.id, session.id));
 
+      // Invalidate the predecessor's session-active cache entry. The
+      // successor isn't pre-populated — it'll lazily populate on its
+      // first authenticated request. Pre-warming would just add cache
+      // writes for sessions that may never be used (e.g. token issued
+      // and immediately discarded).
+      await this.sessionCache.del(session.id);
+
       return {
         ok: true as const,
         session: successor!,
@@ -296,6 +324,13 @@ export class SessionsService {
         )
         .returning({ id: schema.sessions.id }),
     );
+    // Cache entries for expired sessions usually have already lapsed
+    // (the cache TTL ≈ access-token lifetime, and these rows are past
+    // their refresh-token expiry). DEL anyway for safety + consistency
+    // with the other revoke paths.
+    if (res.length > 0) {
+      await this.sessionCache.delMany(res.map((r) => r.id));
+    }
     return res.length;
   }
 }

@@ -1,5 +1,6 @@
 import request from "supertest";
 import type { INestApplication } from "@nestjs/common";
+import type { Redis } from "ioredis";
 import {
   LoginResponseSchema,
   MeResponseSchema,
@@ -10,15 +11,18 @@ import { buildTestApp } from "../helpers/test-app";
 import { ownerSql, truncateAll } from "../helpers/test-db";
 import { createTenantWithAdmin, type TestUser } from "../helpers/test-fixtures";
 import { authed, loginAs, refresh } from "../helpers/test-auth";
+import { REDIS } from "../../src/modules/redis/redis.tokens";
 
 describe("Auth flow", () => {
   let app: INestApplication;
   let sql: ReturnType<typeof ownerSql>;
+  let redis: Redis;
   let user: TestUser;
 
   beforeAll(async () => {
     app = await buildTestApp();
     sql = ownerSql();
+    redis = app.get<Redis>(REDIS);
   });
 
   afterAll(async () => {
@@ -27,7 +31,7 @@ describe("Auth flow", () => {
   });
 
   beforeEach(async () => {
-    await truncateAll(sql);
+    await truncateAll(sql, redis);
     const fixture = await createTenantWithAdmin(sql, {
       tenantSlug: "auth-test",
       email: "alice@auth.test",

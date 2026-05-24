@@ -9,6 +9,8 @@ declare global {
   namespace Express {
     interface Request {
       tenantContext?: TenantContext;
+      /** UUID v4 set by `RequestContextMiddleware`. Always present. */
+      requestId?: string;
     }
   }
 }

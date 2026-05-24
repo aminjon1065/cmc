@@ -11,6 +11,7 @@ import {
   type TenantContext,
 } from "./tenant-context.service";
 import { TenantDatabaseService } from "../../modules/database/tenant-database.service";
+import { SessionCacheService } from "../session-cache/session-cache.service";
 
 /**
  * Validates the Authorization Bearer JWT (if present), confirms the
@@ -33,6 +34,7 @@ export class TenantContextMiddleware implements NestMiddleware {
     private readonly jwt: JwtService,
     private readonly tenantContext: TenantContextService,
     private readonly tenantDb: TenantDatabaseService,
+    private readonly sessionCache: SessionCacheService,
     private readonly config: ConfigService<AppConfig, true>,
   ) {}
 
@@ -69,34 +71,60 @@ export class TenantContextMiddleware implements NestMiddleware {
       return next();
     }
 
-    // Confirm the session is still active. Privileged tx because we have
-    // no tenant scope set up yet — and the request interceptor expects
-    // the context already populated.
+    // Confirm the session is still active. Hot path — we check Redis
+    // first (P0.4 / ADR-0011). The cache stores `{ userId, tenantId }`
+    // for each active sid; a hit whose payload matches the JWT claims
+    // bypasses the DB. Misses, payload mismatches, and cache errors all
+    // fall through to the canonical DB query — which is the source of
+    // truth — and populate the cache on success.
+    //
+    // Privileged tx because we have no tenant scope set up yet — and the
+    // request interceptor expects the context already populated.
     let sessionActive = false;
-    try {
-      sessionActive = await this.tenantDb.runPrivileged(async (tx) => {
-        const rows = await tx
-          .select({ id: schema.sessions.id })
-          .from(schema.sessions)
-          .where(
-            and(
-              eq(schema.sessions.id, claims.sid),
-              eq(schema.sessions.userId, claims.sub),
-              eq(schema.sessions.tenantId, claims.tid),
-              isNull(schema.sessions.revokedAt),
-              sql`${schema.sessions.expiresAt} > now()`,
-            ),
-          )
-          .limit(1);
-        return rows.length > 0;
-      });
-    } catch (err) {
-      this.logger.error(
-        `Session lookup failed; treating request as anonymous: ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-      );
-      return next();
+    const cached = await this.sessionCache.get(claims.sid);
+    if (
+      cached &&
+      cached.userId === claims.sub &&
+      cached.tenantId === claims.tid
+    ) {
+      sessionActive = true;
+    } else {
+      try {
+        sessionActive = await this.tenantDb.runPrivileged(async (tx) => {
+          const rows = await tx
+            .select({ id: schema.sessions.id })
+            .from(schema.sessions)
+            .where(
+              and(
+                eq(schema.sessions.id, claims.sid),
+                eq(schema.sessions.userId, claims.sub),
+                eq(schema.sessions.tenantId, claims.tid),
+                isNull(schema.sessions.revokedAt),
+                sql`${schema.sessions.expiresAt} > now()`,
+              ),
+            )
+            .limit(1);
+          return rows.length > 0;
+        });
+      } catch (err) {
+        this.logger.error(
+          `Session lookup failed; treating request as anonymous: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+        return next();
+      }
+
+      // Populate the cache after a DB-confirmed active session. Cache
+      // failures are non-fatal — the service swallows them and logs.
+      if (sessionActive) {
+        const ttl = this.config.get("SESSION_CACHE_TTL_SEC", { infer: true });
+        await this.sessionCache.set(
+          claims.sid,
+          { userId: claims.sub, tenantId: claims.tid },
+          ttl,
+        );
+      }
     }
 
     if (!sessionActive) {

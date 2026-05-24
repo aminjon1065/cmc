@@ -1,4 +1,5 @@
 import type { INestApplication } from "@nestjs/common";
+import type { Redis } from "ioredis";
 import {
   ListDocumentsResponseSchema,
   SessionsListResponseSchema,
@@ -11,6 +12,7 @@ import {
   type TestUser,
 } from "../helpers/test-fixtures";
 import { authed, loginAs } from "../helpers/test-auth";
+import { REDIS } from "../../src/modules/redis/redis.tokens";
 
 /**
  * The most security-critical guarantee in the platform: a request from
@@ -25,6 +27,7 @@ import { authed, loginAs } from "../helpers/test-auth";
 describe("RLS — cross-tenant isolation", () => {
   let app: INestApplication;
   let sql: ReturnType<typeof ownerSql>;
+  let redis: Redis;
 
   let tenantA: TestTenant;
   let tenantB: TestTenant;
@@ -34,6 +37,7 @@ describe("RLS — cross-tenant isolation", () => {
   beforeAll(async () => {
     app = await buildTestApp();
     sql = ownerSql();
+    redis = app.get<Redis>(REDIS);
   });
 
   afterAll(async () => {
@@ -42,7 +46,7 @@ describe("RLS — cross-tenant isolation", () => {
   });
 
   beforeEach(async () => {
-    await truncateAll(sql);
+    await truncateAll(sql, redis);
     const a = await createTenantWithAdmin(sql, {
       tenantSlug: "tenant-a",
       email: "alice@a.test",

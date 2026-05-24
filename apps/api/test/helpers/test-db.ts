@@ -1,4 +1,5 @@
 import postgres from "postgres";
+import type { Redis } from "ioredis";
 
 /**
  * Owner-credentialed Postgres client for test fixtures.
@@ -29,9 +30,19 @@ export function ownerSql() {
  * migrations every test.
  *
  * `RESTART IDENTITY` and `CASCADE` clear sequences and FK-dependent rows.
+ *
+ * Optional `redis`: when provided, also wipes every key under
+ * `cmc:auth:*` — covering both the P0.1 rate-limit counters AND the
+ * P0.4 session-active cache. The rate-limit counters are keyed on the
+ * loopback IP that supertest always uses, and the session-cache
+ * entries persist for the configured TTL (60 s in tests); accumulated
+ * state across tests would cause spurious 429s or stale session
+ * lookups in later cases. Specs that drive `/auth/*` must pass the
+ * redis client to keep cases isolated.
  */
 export async function truncateAll(
   client: ReturnType<typeof ownerSql>,
+  redis?: Redis,
 ): Promise<void> {
   await client.unsafe(`
     TRUNCATE TABLE
@@ -42,4 +53,30 @@ export async function truncateAll(
       tenants
     RESTART IDENTITY CASCADE
   `);
+
+  if (redis) {
+    await wipeAuthKeys(redis);
+  }
+}
+
+/**
+ * SCAN-and-DEL every `cmc:auth:*` key (rate-limit counters AND
+ * session-active cache). SCAN (not KEYS) so accidentally-large key
+ * spaces don't block Redis on test runs.
+ */
+async function wipeAuthKeys(redis: Redis): Promise<void> {
+  let cursor = "0";
+  do {
+    const [next, batch] = await redis.scan(
+      cursor,
+      "MATCH",
+      "cmc:auth:*",
+      "COUNT",
+      100,
+    );
+    cursor = next;
+    if (batch.length > 0) {
+      await redis.del(...batch);
+    }
+  } while (cursor !== "0");
 }

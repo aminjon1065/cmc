@@ -1,4 +1,5 @@
 import type { INestApplication } from "@nestjs/common";
+import type { Redis } from "ioredis";
 import {
   DocumentResponseSchema,
   DownloadUrlResponseSchema,
@@ -10,16 +11,19 @@ import { buildTestApp } from "../helpers/test-app";
 import { ownerSql, truncateAll } from "../helpers/test-db";
 import { createTenantWithAdmin, type TestUser } from "../helpers/test-fixtures";
 import { authed, loginAs } from "../helpers/test-auth";
+import { REDIS } from "../../src/modules/redis/redis.tokens";
 
 describe("Documents", () => {
   let app: INestApplication;
   let sql: ReturnType<typeof ownerSql>;
+  let redis: Redis;
   let user: TestUser;
   let accessToken: string;
 
   beforeAll(async () => {
     app = await buildTestApp();
     sql = ownerSql();
+    redis = app.get<Redis>(REDIS);
   });
 
   afterAll(async () => {
@@ -28,7 +32,7 @@ describe("Documents", () => {
   });
 
   beforeEach(async () => {
-    await truncateAll(sql);
+    await truncateAll(sql, redis);
     const fixture = await createTenantWithAdmin(sql, {
       tenantSlug: "docs-test",
       email: "doc-owner@docs.test",

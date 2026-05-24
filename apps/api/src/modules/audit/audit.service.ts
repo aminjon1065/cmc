@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { schema } from "@cmc/db";
 import { TenantDatabaseService } from "../database/tenant-database.service";
+import { RequestContextService } from "../../common/request-context/request-context.service";
 
 export type AuditOutcome = "success" | "failure" | "denied";
 
@@ -44,7 +45,10 @@ export type AuditRecordInput = {
 export class AuditService {
   private readonly logger = new Logger(AuditService.name);
 
-  constructor(private readonly tenantDb: TenantDatabaseService) {}
+  constructor(
+    private readonly tenantDb: TenantDatabaseService,
+    private readonly requestContext: RequestContextService,
+  ) {}
 
   async record(input: AuditRecordInput): Promise<void> {
     try {
@@ -72,6 +76,11 @@ export class AuditService {
   }
 
   private toRow(input: AuditRecordInput) {
+    // If the caller didn't specify request_id, pull it from the active
+    // ALS scope. This makes every audit row auto-correlatable with the
+    // request that produced it without every call site having to know
+    // about the request-context plumbing.
+    const requestId = input.requestId ?? this.requestContext.getRequestId() ?? null;
     return {
       tenantId: input.tenantId ?? null,
       actorId: input.actorId ?? null,
@@ -82,7 +91,7 @@ export class AuditService {
       outcome: input.outcome,
       ip: input.ip ?? null,
       userAgent: input.userAgent ?? null,
-      requestId: input.requestId ?? null,
+      requestId,
       traceId: input.traceId ?? null,
       metadata: input.metadata ?? null,
     };
