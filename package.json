@@ -20,7 +20,9 @@
     "infra:down": "docker compose -f infra/docker-compose.yml --env-file infra/.env down",
     "infra:logs": "docker compose -f infra/docker-compose.yml --env-file infra/.env logs -f",
     "infra:reset": "docker compose -f infra/docker-compose.yml --env-file infra/.env down -v",
-    "infra:ps": "docker compose -f infra/docker-compose.yml --env-file infra/.env ps"
+    "infra:ps": "docker compose -f infra/docker-compose.yml --env-file infra/.env ps",
+    "db:backup": "docker compose -f infra/docker-compose.yml --env-file infra/.env exec -T postgres-backup /usr/local/bin/backup.sh",
+    "db:restore": "docker compose -f infra/docker-compose.yml --env-file infra/.env exec -e CONFIRM_RESTORE postgres-backup /usr/local/bin/restore.sh"
   },
   "devDependencies": {
     "turbo": "^2.3.3",

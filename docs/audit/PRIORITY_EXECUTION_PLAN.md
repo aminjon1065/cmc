@@ -109,12 +109,28 @@ These close gaps from current `main` that **cannot wait** for any new module.
 - Future encryption / sharding → H3
 **Unblocks:** higher QPS without changing middleware. DB SELECT load on hot path drops orders of magnitude.
 
-### P0.5 — Postgres backups
+### P0.5 — Postgres backups ✅ **COMPLETED 2026-05-25**
 **Why:** no non-dev deployment is acceptable without backups. ToR §13.6.
-**Cost:** S (1 d) for the cron + restore drill.
-**How:** docker-compose sidecar running `pg_dump` to MinIO bucket `cmc-backups` nightly; rotation; a documented `pnpm db:restore <file>` script that runs against a fresh container.
-**Depends on:** —.
-**Unblocks:** P1 (deploy).
+**Cost:** S (1 d) for the cron + restore drill. **Actual: ½ d.**
+**Delivered:**
+- `infra/backup/{Dockerfile, entrypoint.sh, backup.sh, restore.sh}` — alpine + `postgresql16-client` + `mc` (pinned to the same release `minio-init` uses) + busybox crond
+- `postgres-backup` service in `infra/docker-compose.yml` running `crond -f -l 8`; `depends_on` includes `postgres` (healthy), `minio` (healthy), `minio-init` (completed) so the bucket is guaranteed present before first run
+- `pg_dump --format=custom --compress=9` → `minio/cmc-backups/postgres/YYYY/MM/cmc-<ISO-Z>.dump`; rotation via `mc rm --older-than ${BACKUP_RETENTION_DAYS}d` (default 7d)
+- 5 new env vars in `infra/.env.example` (`BACKUP_BUCKET`, `BACKUP_RETENTION_DAYS`, `BACKUP_SCHEDULE_CRON`, `BACKUP_RUN_ON_START`, `BACKUP_TZ`) — default schedule `0 3 * * *` UTC
+- `pnpm db:backup` → one-shot manual run via `docker compose exec -T`
+- `pnpm db:restore <key|latest>` → DROP+CREATE+`pg_restore --exit-on-error`; TTY prompt requires retyping the DB name; for scripted callers, `CONFIRM_RESTORE=yes` is forwarded via `docker compose exec -e CONFIRM_RESTORE` (the var-name-only form passes the host value through, so no `=yes` hardcoded into the pnpm script — the safety prompt remains opt-out, not opt-in)
+- Restore drill rehearsed end-to-end against the live dev DB: backup → insert marker → `restore latest` → marker absent, baseline counts (users, sessions, audit, extensions, roles, RLS-force) all match; then time-targeted explicit-key restore proven by an A-then-B marker pair where the named snapshot kept A and dropped B; `cmc_app` runtime role still reads post-restore (GRANTs preserved in dump); full e2e suite re-run 57/57 green
+- ADR-0012 captures the design + the "what we deliberately did not do"
+
+**Deferred deliberately:**
+- WAL streaming / PITR → P3 (when RPO contract tightens below 24 h)
+- Prometheus metric for backup success/failure → P0.7
+- Alertmanager rule "no fresh backup in 36 h" → P1.8
+- Application-layer encryption of dump bytes → P2.14 (Vault)
+- MinIO content backup (document bytes) → separate item
+- Cross-region off-site replication → deploy-time concern
+- Restore verification gate in CI → cheap follow-on once Docker-in-CI stabilises
+**Unblocks:** P1 (first deploy).
 
 ### P0.6 — OTEL HTTP + Postgres + S3 auto-instrumentation
 **Why:** essential for any future debugging beyond log-grepping.

@@ -19,7 +19,7 @@
 | TD-001 | No rate limiting on auth endpoints | ✅ RESOLVED 2026-05-25 (P0.1, ADR-0009) | S | Security |
 | TD-002 | No MFA | S0 | M | Security |
 | TD-003 | No RBAC — every authed user can read every document | S0 | M | Security |
-| TD-004 | Postgres backups absent | S0 | S | Operations |
+| TD-004 | Postgres backups absent | ✅ RESOLVED 2026-05-25 (P0.5, ADR-0012) | S | Operations |
 | TD-005 | Secrets in `.env` files in compose / CI | S0 | M | Security |
 | TD-006 | No reverse proxy / TLS strategy committed (deferred to deploy) | S0 | S | Operations |
 | TD-007 | Logs unstructured (text via NestJS default) | ✅ RESOLVED 2026-05-25 (P0.3, ADR-0010) | S | Observability |
@@ -82,10 +82,15 @@
 **Locations:** `apps/api/src/modules/documents/documents.controller.ts` — `@UseGuards(JwtAuthGuard)` only.
 **Remediation:** RBAC tables + `@Authorize` guard. Roadmap P1.1.
 
-### TD-004 — No Postgres backups
-**Risk:** any disk loss is total data loss.
-**Locations:** absent.
-**Remediation:** nightly `pg_dump` to MinIO bucket `cmc-backups`; documented restore drill. Roadmap P0.5.
+### TD-004 — No Postgres backups · ✅ RESOLVED 2026-05-25
+**Was:** any disk loss was total data loss. No restore tool, no rehearsal.
+**Resolution:** P0.5 added the `postgres-backup` sidecar (`infra/backup/`) — alpine + `postgresql16-client` + `mc` + busybox crond. Default schedule `0 3 * * *` UTC; dumps land in `minio/cmc-backups/postgres/YYYY/MM/cmc-<ISO-Z>.dump`; rotation drops anything older than `BACKUP_RETENTION_DAYS` (default 7). `pnpm db:backup` for one-shot manual runs; `pnpm db:restore <key|latest>` for a confirmed DROP+CREATE+`pg_restore` cycle. Restore drill rehearsed end-to-end. ADR-0012 captures the design and the deliberate gaps.
+**Follow-on tracking:**
+- WAL streaming / PITR → P3 (when RPO contracts below 24 h)
+- Backup-success Prometheus metric → P0.7
+- "No fresh backup in 36 h" Alertmanager rule → P1.8
+- Dump-byte encryption via Vault → P2.14
+- MinIO content backup + off-site replication → separate ops follow-ons
 
 ### TD-005 — Secrets in `.env` files
 **Risk:** host compromise → secret compromise. Repo `.env.example` files use `change_me` placeholders, but the real values land on the deploy host in plain text.
@@ -275,9 +280,9 @@ ADR-0005 explains this is a deliberate accommodation of NestJS DI. **No action.*
 
 ## Aggregate
 
-- **Resolved since audit baseline:** 4 (TD-013 by P0.2; TD-001 by P0.1; TD-007 by P0.3; TD-018 by P0.4)
+- **Resolved since audit baseline:** 5 (TD-013 by P0.2; TD-001 by P0.1; TD-007 by P0.3; TD-018 by P0.4; TD-004 by P0.5)
 - **Partial:** 1 (TD-008 — request_id ✅ via P0.3; trace_id awaits P0.6)
-- **S0 items (must-fix before any non-dev deploy):** 5.
+- **S0 items (must-fix before any non-dev deploy):** 4 (was 5; TD-004 resolved).
 - **S1 items (correctness/security under realistic load):** 4.
 - **S2 items (operational pain / scale cap):** 16 (was 17; TD-018 resolved).
 - **S3 items (hygiene):** 13.

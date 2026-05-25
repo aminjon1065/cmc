@@ -128,6 +128,42 @@ services:
         done
     restart: "no"
 
+  # Nightly pg_dump → MinIO sidecar. See infra/backup/ for the image build
+  # context, backup.sh, restore.sh, and the ADR-0012 design.
+  #
+  # The cron loop runs inside this container; manual one-shots use:
+  #   docker compose exec postgres-backup /usr/local/bin/backup.sh
+  #   docker compose exec postgres-backup /usr/local/bin/restore.sh <key|latest>
+  # or the pnpm aliases db:backup / db:restore.
+  postgres-backup:
+    build:
+      context: ./backup
+      dockerfile: Dockerfile
+    image: cmc/postgres-backup:16
+    container_name: cmc-postgres-backup
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      BACKUP_BUCKET: ${BACKUP_BUCKET:-cmc-backups}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-7}
+      BACKUP_SCHEDULE_CRON: ${BACKUP_SCHEDULE_CRON:-0 3 * * *}
+      BACKUP_RUN_ON_START: ${BACKUP_RUN_ON_START:-false}
+      TZ: ${BACKUP_TZ:-UTC}
+
 volumes:
   postgres_data:
     name: cmc-postgres-data

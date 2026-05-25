@@ -233,8 +233,8 @@ Compact one-row-per-module view. Detail per module is in
 | 13.3 | CI/CD | 🟡 CI yes (GHA); no CD yet |
 | 13.4 | Environments (dev/staging/prod/dr) | 🟡 dev only |
 | 13.5 | IaC (Terraform / Helm) | 🔴 |
-| 13.6 | Backups | 🔴 |
-| 13.7 | Disaster recovery | 🔴 |
+| 13.6 | Backups | 🟢 nightly `pg_dump` → MinIO sidecar (P0.5 / ADR-0012); rotation 7d; `pnpm db:restore` rehearsed |
+| 13.7 | Disaster recovery | 🟡 same-cluster restore path covered; cross-cluster + off-site + PITR still 🔴 |
 | 13.8 | Autoscaling | 🔴 |
 | 13.10 | Logging (Loki) | 🔴 |
 | 13.11 | Tracing (Tempo/Jaeger + OTEL) | 🔴 |

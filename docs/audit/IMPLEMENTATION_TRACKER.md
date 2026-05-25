@@ -567,6 +567,20 @@ No `incidents` table, no severity classification, no roles (Commander/Comms/Ops)
 | Blocks | any non-dev deployment |
 | Complexity | M to deploy + adopt for first workload |
 
+### Backups plane (Postgres)
+
+| | |
+|---|---|
+| Status | DONE (logical nightly dump; PITR deferred) — 2026-05-25, P0.5, ADR-0012 |
+| Files | `infra/backup/{Dockerfile, entrypoint.sh, backup.sh, restore.sh}`, `infra/docker-compose.yml` (postgres-backup service) |
+| Tooling | alpine + postgresql16-client + `mc` + busybox crond |
+| Cadence | `BACKUP_SCHEDULE_CRON` (default `0 3 * * *` UTC), retention `BACKUP_RETENTION_DAYS` (default 7d) |
+| Storage | MinIO bucket `cmc-backups`, key `postgres/YYYY/MM/cmc-<ISO-Z>.dump` |
+| Manual | `pnpm db:backup` / `pnpm db:restore <key\|latest>` (TTY confirmation + `CONFIRM_RESTORE=yes` for scripted callers) |
+| Drill | rehearsed end-to-end: seed → backup → wipe → restore → e2e auth suite green |
+| Observability today | `docker compose logs postgres-backup` |
+| Deferred to | P0.7 (Prometheus metric) · P1.8 (Alertmanager "no fresh backup in 36 h") · P2.14 (Vault-encrypted dump bytes) · P3 (WAL streaming / PITR) |
+
 ---
 
 ## Summary table
