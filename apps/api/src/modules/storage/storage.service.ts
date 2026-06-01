@@ -140,6 +140,60 @@ export class StorageService {
       new DeleteObjectCommand({ Bucket: input.bucket, Key: input.key }),
     );
   }
+
+  /**
+   * Write an object under S3/MinIO Object Lock (WORM) — used for the audit
+   * Merkle anchors (P1.11b / ADR-0029). The bucket MUST already exist with
+   * object-lock enabled (provisioned out-of-band; we never CreateBucket here —
+   * `HeadBucket`/`CreateBucket` trigger an aws-sdk lazy `import()` that breaks
+   * under jest's VM-modules). Returns the object's version id (lock buckets are
+   * versioned). GOVERNANCE retention can be overridden by a privileged user;
+   * COMPLIANCE cannot, even by root, until `retainUntil`.
+   */
+  async putImmutableObject(input: {
+    bucket: string;
+    key: string;
+    body: string;
+    contentType?: string;
+    lockMode: "GOVERNANCE" | "COMPLIANCE";
+    retainUntil: Date;
+  }): Promise<{ versionId: string | null }> {
+    const res = await this.internal.send(
+      new PutObjectCommand({
+        Bucket: input.bucket,
+        Key: input.key,
+        Body: input.body,
+        ContentType: input.contentType ?? "application/json",
+        ObjectLockMode: input.lockMode,
+        ObjectLockRetainUntilDate: input.retainUntil,
+      }),
+    );
+    return { versionId: res.VersionId ?? null };
+  }
+
+  /**
+   * Connectivity probe for the health readiness check (P0.8 / ADR-0015).
+   *
+   * HEADs a sentinel key in the files bucket. The key need not exist — a
+   * "not found" response still proves MinIO is reachable AND our
+   * credentials are accepted (a 403 would throw, a connection failure
+   * would throw). Returns normally when reachable, throws otherwise.
+   *
+   * Why HeadObject and not HeadBucket: `HeadObjectCommand` is the command
+   * the documents module already exercises under jest, so it is proven
+   * jest-safe; `HeadBucketCommand` triggers an aws-sdk lazy `import()`
+   * that jest's VM-modules runtime cannot resolve
+   * (ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING_FLAG). HeadObject is also
+   * S3-generic, so this probe works unchanged against AWS S3, not just
+   * MinIO. Exposed here (not via the raw S3 token) so HealthService
+   * depends on the StorageModule's public surface.
+   */
+  async probeReachable(bucket: string): Promise<void> {
+    // `head()` swallows not-found and only throws on real errors
+    // (connection / auth / unexpected), which is exactly the
+    // reachable-vs-unreachable signal a readiness probe needs.
+    await this.head({ bucket, key: ".cmc-health-probe" });
+  }
 }
 
 function isNotFound(err: unknown): boolean {

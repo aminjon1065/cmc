@@ -5,6 +5,7 @@ import type { AppConfig } from "../../config/configuration";
 import { DB } from "./database.tokens";
 import { TenantDatabaseService } from "./tenant-database.service";
 import { TenantTransactionInterceptor } from "./tenant-transaction.interceptor";
+import { MetricsService } from "../metrics/metrics.service";
 
 // Re-export so existing `import { DB } from "./database.module"` code keeps
 // working. The actual symbol lives in database.tokens.ts to break the
@@ -37,6 +38,19 @@ class DatabaseLifecycle implements OnModuleDestroy {
       provide: DatabaseLifecycle,
       inject: [DB],
       useFactory: (database: Database) => new DatabaseLifecycle(database),
+    },
+    {
+      // Publish the configured pool max to the metrics registry once at
+      // boot (P0.7). A side-effect-only provider; Nest instantiates every
+      // provider of an eagerly-loaded module, so the factory runs at boot.
+      provide: "DB_POOL_MAX_METRIC",
+      inject: [MetricsService],
+      useFactory: (metrics: MetricsService) => {
+        // Keep in sync with the `max: 20` passed to createDatabase below.
+        // (When DB_POOL_MAX becomes configurable this reads from config.)
+        metrics.setDbPoolMax(20);
+        return true;
+      },
     },
     TenantDatabaseService,
     TenantTransactionInterceptor,

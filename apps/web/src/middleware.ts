@@ -19,7 +19,10 @@ export default auth((req) => {
 
   const isProtected =
     nextUrl.pathname.startsWith("/dashboard") ||
-    nextUrl.pathname.startsWith("/documents");
+    nextUrl.pathname.startsWith("/documents") ||
+    nextUrl.pathname.startsWith("/admin") ||
+    nextUrl.pathname.startsWith("/incidents") ||
+    nextUrl.pathname.startsWith("/notifications");
 
   if (isProtected && !isAuthed) {
     const loginUrl = new URL("/login", nextUrl);

@@ -20,6 +20,8 @@ import type {
   UploadInitResponse,
 } from "@cmc/contracts";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
+import { AuthorizeGuard } from "../../common/authz/authorize.guard";
+import { Authorize } from "../../common/authz/authorize.decorator";
 import { DocumentsService } from "./documents.service";
 import { UploadInitDto } from "./dto/upload-init.dto";
 
@@ -62,11 +64,12 @@ function toContract(row: DocumentRow): Document {
 }
 
 @Controller("documents")
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, AuthorizeGuard)
 export class DocumentsController {
   constructor(private readonly documents: DocumentsService) {}
 
   @Get()
+  @Authorize("document:read")
   async list(
     @Query("q") q?: string,
     @Query("limit") limit?: string,
@@ -84,6 +87,7 @@ export class DocumentsController {
   }
 
   @Get(":id")
+  @Authorize("document:read")
   async getOne(
     @Param("id", new ParseUUIDPipe()) id: string,
   ): Promise<DocumentResponse> {
@@ -92,6 +96,7 @@ export class DocumentsController {
   }
 
   @Post("upload-init")
+  @Authorize("document:write")
   @HttpCode(HttpStatus.CREATED)
   async initUpload(@Body() body: UploadInitDto): Promise<UploadInitResponse> {
     const { document, upload } = await this.documents.initUpload({
@@ -112,6 +117,7 @@ export class DocumentsController {
   }
 
   @Post(":id/finalize")
+  @Authorize("document:write")
   @HttpCode(HttpStatus.OK)
   async finalize(
     @Param("id", new ParseUUIDPipe()) id: string,
@@ -121,6 +127,7 @@ export class DocumentsController {
   }
 
   @Get(":id/download-url")
+  @Authorize("document:read")
   async downloadUrl(
     @Param("id", new ParseUUIDPipe()) id: string,
   ): Promise<DownloadUrlResponse> {
@@ -133,6 +140,7 @@ export class DocumentsController {
   }
 
   @Delete(":id")
+  @Authorize("document:delete")
   @HttpCode(HttpStatus.NO_CONTENT)
   async remove(@Param("id", new ParseUUIDPipe()) id: string): Promise<void> {
     await this.documents.softDelete(id);

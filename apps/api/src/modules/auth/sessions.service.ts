@@ -31,7 +31,8 @@ export type RevokeReason =
   | "rotation_replay"
   | "rotation_superseded"
   | "admin"
-  | "expired";
+  | "expired"
+  | "password_reset";
 
 @Injectable()
 export class SessionsService {
@@ -183,6 +184,33 @@ export class SessionsService {
     if (rows.length > 0) {
       await this.sessionCache.delMany(rows.map((r) => r.id));
     }
+  }
+
+  /**
+   * Revoke EVERY active session for a user. Used by the password-reset flow
+   * (P1.3): changing the password forces a fresh login everywhere, killing any
+   * session an attacker may have established. Returns the count revoked.
+   */
+  async revokeAllForUser(
+    userId: string,
+    reason: RevokeReason,
+  ): Promise<number> {
+    const rows = await this.tenantDb.run((tx) =>
+      tx
+        .update(schema.sessions)
+        .set({ revokedAt: sql`now()`, revokedReason: reason })
+        .where(
+          and(
+            eq(schema.sessions.userId, userId),
+            isNull(schema.sessions.revokedAt),
+          ),
+        )
+        .returning({ id: schema.sessions.id }),
+    );
+    if (rows.length > 0) {
+      await this.sessionCache.delMany(rows.map((r) => r.id));
+    }
+    return rows.length;
   }
 
   async touchLastUsed(id: string): Promise<void> {

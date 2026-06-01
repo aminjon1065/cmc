@@ -45,7 +45,7 @@ describe("Auth flow", () => {
   describe("POST /auth/login", () => {
     it("issues a valid token bundle on correct credentials", async () => {
       const res = await request(app.getHttpServer())
-        .post("/auth/login")
+        .post("/v1/auth/login")
         .send({ email: user.email, password: user.password })
         .expect(200);
 
@@ -59,7 +59,7 @@ describe("Auth flow", () => {
 
     it("rejects an unknown user with 401 and audits user_not_found", async () => {
       await request(app.getHttpServer())
-        .post("/auth/login")
+        .post("/v1/auth/login")
         .send({ email: "ghost@auth.test", password: "doesnt_matter_8" })
         .expect(401);
 
@@ -72,7 +72,7 @@ describe("Auth flow", () => {
 
     it("rejects a wrong password with 401 and audits wrong_password", async () => {
       await request(app.getHttpServer())
-        .post("/auth/login")
+        .post("/v1/auth/login")
         .send({ email: user.email, password: "definitely_wrong_pwd" })
         .expect(401);
 
@@ -85,7 +85,7 @@ describe("Auth flow", () => {
 
     it("rejects malformed payloads with 400 (DTO validation)", async () => {
       await request(app.getHttpServer())
-        .post("/auth/login")
+        .post("/v1/auth/login")
         .send({ email: "not-an-email", password: "x" })
         .expect(400);
     });
@@ -95,12 +95,12 @@ describe("Auth flow", () => {
 
   describe("GET /auth/me", () => {
     it("returns 401 without a bearer token", async () => {
-      await request(app.getHttpServer()).get("/auth/me").expect(401);
+      await request(app.getHttpServer()).get("/v1/auth/me").expect(401);
     });
 
     it("returns 401 for a malformed token", async () => {
       await request(app.getHttpServer())
-        .get("/auth/me")
+        .get("/v1/auth/me")
         .set("Authorization", "Bearer this.is.not.a.jwt")
         .expect(401);
     });
@@ -108,7 +108,7 @@ describe("Auth flow", () => {
     it("returns the current user for a valid bearer token", async () => {
       const login = await loginAs(app, user);
       const res = await authed(app, login.accessToken)
-        .get("/auth/me")
+        .get("/v1/auth/me")
         .expect(200);
 
       const parsed = MeResponseSchema.safeParse(res.body);
@@ -125,7 +125,7 @@ describe("Auth flow", () => {
       const login = await loginAs(app, user);
 
       const rot = await request(app.getHttpServer())
-        .post("/auth/refresh")
+        .post("/v1/auth/refresh")
         .send({ refreshToken: login.refreshToken })
         .expect(200);
 
@@ -134,11 +134,11 @@ describe("Auth flow", () => {
       expect(parsed.data?.refreshToken).not.toBe(login.refreshToken);
 
       // New access works.
-      await authed(app, parsed.data!.accessToken).get("/auth/me").expect(200);
+      await authed(app, parsed.data!.accessToken).get("/v1/auth/me").expect(200);
 
       // Old refresh now points at a revoked session — replay path → 401.
       await request(app.getHttpServer())
-        .post("/auth/refresh")
+        .post("/v1/auth/refresh")
         .send({ refreshToken: login.refreshToken })
         .expect(401);
     });
@@ -149,7 +149,7 @@ describe("Auth flow", () => {
 
       // Replay the original — server burns the family.
       await request(app.getHttpServer())
-        .post("/auth/refresh")
+        .post("/v1/auth/refresh")
         .send({ refreshToken: login.refreshToken })
         .expect(401);
 
@@ -157,12 +157,12 @@ describe("Auth flow", () => {
       // (using the still-fresh token returned by the legitimate rotate)
       // is rejected because its session was burned.
       await request(app.getHttpServer())
-        .post("/auth/refresh")
+        .post("/v1/auth/refresh")
         .send({ refreshToken: rotated.refreshToken })
         .expect(401);
 
       // Access from the burnt session no longer authenticates either.
-      await authed(app, rotated.accessToken).get("/auth/me").expect(401);
+      await authed(app, rotated.accessToken).get("/v1/auth/me").expect(401);
 
       // DB shows the whole family marked rotation_replay or _superseded.
       const sessions = await sql<{ revoked_reason: string }[]>`
@@ -174,7 +174,7 @@ describe("Auth flow", () => {
 
     it("rejects an unknown refresh token with 401", async () => {
       await request(app.getHttpServer())
-        .post("/auth/refresh")
+        .post("/v1/auth/refresh")
         .send({ refreshToken: "a".repeat(48) })
         .expect(401);
     });
@@ -185,12 +185,12 @@ describe("Auth flow", () => {
   describe("POST /auth/logout", () => {
     it("revokes the current session — subsequent /auth/me is 401", async () => {
       const login = await loginAs(app, user);
-      await authed(app, login.accessToken).post("/auth/logout").expect(204);
-      await authed(app, login.accessToken).get("/auth/me").expect(401);
+      await authed(app, login.accessToken).post("/v1/auth/logout").expect(204);
+      await authed(app, login.accessToken).get("/v1/auth/me").expect(401);
     });
 
     it("requires authentication", async () => {
-      await request(app.getHttpServer()).post("/auth/logout").expect(401);
+      await request(app.getHttpServer()).post("/v1/auth/logout").expect(401);
     });
   });
 
@@ -203,7 +203,7 @@ describe("Auth flow", () => {
       const b = await loginAs(app, user);
 
       const res = await authed(app, a.accessToken)
-        .get("/auth/sessions")
+        .get("/v1/auth/sessions")
         .expect(200);
       const parsed = SessionsListResponseSchema.safeParse(res.body);
       expect(parsed.success).toBe(true);
@@ -215,7 +215,7 @@ describe("Auth flow", () => {
       // Voucher: the same query from the other access token marks the
       // other session as current.
       const resB = await authed(app, b.accessToken)
-        .get("/auth/sessions")
+        .get("/v1/auth/sessions")
         .expect(200);
       const currentB = SessionsListResponseSchema.parse(resB.body)
         .sessions.filter((s) => s.current)
@@ -231,7 +231,7 @@ describe("Auth flow", () => {
 
       // Find b's session id from a's perspective.
       const list = await authed(app, a.accessToken)
-        .get("/auth/sessions")
+        .get("/v1/auth/sessions")
         .expect(200);
       const bSession = SessionsListResponseSchema.parse(
         list.body,
@@ -239,19 +239,19 @@ describe("Auth flow", () => {
       expect(bSession).toBeDefined();
 
       await authed(app, a.accessToken)
-        .delete(`/auth/sessions/${bSession!.id}`)
+        .delete(`/v1/auth/sessions/${bSession!.id}`)
         .expect(204);
 
       // b's access token is now dead.
-      await authed(app, b.accessToken).get("/auth/me").expect(401);
+      await authed(app, b.accessToken).get("/v1/auth/me").expect(401);
       // a still works.
-      await authed(app, a.accessToken).get("/auth/me").expect(200);
+      await authed(app, a.accessToken).get("/v1/auth/me").expect(200);
     });
 
     it("refuses to revoke the current session (use logout)", async () => {
       const a = await loginAs(app, user);
       const list = await authed(app, a.accessToken)
-        .get("/auth/sessions")
+        .get("/v1/auth/sessions")
         .expect(200);
       const current = SessionsListResponseSchema.parse(list.body).sessions.find(
         (s) => s.current,
@@ -259,14 +259,14 @@ describe("Auth flow", () => {
       expect(current).toBeDefined();
 
       await authed(app, a.accessToken)
-        .delete(`/auth/sessions/${current!.id}`)
+        .delete(`/v1/auth/sessions/${current!.id}`)
         .expect(403);
     });
 
     it("returns 404 for an unknown id", async () => {
       const a = await loginAs(app, user);
       await authed(app, a.accessToken)
-        .delete("/auth/sessions/00000000-0000-0000-0000-000000000000")
+        .delete("/v1/auth/sessions/00000000-0000-0000-0000-000000000000")
         .expect(404);
     });
   });

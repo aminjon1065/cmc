@@ -81,6 +81,11 @@ export class AuditService {
     // request that produced it without every call site having to know
     // about the request-context plumbing.
     const requestId = input.requestId ?? this.requestContext.getRequestId() ?? null;
+    // Same ALS-default pattern as request_id: pull the captured OTEL
+    // trace id (P0.6 / ADR-0013) so every audit row joins to its trace
+    // without each call site knowing about the tracing plumbing.
+    const traceId =
+      input.traceId ?? this.requestContext.getTraceId() ?? null;
     return {
       tenantId: input.tenantId ?? null,
       actorId: input.actorId ?? null,
@@ -92,7 +97,7 @@ export class AuditService {
       ip: input.ip ?? null,
       userAgent: input.userAgent ?? null,
       requestId,
-      traceId: input.traceId ?? null,
+      traceId,
       metadata: input.metadata ?? null,
     };
   }

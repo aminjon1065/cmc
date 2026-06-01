@@ -1,0 +1,36 @@
+# Tempo — distributed-trace store for the CMC platform (P1.8 / ADR-0026).
+# Receives OTLP from the API (P0.6 emits when OTEL_EXPORTER_OTLP_ENDPOINT is
+# set). Dev-scale: local filesystem store, 7-day block retention. Production
+# would swap `local` for object storage (S3/MinIO).
+stream_over_http_enabled: true
+
+server:
+  http_listen_port: 3200
+  log_level: warn
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        http:
+          endpoint: 0.0.0.0:4318
+        grpc:
+          endpoint: 0.0.0.0:4317
+
+ingester:
+  max_block_duration: 5m
+
+compactor:
+  compaction:
+    block_retention: 168h # 7 days
+
+storage:
+  trace:
+    backend: local
+    local:
+      path: /var/tempo/blocks
+    wal:
+      path: /var/tempo/wal
+
+usage_report:
+  reporting_enabled: false

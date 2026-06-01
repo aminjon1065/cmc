@@ -2,7 +2,6 @@ import Link from "next/link";
 import {
   Activity,
   BarChart3,
-  Bot,
   Briefcase,
   FileText,
   Files,
@@ -22,6 +21,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Emblem } from "./emblem";
+import { getMyAccess, hasPermission, isAdmin } from "@/lib/access";
 
 type NavItem = {
   id: string;
@@ -95,13 +95,27 @@ const NAV: NavGroup[] = [
   },
 ];
 
-export function Sidebar({
+export async function Sidebar({
   active,
   user,
+  orgName = "Operational Intelligence Platform",
+  orgShort = "Enterprise Operations",
 }: {
   active?: string;
   user?: { name?: string | null; role?: string | null } | null;
+  /** Branding header strings (P0.11) — generic defaults keep this usable
+   *  without a tenant. */
+  orgName?: string;
+  orgShort?: string;
 }) {
+  // The Administration entry is only enabled for users who can manage the
+  // tenant (P1.4a); the Incidents entry for users who can read incidents
+  // (P1.5b). `getMyAccess()` is request-memoised, so this shares the round-trip
+  // the /admin layout + page already make.
+  const access = await getMyAccess();
+  const canAdmin = isAdmin(access);
+  const canIncidents = hasPermission(access, "incident:read");
+
   const initials = (user?.name ?? "")
     .split(/\s+/)
     .map((p) => p[0])
@@ -126,13 +140,13 @@ export function Sidebar({
             className="truncate text-[11.5px] font-semibold leading-tight"
             style={{ color: "var(--c-fg-1)", letterSpacing: "-0.01em" }}
           >
-            Crisis Management Center
+            {orgName}
           </div>
           <div
-            className="text-[9.5px] leading-tight"
+            className="truncate text-[9.5px] leading-tight"
             style={{ color: "var(--c-fg-3)", letterSpacing: "0.04em" }}
           >
-            Civil Defense · TJ
+            {orgShort}
           </div>
         </div>
       </div>
@@ -152,6 +166,25 @@ export function Sidebar({
             {group.items.map((item) => {
               const isActive = active === item.id;
               const Icon = item.icon;
+              // The Administration + Incidents entries are gated on the user's
+              // permissions at render time; Notifications is open to everyone;
+              // every other item keeps its static href/disabled.
+              const href =
+                item.id === "admin" && canAdmin
+                  ? "/admin"
+                  : item.id === "cases" && canIncidents
+                    ? "/incidents"
+                    : item.id === "notif"
+                      ? "/notifications"
+                      : item.href;
+              const disabled =
+                item.id === "admin"
+                  ? !canAdmin
+                  : item.id === "cases"
+                    ? !canIncidents
+                    : item.id === "notif"
+                      ? false
+                      : item.disabled;
               const content = (
                 <span
                   className="relative flex items-center gap-2.5 rounded-md px-2 py-1 text-[12px]"
@@ -159,11 +192,11 @@ export function Sidebar({
                     background: isActive ? "var(--c-bg-3)" : "transparent",
                     color: isActive
                       ? "var(--c-fg-1)"
-                      : item.disabled
+                      : disabled
                         ? "var(--c-fg-4)"
                         : "var(--c-fg-2)",
                     fontWeight: isActive ? 500 : 400,
-                    cursor: item.disabled ? "not-allowed" : "pointer",
+                    cursor: disabled ? "not-allowed" : "pointer",
                   }}
                 >
                   {isActive && (
@@ -183,9 +216,9 @@ export function Sidebar({
                   <span className="truncate">{item.label}</span>
                 </span>
               );
-              if (item.href && !item.disabled) {
+              if (href && !disabled) {
                 return (
-                  <Link key={item.id} href={item.href as never}>
+                  <Link key={item.id} href={href as never}>
                     {content}
                   </Link>
                 );
@@ -193,8 +226,8 @@ export function Sidebar({
               return (
                 <div
                   key={item.id}
-                  aria-disabled={item.disabled || undefined}
-                  title={item.disabled ? "Coming soon" : undefined}
+                  aria-disabled={disabled || undefined}
+                  title={disabled ? "Coming soon" : undefined}
                 >
                   {content}
                 </div>

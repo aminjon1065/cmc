@@ -45,7 +45,7 @@ describe("Documents", () => {
   // ---------- list ----------
 
   it("GET /documents returns an empty list initially", async () => {
-    const res = await authed(app, accessToken).get("/documents").expect(200);
+    const res = await authed(app, accessToken).get("/v1/documents").expect(200);
     const list = ListDocumentsResponseSchema.parse(res.body);
     expect(list.total).toBe(0);
     expect(list.documents).toEqual([]);
@@ -55,7 +55,7 @@ describe("Documents", () => {
 
   it("POST /documents/upload-init creates a pending row + returns presigned URL", async () => {
     const res = await authed(app, accessToken)
-      .post("/documents/upload-init")
+      .post("/v1/documents/upload-init")
       .send({
         name: "report.pdf",
         mimeType: "application/pdf",
@@ -74,7 +74,7 @@ describe("Documents", () => {
 
   it("rejects oversize uploads with 400", async () => {
     await authed(app, accessToken)
-      .post("/documents/upload-init")
+      .post("/v1/documents/upload-init")
       .send({
         name: "huge.bin",
         mimeType: "application/octet-stream",
@@ -85,7 +85,7 @@ describe("Documents", () => {
 
   it("rejects payloads with invalid MIME type via DTO validation", async () => {
     await authed(app, accessToken)
-      .post("/documents/upload-init")
+      .post("/v1/documents/upload-init")
       .send({
         name: "x.bin",
         mimeType: "not a mime",
@@ -98,7 +98,7 @@ describe("Documents", () => {
 
   it("POST /documents/:id/finalize fails when the object is missing", async () => {
     const init = await authed(app, accessToken)
-      .post("/documents/upload-init")
+      .post("/v1/documents/upload-init")
       .send({
         name: "missing.txt",
         mimeType: "text/plain",
@@ -109,7 +109,7 @@ describe("Documents", () => {
 
     // We never PUT bytes to the bucket — finalize should refuse.
     await authed(app, accessToken)
-      .post(`/documents/${docId}/finalize`)
+      .post(`/v1/documents/${docId}/finalize`)
       .expect(400);
 
     // Status flipped to 'failed' with a structured reason.
@@ -127,7 +127,7 @@ describe("Documents", () => {
   it("full lifecycle: init → PUT to MinIO → finalize → list → download URL → delete → list empty", async () => {
     // 1. init
     const init = await authed(app, accessToken)
-      .post("/documents/upload-init")
+      .post("/v1/documents/upload-init")
       .send({
         name: "hello.txt",
         mimeType: "text/plain",
@@ -147,21 +147,21 @@ describe("Documents", () => {
 
     // 3. finalize — server HEADs the object, captures size + ETag.
     const fin = await authed(app, accessToken)
-      .post(`/documents/${docId}/finalize`)
+      .post(`/v1/documents/${docId}/finalize`)
       .expect(200);
     const finBody = FinalizeUploadResponseSchema.parse(fin.body);
     expect(finBody.document.status).toBe("ready");
     expect(finBody.document.sizeBytes).toBe(13);
 
     // 4. list — the doc is there.
-    const list = await authed(app, accessToken).get("/documents").expect(200);
+    const list = await authed(app, accessToken).get("/v1/documents").expect(200);
     const listBody = ListDocumentsResponseSchema.parse(list.body);
     expect(listBody.total).toBe(1);
     expect(listBody.documents[0]?.id).toBe(docId);
 
     // 5. download URL — fetch via the presigned GET, bytes match.
     const dl = await authed(app, accessToken)
-      .get(`/documents/${docId}/download-url`)
+      .get(`/v1/documents/${docId}/download-url`)
       .expect(200);
     const dlBody = DownloadUrlResponseSchema.parse(dl.body);
     const fetched = await fetch(dlBody.url);
@@ -169,10 +169,10 @@ describe("Documents", () => {
     expect(await fetched.text()).toBe("Hello, world!");
 
     // 6. delete (soft).
-    await authed(app, accessToken).delete(`/documents/${docId}`).expect(204);
+    await authed(app, accessToken).delete(`/v1/documents/${docId}`).expect(204);
 
     // 7. list is empty again.
-    const after = await authed(app, accessToken).get("/documents").expect(200);
+    const after = await authed(app, accessToken).get("/v1/documents").expect(200);
     expect(ListDocumentsResponseSchema.parse(after.body).total).toBe(0);
 
     // DB row is soft-deleted, not hard-deleted.
@@ -188,7 +188,7 @@ describe("Documents", () => {
 
   it("GET /documents/:id returns 404 for a non-existent id", async () => {
     await authed(app, accessToken)
-      .get("/documents/00000000-0000-0000-0000-000000000000")
+      .get("/v1/documents/00000000-0000-0000-0000-000000000000")
       .expect(404);
   });
 
@@ -212,7 +212,7 @@ describe("Documents", () => {
     await sql`RESET app.bypass_rls`;
 
     const res = await authed(app, accessToken)
-      .get(`/documents/${inserted[0]!.id}`)
+      .get(`/v1/documents/${inserted[0]!.id}`)
       .expect(200);
     const body = DocumentResponseSchema.parse(res.body);
     expect(body.document.name).toBe("pre.txt");
@@ -223,7 +223,7 @@ describe("Documents", () => {
 
   it("audit_log captures upload_init, finalize, and delete", async () => {
     const init = await authed(app, accessToken)
-      .post("/documents/upload-init")
+      .post("/v1/documents/upload-init")
       .send({
         name: "audited.txt",
         mimeType: "text/plain",
@@ -239,10 +239,10 @@ describe("Documents", () => {
     });
 
     await authed(app, accessToken)
-      .post(`/documents/${docId}/finalize`)
+      .post(`/v1/documents/${docId}/finalize`)
       .expect(200);
 
-    await authed(app, accessToken).delete(`/documents/${docId}`).expect(204);
+    await authed(app, accessToken).delete(`/v1/documents/${docId}`).expect(204);
 
     await sql`SET app.bypass_rls = 'on'`;
     const actions = await sql<{ action: string }[]>`

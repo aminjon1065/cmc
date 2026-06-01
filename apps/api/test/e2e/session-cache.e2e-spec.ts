@@ -66,7 +66,7 @@ describe("Session-active cache", () => {
     // the *next* request that carries the token).
     await expect(redis.exists(cacheKey(sid))).resolves.toBe(0);
 
-    await authed(app, login.accessToken).get("/auth/me").expect(200);
+    await authed(app, login.accessToken).get("/v1/auth/me").expect(200);
 
     // After /auth/me the cache key exists with the expected payload.
     const raw = await redis.get(cacheKey(sid));
@@ -84,9 +84,9 @@ describe("Session-active cache", () => {
     const login = await loginAs(app, user);
     const sid = sidFromAccessToken(login.accessToken);
 
-    await authed(app, login.accessToken).get("/auth/me").expect(200);
-    await authed(app, login.accessToken).get("/auth/me").expect(200);
-    await authed(app, login.accessToken).get("/auth/me").expect(200);
+    await authed(app, login.accessToken).get("/v1/auth/me").expect(200);
+    await authed(app, login.accessToken).get("/v1/auth/me").expect(200);
+    await authed(app, login.accessToken).get("/v1/auth/me").expect(200);
 
     // Still cached after multiple authed reads.
     await expect(redis.exists(cacheKey(sid))).resolves.toBe(1);
@@ -98,17 +98,17 @@ describe("Session-active cache", () => {
     const login = await loginAs(app, user);
     const sid = sidFromAccessToken(login.accessToken);
 
-    await authed(app, login.accessToken).get("/auth/me").expect(200);
+    await authed(app, login.accessToken).get("/v1/auth/me").expect(200);
     await expect(redis.exists(cacheKey(sid))).resolves.toBe(1);
 
-    await authed(app, login.accessToken).post("/auth/logout").expect(204);
+    await authed(app, login.accessToken).post("/v1/auth/logout").expect(204);
 
     // Cache key gone — next request for this sid would miss and fall
     // through to DB (which now shows revoked_at set).
     await expect(redis.exists(cacheKey(sid))).resolves.toBe(0);
 
     // And the token is dead.
-    await authed(app, login.accessToken).get("/auth/me").expect(401);
+    await authed(app, login.accessToken).get("/v1/auth/me").expect(401);
   });
 
   // ---------- admin revoke (DELETE /auth/sessions/:id) ----------
@@ -120,15 +120,15 @@ describe("Session-active cache", () => {
     const bSid = sidFromAccessToken(b.accessToken);
 
     // Warm both cache entries via authed requests.
-    await authed(app, a.accessToken).get("/auth/me").expect(200);
-    await authed(app, b.accessToken).get("/auth/me").expect(200);
+    await authed(app, a.accessToken).get("/v1/auth/me").expect(200);
+    await authed(app, b.accessToken).get("/v1/auth/me").expect(200);
 
     await expect(redis.exists(cacheKey(aSid))).resolves.toBe(1);
     await expect(redis.exists(cacheKey(bSid))).resolves.toBe(1);
 
     // From session A, revoke session B.
     await authed(app, a.accessToken)
-      .delete(`/auth/sessions/${bSid}`)
+      .delete(`/v1/auth/sessions/${bSid}`)
       .expect(204);
 
     // B's cache entry gone; A's still present.
@@ -136,9 +136,9 @@ describe("Session-active cache", () => {
     await expect(redis.exists(cacheKey(aSid))).resolves.toBe(1);
 
     // B's token is dead.
-    await authed(app, b.accessToken).get("/auth/me").expect(401);
+    await authed(app, b.accessToken).get("/v1/auth/me").expect(401);
     // A's token still works.
-    await authed(app, a.accessToken).get("/auth/me").expect(200);
+    await authed(app, a.accessToken).get("/v1/auth/me").expect(200);
   });
 
   // ---------- refresh-rotation ----------
@@ -147,7 +147,7 @@ describe("Session-active cache", () => {
     const login = await loginAs(app, user);
     const oldSid = sidFromAccessToken(login.accessToken);
 
-    await authed(app, login.accessToken).get("/auth/me").expect(200);
+    await authed(app, login.accessToken).get("/v1/auth/me").expect(200);
     await expect(redis.exists(cacheKey(oldSid))).resolves.toBe(1);
 
     const rotated = await refresh(app, login.refreshToken);
@@ -159,7 +159,7 @@ describe("Session-active cache", () => {
     // Successor not pre-warmed — lazy populate on first authed request.
     await expect(redis.exists(cacheKey(newSid))).resolves.toBe(0);
 
-    await authed(app, rotated.accessToken).get("/auth/me").expect(200);
+    await authed(app, rotated.accessToken).get("/v1/auth/me").expect(200);
     await expect(redis.exists(cacheKey(newSid))).resolves.toBe(1);
   });
 
@@ -174,14 +174,14 @@ describe("Session-active cache", () => {
 
     // Warm sidB's cache entry. sidA's cache was already invalidated by
     // the legitimate rotate (asserted above).
-    await authed(app, rotated.accessToken).get("/auth/me").expect(200);
+    await authed(app, rotated.accessToken).get("/v1/auth/me").expect(200);
     await expect(redis.exists(cacheKey(sidB))).resolves.toBe(1);
 
     // Replay the original (already-rotated) refresh token → family
     // burn → both sidA and sidB are revoked AND their cache entries
     // DEL'd.
     await request(app.getHttpServer())
-      .post("/auth/refresh")
+      .post("/v1/auth/refresh")
       .send({ refreshToken: login.refreshToken })
       .expect(401);
 
@@ -189,7 +189,7 @@ describe("Session-active cache", () => {
     await expect(redis.exists(cacheKey(sidB))).resolves.toBe(0);
 
     // sidB's access token now fails — middleware finds revoked row.
-    await authed(app, rotated.accessToken).get("/auth/me").expect(401);
+    await authed(app, rotated.accessToken).get("/v1/auth/me").expect(401);
   });
 
   // ---------- payload mismatch defence-in-depth ----------
@@ -214,7 +214,7 @@ describe("Session-active cache", () => {
 
     // Request still succeeds — DB confirms the session is real and
     // belongs to the right user.
-    await authed(app, login.accessToken).get("/auth/me").expect(200);
+    await authed(app, login.accessToken).get("/v1/auth/me").expect(200);
 
     // And the poisoned entry gets overwritten with the correct payload
     // (the middleware repopulates after the DB confirms active).

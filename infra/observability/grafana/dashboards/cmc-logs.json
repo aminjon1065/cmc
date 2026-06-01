@@ -1,0 +1,96 @@
+{
+  "uid": "cmc-logs",
+  "title": "CMC · Logs",
+  "tags": ["cmc", "logs"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "type": "textbox",
+        "name": "request_id",
+        "label": "request_id",
+        "query": ".+",
+        "current": { "text": ".+", "value": ".+" }
+      },
+      {
+        "type": "textbox",
+        "name": "tenant",
+        "label": "tenant",
+        "query": ".+",
+        "current": { "text": ".+", "value": ".+" }
+      },
+      {
+        "type": "textbox",
+        "name": "search",
+        "label": "search",
+        "query": "",
+        "current": { "text": "", "value": "" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "API log rate by level",
+      "datasource": { "type": "loki", "uid": "cmc-loki" },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "bars", "fillOpacity": 60, "stacking": { "mode": "normal" } } } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "cmc-loki" },
+          "expr": "sum by (level) (count_over_time({app=\"cmc-api\"} | json | __error__=\"\" [1m]))",
+          "legendFormat": "level {{level}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "logs",
+      "title": "API logs — filter by request_id / tenant / search",
+      "datasource": { "type": "loki", "uid": "cmc-loki" },
+      "gridPos": { "h": 13, "w": 24, "x": 0, "y": 6 },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": true,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "cmc-loki" },
+          "expr": "{app=\"cmc-api\"} | json | requestId =~ `$request_id` | tenantId =~ `$tenant` |~ `$search`"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "logs",
+      "title": "Infra container logs (postgres / redis / mailpit / …)",
+      "datasource": { "type": "loki", "uid": "cmc-loki" },
+      "gridPos": { "h": 11, "w": 24, "x": 0, "y": 19 },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "cmc-loki" },
+          "expr": "{job=\"docker\"} |~ `$search`"
+        }
+      ]
+    }
+  ]
+}

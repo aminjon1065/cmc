@@ -69,7 +69,7 @@ describe("RLS — cross-tenant isolation", () => {
       await loginAs(app, userB); // creates a session for Tenant B
 
       const res = await authed(app, aLogin.accessToken)
-        .get("/auth/sessions")
+        .get("/v1/auth/sessions")
         .expect(200);
 
       const list = SessionsListResponseSchema.parse(res.body);
@@ -95,7 +95,7 @@ describe("RLS — cross-tenant isolation", () => {
       expect(bSession.length).toBe(1);
 
       await authed(app, aLogin.accessToken)
-        .delete(`/auth/sessions/${bSession[0]!.id}`)
+        .delete(`/v1/auth/sessions/${bSession[0]!.id}`)
         .expect(404);
 
       // B's session is unchanged.
@@ -125,7 +125,7 @@ describe("RLS — cross-tenant isolation", () => {
 
       const aLogin = await loginAs(app, userA);
       const res = await authed(app, aLogin.accessToken)
-        .get("/documents")
+        .get("/v1/documents")
         .expect(200);
       const list = ListDocumentsResponseSchema.parse(res.body);
       expect(list.total).toBe(0);
@@ -149,15 +149,15 @@ describe("RLS — cross-tenant isolation", () => {
       const aLogin = await loginAs(app, userA);
 
       await authed(app, aLogin.accessToken)
-        .get(`/documents/${docId}`)
+        .get(`/v1/documents/${docId}`)
         .expect(404);
 
       await authed(app, aLogin.accessToken)
-        .get(`/documents/${docId}/download-url`)
+        .get(`/v1/documents/${docId}/download-url`)
         .expect(404);
 
       await authed(app, aLogin.accessToken)
-        .delete(`/documents/${docId}`)
+        .delete(`/v1/documents/${docId}`)
         .expect(404);
 
       // Row is intact in DB.

@@ -17,15 +17,15 @@
 | # | Title | Severity | Effort | Area |
 |---|---|---|---|---|
 | TD-001 | No rate limiting on auth endpoints | ✅ RESOLVED 2026-05-25 (P0.1, ADR-0009) | S | Security |
-| TD-002 | No MFA | S0 | M | Security |
-| TD-003 | No RBAC — every authed user can read every document | S0 | M | Security |
+| TD-002 | No MFA | ✅ RESOLVED 2026-05-25 (P1.2, ADR-0020) | M | Security |
+| TD-003 | No RBAC — every authed user can read every document | ✅ RESOLVED 2026-05-25 (P1.1, ADR-0019) | M | Security |
 | TD-004 | Postgres backups absent | ✅ RESOLVED 2026-05-25 (P0.5, ADR-0012) | S | Operations |
 | TD-005 | Secrets in `.env` files in compose / CI | S0 | M | Security |
-| TD-006 | No reverse proxy / TLS strategy committed (deferred to deploy) | S0 | S | Operations |
+| TD-006 | No reverse proxy / TLS strategy committed (deferred to deploy) | ✅ RESOLVED 2026-05-25 (P0.9, ADR-0016) | S | Operations |
 | TD-007 | Logs unstructured (text via NestJS default) | ✅ RESOLVED 2026-05-25 (P0.3, ADR-0010) | S | Observability |
-| TD-008 | No `request_id` / `trace_id` populated | 🟡 PARTIAL — request_id ✅ (P0.3); trace_id deferred to P0.6 | S | Observability |
-| TD-009 | No metrics endpoint / no Prometheus | S1 | S | Observability |
-| TD-010 | Health check is liveness only — no dependency probes | S1 | XS | Operations |
+| TD-008 | No `request_id` / `trace_id` populated | ✅ RESOLVED 2026-05-25 (request_id P0.3/ADR-0010; trace_id P0.6/ADR-0013) | S | Observability |
+| TD-009 | No metrics endpoint / no Prometheus | ✅ RESOLVED 2026-05-25 (P0.7, ADR-0014) | S | Observability |
+| TD-010 | Health check is liveness only — no dependency probes | ✅ RESOLVED 2026-05-25 (P0.8, ADR-0015) | XS | Operations |
 | TD-011 | Audit-log hash chain columns exist but unpopulated | S1 | M | Security / compliance |
 | TD-012 | Audit-write failures are swallowed, not retried | S1 | S | Reliability |
 | TD-013 | Redis deployed but unused by app code | ✅ RESOLVED 2026-05-25 (P0.2, ADR-0008) | S | Performance |
@@ -36,7 +36,7 @@
 | TD-018 | Session-active lookup hits Postgres on every authenticated request | ✅ RESOLVED 2026-05-25 (P0.4, ADR-0011) | S | Performance |
 | TD-019 | No connection pooler (PgBouncer) | S2 | S | Scaling |
 | TD-020 | No outbox / event bus → cross-module reactions absent | S1 | L | Architecture |
-| TD-021 | Tajikistan-CMC branding hardcoded in shared components | S2 | S | Multi-tenant readiness |
+| TD-021 | Tajikistan-CMC branding hardcoded in shared components | ✅ RESOLVED 2026-05-25 (P0.11, ADR-0018) | S | Multi-tenant readiness |
 | TD-022 | Hardcoded demo data on dashboard | S2 | M | Product correctness |
 | TD-023 | Frontend inline-styled — design system promised, not implemented | S2 | L | Frontend |
 | TD-024 | No i18n / Russian/Tajik locale | S2 | L | Product |
@@ -52,7 +52,7 @@
 | TD-034 | No janitor job for expired/abandoned `uploading` document rows | S3 | S | Operations |
 | TD-035 | The interceptor wraps every authenticated handler in a tx, even read-only handlers | S3 | — | Performance (negligible today) |
 | TD-036 | No `failed`-status object lifecycle rule in MinIO bucket | S3 | S | Operations |
-| TD-037 | No password-reset flow → admins seed passwords | S2 | S | UX / Security |
+| TD-037 | ~~No password-reset flow → admins seed passwords~~ ✅ **RESOLVED** (P1.3 / ADR-0021) | S2 | S | UX / Security |
 | TD-038 | No tenant picker for cross-tenant email collision | S3 | S | UX |
 | TD-039 | `audit_log.metadata` is jsonb with no validation — keys can drift | S3 | XS | Data quality |
 | TD-040 | No coverage report | S3 | XS | Testing hygiene |
@@ -72,15 +72,15 @@
 - Breach metrics → P0.7 (Prometheus)
 - Per-tenant overrides → P1.4 (admin panel)
 
-### TD-002 — No MFA
-**Risk:** single-factor authentication. ToR §6.11 default is multi-factor.
-**Locations:** auth flow end-to-end.
-**Remediation:** TOTP first (cheapest), WebAuthn second. Backup codes one-time-use, argon2-hashed. Already on the roadmap (P1.2).
+### TD-002 — No MFA · ✅ RESOLVED 2026-05-25
+**Was:** single-factor (password) authentication; ToR §6.11 default is multi-factor.
+**Resolution:** P1.2 added TOTP MFA — `user_mfa_methods` (secret AES-256-GCM encrypted at rest) + `mfa_backup_codes` (argon2, one-time) under RLS; two-step login via a stateless `mfa_token` (`/auth/login` → `mfa_required` → `/auth/mfa/verify` → session); confirm-before-active enrolment with QR; rate-limited + audited; management endpoints (enrol/confirm/status/disable/regenerate). 8 e2e tests; full suite 100/100; live-validated end-to-end. ADR-0020 captures it.
+**Follow-on:** `MFA_ENC_KEY` → Vault (P2.14); per-tenant/role MFA-required enforcement + admin reset → P1.4; WebAuthn/FIDO2 → later.
 
-### TD-003 — No RBAC
-**Risk:** every authenticated user can read every document, list every session, and (once added) act on every incident / case / workflow in their tenant. Tenant is the only access boundary.
-**Locations:** `apps/api/src/modules/documents/documents.controller.ts` — `@UseGuards(JwtAuthGuard)` only.
-**Remediation:** RBAC tables + `@Authorize` guard. Roadmap P1.1.
+### TD-003 — No RBAC · ✅ RESOLVED 2026-05-25
+**Was:** every authenticated user could read every document (and act on every future module) — tenant was the only access boundary.
+**Resolution:** P1.1 added per-tenant roles + a global permission catalog (`permissions`/`roles`/`role_permissions`/`user_roles`, all RLS-isolated), the `@Authorize` guard with a Redis-cached permission set (fail-open, invalidated on role change), and system roles (`tenant_admin`/`operator`/`auditor`) seeded per tenant. Documents are now `@Authorize`-gated per route (read/write/delete) — a role-less user gets 403, an operator can't delete, an auditor can't write. Every denial is audited. 9 e2e tests; full suite 92/92; live-validated. ADR-0019 captures it.
+**Follow-on:** ABAC/OPA → later layer; custom-role CRUD → P1.4; `/health/deep` role-gate → one-line follow-on.
 
 ### TD-004 — No Postgres backups · ✅ RESOLVED 2026-05-25
 **Was:** any disk loss was total data loss. No restore tool, no rehearsal.
@@ -97,30 +97,33 @@
 **Locations:** `apps/api/.env`, `infra/.env`, CI workflow env blocks.
 **Remediation:** Vault dev mode in compose, sourcing one workload's secrets first (cmc_app DB credentials are the smallest blast radius). Roadmap P2.12.
 
-### TD-006 — No reverse proxy / TLS
-**Risk:** cannot deploy externally.
-**Locations:** compose has no proxy; ADR-0001 defers to "deploy step."
-**Remediation:** Caddy in `infra/deploy-compose.yml` overlay. Roadmap P0.9.
+### TD-006 — No reverse proxy / TLS · ✅ RESOLVED 2026-05-25
+**Was:** no TLS termination, no single ingress — could not serve the platform externally.
+**Resolution:** P0.9 added a Caddy edge in `infra/deploy-compose.yml` + `infra/caddy/Caddyfile` (automatic Let's Encrypt in prod, internal CA for `*.localhost`). Subdomain routing (`{$APP_HOST}`→web, `{$API_HOST}`→API) — not path-based, because `/v1` doesn't exist yet (P1.9) and the API paths collide with web routes. Security headers + HSTS + gzip; `/metrics` + `/health/deep` 404'd at the edge (closes ADR-0014/0015 follow-ons). `pnpm deploy:*`. Live-verified end-to-end with the internal CA. ADR-0016 captures it.
+**Follow-on:** upstreams flip to compose-DNS at P0.10; edge WAF/rate-limit → later hardening; mTLS → P4.
 
 ### TD-007 — Unstructured logs · ✅ RESOLVED 2026-05-25
 **Was:** ELK/Loki ingestion was best-effort regex. Incident debugging meant grep across processes.
 **Resolution:** P0.3 swapped the NestJS default logger for `nestjs-pino`. Every `new Logger("Foo")` call site pipes through pino transparently. JSON in prod, pino-pretty in dev. Centralised redact list strips authorization / cookie / password / refreshToken. Custom req serializer trims headers to a safe allowlist. Mixin reads `RequestContextService` and `TenantContextService` ALS at log time → every line carries `requestId`, optionally `tenantId` + `userId`. ADR-0010 captures the contract.
 **Follow-on:** log shipping (Loki + Promtail) → P1.7.
 
-### TD-008 — No `request_id` / `trace_id` populated · 🟡 PARTIAL
+### TD-008 — No `request_id` / `trace_id` populated · ✅ RESOLVED 2026-05-25
 **Was:** audit-log columns existed but were NULL; no cross-process correlation.
-**Resolution (request_id only):** P0.3 added `RequestContextService` (ALS-backed) populated by `RequestContextMiddleware` that runs *before* `TenantContextMiddleware`. `AuditService.toRow()` defaults `request_id` from the ALS scope so every audit row is auto-correlated. UUID-shape gate on inbound `X-Request-Id` closes log-injection. Header echoed on response + included in problem+json body.
-**Remaining:** `trace_id` still NULL — the ALS slot is reserved and the audit serializer wires through, but the OTEL plumbing that produces trace ids lands at P0.6.
+**Resolution (request_id, P0.3):** `RequestContextService` (ALS-backed) populated by `RequestContextMiddleware` that runs *before* `TenantContextMiddleware`. `AuditService.toRow()` defaults `request_id` from the ALS scope so every audit row is auto-correlated. UUID-shape gate on inbound `X-Request-Id` closes log-injection. Header echoed on response + included in problem+json body.
+**Resolution (trace_id, P0.6 / ADR-0013):** OTEL `NodeSDK` started before any instrumented module; `RequestContextMiddleware` captures the active span's trace id into the same ALS and echoes `X-Trace-Id`; pino `customProps` and `AuditService.toRow()` now stamp `trace_id` via the ALS (same `?? null` pattern as request_id). Verified end-to-end (`tracing.e2e-spec.ts`): trace_id lands on audit rows on both success and durable-failure paths and is adopted from an inbound W3C `traceparent`.
 
-### TD-009 — No metrics endpoint
-**Risk:** capacity blindness.
-**Locations:** absent.
-**Remediation:** OTEL Prometheus exporter or `prom-client`. Roadmap P0.7.
+### TD-009 — No metrics endpoint · ✅ RESOLVED 2026-05-25
+**Was:** capacity blindness — no `/metrics`, no Prometheus client.
+**Resolution:** P0.7 added a `prom-client` registry + `GET /metrics`: HTTP RED histogram (`http_request_duration_seconds` by method/route/status, route = matched pattern so no id-cardinality), DB saturation (`cmc_db_transactions_in_flight`, `cmc_db_transactions_total{scope,outcome}`, `cmc_db_pool_max`), and Node defaults. Prometheus + Grafana compose (`pnpm obs:up`) with a checked-in `cmc-api-red.json` dashboard. `metrics.e2e-spec.ts` proves format, RED increments, exclusions, and no-UUID-leak; full suite 69/69. ADR-0014 captures it.
+**Follow-on tracking:**
+- Alert rules on these series → P1.8 (Alertmanager)
+- Business metrics + per-tenant label → P1.x / H1 cardinality decision
+- Exact pool stats → node-`pg` migration; /metrics network restriction → P0.9
 
-### TD-010 — Liveness-only health check
-**Risk:** Kubernetes readiness probes and load balancer health probes will route traffic to instances whose Postgres / Redis / MinIO are broken.
-**Locations:** `apps/api/src/modules/health/health.controller.ts`.
-**Remediation:** Add `/health/ready` and `/health/deep`. Roadmap P0.8.
+### TD-010 — Liveness-only health check · ✅ RESOLVED 2026-05-25
+**Was:** `/health` answered 200 regardless of dependency state — LBs/orchestrators would route to instances with broken Postgres/Redis/MinIO.
+**Resolution:** P0.8 added `/health/ready` (anonymous; parallel, timeout-bounded probes of Postgres `select 1` + Redis `ping` + MinIO `HeadObject`; **200 ready / 503 not_ready**) and `/health/deep` (authenticated; per-dep status + latencyMs + error, `ok|degraded`). Liveness `/health` left untouched (never touches a dep, by design). `HEALTH_PROBE_TIMEOUT_MS` bounds each probe. Live-verified incl. the dead-dep 503 path (liveness stays 200); e2e 73/73. ADR-0015 captures it.
+**Follow-on:** `/health/deep` role-gate → P1.1 (RBAC); `/health/startup` + external synthetic monitor → when needed / H1.
 
 ### TD-011 — Audit-log hash chain absent
 **Risk:** ToR §3.15 "tamper-evident" property is aspirational. A privileged operator or compromised role could rewrite history without detection.
@@ -172,14 +175,10 @@
 **Locations:** none.
 **Remediation:** NATS JetStream + outbox + relay. Roadmap P2.1.
 
-### TD-021 — Tajikistan-CMC branding hardcoded
-**Risk:** the second tenant cannot be onboarded without code changes.
-**Locations:**
-- `apps/web/src/app/dashboard/page.tsx` (region names, ministry abbreviations, "Cabinet briefed at 03:15", "Dushanbe")
-- `apps/web/src/app/login/page.tsx` (mural copy "Republic of Tajikistan's emergency operations", "National Data Center · Dushanbe", "v2.6.0 · Build 2026.05.14")
-- `apps/web/src/components/cmc/sidebar.tsx` ("Crisis Management Center", "Civil Defense · TJ")
-- `apps/web/src/app/layout.tsx` (metadata.description)
-**Remediation:** `tenant_branding` table + a per-tenant theme provider. Roadmap P0.11.
+### TD-021 — Tajikistan-CMC branding hardcoded · ✅ RESOLVED 2026-05-25
+**Was:** the org identity (Crisis Management Center, Civil Defense · TJ, Republic of Tajikistan mural copy, National Data Center · Dushanbe, build label, metadata) was hardcoded across `login/page.tsx`, `layout.tsx`, `sidebar.tsx`, and the dashboard hero — the second tenant could not be onboarded without editing components.
+**Resolution:** P0.11 added a `tenant_branding` table (RLS-isolated) + a context-aware `GET /branding` (authed → own tenant, anonymous → default tenant). `@cmc/contracts` ships a **vendor-neutral** `DEFAULT_BRANDING`; the TJ-CMC values live ONLY in `seed-branding.ts`. Web fetches branding server-side (fallback-safe) and all hardcoded strings are gone (grep-clean). 6 e2e tests prove tenant isolation + no-leak. ADR-0018 captures it.
+**Note:** only **branding** moved. The dashboard's hardcoded **demo data** (regions, incident counts, ribbon) is a separate item — TD-022, addressed at P1.5 / P2.6.
 
 ### TD-022 — Hardcoded demo data on dashboard
 **Risk:** the dashboard claims a system state that does not exist. A user sees "27 active incidents" with no underlying data.
@@ -217,6 +216,7 @@
 **Risk:** ToR §13.14 calls for Semgrep, CodeQL, Trivy, OWASP Dependency-Check, OSV-Scanner, Falco, ZAP.
 **Locations:** absent from `.github/workflows/ci.yml`.
 **Remediation:** start with Trivy + osv-scanner + Semgrep — all open source, all free for self-hosted.
+**Now-relevant:** P0.10 (ADR-0017) shipped api + web container images (distroless, non-root — minimal surface), so **container scanning (Trivy) + SBOM now have a concrete target**. The image build is local-only today; the natural home is a CI build-scan-push job.
 
 ### TD-030 — Trusting declared `sizeBytes` for the upload limit
 **Risk:** the pre-signed PUT carries the declared `Content-Length` in the signature (good — S3 enforces it). But a client that lies about size at upload-init can request a high-but-still-valid presign URL and upload that much; the size check at finalize fails after the bytes are already in MinIO.
@@ -247,9 +247,10 @@ The `set_config` parameter is bind-bound so injection is closed. The UUID regex 
 ### TD-036 — No bucket lifecycle for `failed`-status objects
 **Remediation:** MinIO lifecycle rule that auto-deletes objects whose key matches a `failed` pattern after 24 h. ADR-0004 named this.
 
-### TD-037 — No password reset flow
+### TD-037 — No password reset flow ✅ RESOLVED (2026-06-01, P1.3 / ADR-0021)
 **Risk:** admins set passwords via seed/SQL; users have no recovery path.
-**Remediation:** Roadmap P1.3.
+**Resolution:** `password_resets` table (single-use, sha256-hashed 256-bit token, RLS, migration `0008`) + two flows over a shared race-safe (CAS-consume) completion: self-service `POST /auth/password/forgot` (always-204, no enumeration) + `POST /auth/password/reset`, and admin-initiated `POST /auth/password/admin-reset/:userId` (gated by the new `user:manage` permission, returns the token). A reset revokes all sessions but leaves MFA intact. Delivery is behind a pluggable `PasswordResetNotifier` (dev logger now; SMTP at P1.6). Rate-limited + audited. 11 e2e tests; full suite 111/111; live-validated.
+**Remaining:** email delivery (P1.6) — until then production self-service is inert (notifier drops in prod); admins use admin-reset.
 
 ### TD-038 — No tenant picker for ambiguous emails
 **Risk:** when one email belongs to two tenants, login fails with the same 401 as wrong-password. Bad UX, but currently no second tenant exists.
@@ -280,11 +281,11 @@ ADR-0005 explains this is a deliberate accommodation of NestJS DI. **No action.*
 
 ## Aggregate
 
-- **Resolved since audit baseline:** 5 (TD-013 by P0.2; TD-001 by P0.1; TD-007 by P0.3; TD-018 by P0.4; TD-004 by P0.5)
-- **Partial:** 1 (TD-008 — request_id ✅ via P0.3; trace_id awaits P0.6)
-- **S0 items (must-fix before any non-dev deploy):** 4 (was 5; TD-004 resolved).
-- **S1 items (correctness/security under realistic load):** 4.
-- **S2 items (operational pain / scale cap):** 16 (was 17; TD-018 resolved).
+- **Resolved since audit baseline:** 13 (P0 band: TD-013/P0.2, TD-001/P0.1, TD-007/P0.3, TD-018/P0.4, TD-004/P0.5, TD-008/P0.3+P0.6, TD-009/P0.7, TD-010/P0.8, TD-006/P0.9, TD-021/P0.11; P1: TD-003/P1.1, TD-002/P1.2, TD-037/P1.3)
+- **Partial:** 0 (TD-008 fully closed — trace_id landed with P0.6)
+- **S0 items (must-fix before any non-dev deploy):** 1 (was 5; TD-004 + TD-006 + TD-003 + TD-002 resolved). Remaining: TD-005 (secrets in .env → P2.14 Vault).
+- **S1 items (correctness/security under realistic load):** 2 (was 4; TD-009 + TD-010 resolved).
+- **S2 items (operational pain / scale cap):** 14 (was 17; TD-018 + TD-021 + TD-037 resolved).
 - **S3 items (hygiene):** 13.
 
 Many S0 / S1 items are **already named in ADRs as known gaps**. The ADR discipline functions as a debt register — this document is the consolidated form.

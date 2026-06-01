@@ -16,8 +16,13 @@ module.exports = {
   // Tests touch real Postgres + run real argon2 verifies. 15s default is
   // tight under load; 30s gives margin without hiding genuine hangs.
   testTimeout: 30_000,
-  // Load the .env.test bootstrap before each worker imports anything.
-  setupFiles: [path.resolve(__dirname, "env.ts")],
+  // Load the .env.test bootstrap before each worker imports anything,
+  // then start OTEL tracing (P0.6) so it instruments http/express before
+  // the test files import them. Order matters: env first, tracing second.
+  setupFiles: [
+    path.resolve(__dirname, "env.ts"),
+    path.resolve(__dirname, "tracing-setup.ts"),
+  ],
   // One global setup that creates cmc_test, applies migrations, grants
   // cmc_app. Runs once before any worker starts.
   globalSetup: path.resolve(__dirname, "global-setup.ts"),

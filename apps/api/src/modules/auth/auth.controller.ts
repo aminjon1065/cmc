@@ -18,6 +18,7 @@ import type { Request } from "express";
 import type {
   LoginResponse,
   MeResponse,
+  MfaRequiredResponse,
   RefreshResponse,
   SessionsListResponse,
 } from "@cmc/contracts";
@@ -26,6 +27,7 @@ import { SessionsService } from "./sessions.service";
 import { AuthRateLimitSpecs } from "./auth-rate-limit.specs";
 import { LoginDto } from "./dto/login.dto";
 import { RefreshDto } from "./dto/refresh.dto";
+import { MfaVerifyDto } from "./dto/mfa-verify.dto";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { RateLimitService } from "../../common/rate-limit/rate-limit.service";
@@ -46,7 +48,7 @@ export class AuthController {
     @Body() body: LoginDto,
     @Ip() ip: string,
     @Req() req: Request,
-  ): Promise<LoginResponse> {
+  ): Promise<LoginResponse | MfaRequiredResponse> {
     // Rate-limit BEFORE credentials check so a flood of failed-credential
     // attempts cannot bypass throttling. Per ADR-0009: both per-IP and
     // per-email counters fire; the breach (whichever first) throws
@@ -63,6 +65,36 @@ export class AuthController {
     return this.auth.login({
       email: body.email,
       password: body.password,
+      ip: ip ?? null,
+      userAgent,
+    });
+  }
+
+  /**
+   * Second step of an MFA login. Rate-limited on the same per-IP login bucket
+   * so guessing TOTP/backup codes can't be brute-forced.
+   */
+  @Post("mfa/verify")
+  @HttpCode(HttpStatus.OK)
+  async mfaVerify(
+    @Body() body: MfaVerifyDto,
+    @Ip() ip: string,
+    @Req() req: Request,
+  ): Promise<LoginResponse> {
+    const userAgent = req.headers["user-agent"] ?? null;
+    await this.rateLimit.enforce(
+      this.rateLimitSpecs.loginSpecs({
+        ip: ip ?? null,
+        // No email at this step; key the per-email bucket on the mfa_token's
+        // tail so repeated attempts for the same pending login are throttled.
+        email: body.mfaToken.slice(-24),
+        userAgent,
+      }),
+    );
+
+    return this.auth.verifyMfa({
+      mfaToken: body.mfaToken,
+      code: body.code,
       ip: ip ?? null,
       userAgent,
     });

@@ -21,6 +21,13 @@ export type RequestContext = {
   requestId: string;
   /** Optional upstream correlation id (e.g. cross-system trace). */
   correlationId?: string;
+  /**
+   * OTEL trace id (32-hex) of the active server span, captured by
+   * RequestContextMiddleware (P0.6 / ADR-0013). Lets the logger and the
+   * audit writer stamp trace_id without coupling to the OTEL API.
+   * Undefined when tracing is disabled or no span is active.
+   */
+  traceId?: string;
 };
 
 @Injectable()
@@ -38,5 +45,20 @@ export class RequestContextService {
   /** Convenience: just the request_id, or `undefined` if outside scope. */
   getRequestId(): string | undefined {
     return this.storage.getStore()?.requestId;
+  }
+
+  /** The captured OTEL trace id, or `undefined` if none. */
+  getTraceId(): string | undefined {
+    return this.storage.getStore()?.traceId;
+  }
+
+  /**
+   * Stamp the trace id onto the active context. No-op if called outside a
+   * request scope (nothing to attach to). Set once, early, by the
+   * request-context middleware.
+   */
+  setTraceId(traceId: string): void {
+    const store = this.storage.getStore();
+    if (store) store.traceId = traceId;
   }
 }

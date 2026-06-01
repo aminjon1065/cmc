@@ -57,9 +57,9 @@ A `—` means "not applicable to a NOT STARTED module."
 - No OIDC server (no `.well-known/openid-configuration`, no JWKS endpoint, no third-party RP relationships)
 - No SAML 2.0 / SSO / SCIM
 - No service-account / API-key issuance
-- No MFA (TOTP, WebAuthn, backup codes) — ToR §6.11
-- No password reset flow
-- No tenant picker for cross-tenant email collision
+- ~~No MFA~~ ✅ TOTP MFA landed (P1.2 / ADR-0020): encrypted secret at rest, one-time backup codes, two-step `mfa_required` login, enrol/confirm/disable. WebAuthn + per-tenant enforcement still pending.
+- ~~No password reset flow~~ ✅ password reset landed (P1.3 / ADR-0021): `password_resets` (single-use sha256-hashed token, RLS), self-service (no-enumeration) + admin-initiated (`user:manage`-gated) flows, race-safe CAS completion that revokes all sessions but leaves MFA intact, pluggable notifier (dev logger now → SMTP at P1.6). Email delivery still pending (P1.6).
+- No tenant picker for cross-tenant email collision (TD-038; also makes ambiguous-email self-reset a no-op)
 - ~~No rate limiting~~ ✅ closed by P0.1 (auth endpoints); global rate-limit still pending → P0.9
 - No JIT provisioning from SSO claims
 - RS256 + JWKS + key rotation (today HS256 — fine until services split, called out in ADR-0002)
@@ -71,7 +71,7 @@ A `—` means "not applicable to a NOT STARTED module."
 - NATS for revocation broadcast (only matters when a second service exists)
 
 **Complexity to complete to ToR §3.1**
-- MFA + rate limit + password reset: **M**
+- ~~MFA + rate limit + password reset: **M**~~ ✅ all landed (P0.1 rate-limit, P1.2 MFA, P1.3 password reset)
 - OIDC server (Keycloak adoption or self-built with `oidc-provider`): **L**
 - SAML / SCIM: **L**
 - RS256 + JWKS rotation: **S**
@@ -95,6 +95,7 @@ A `—` means "not applicable to a NOT STARTED module."
 - `cmc_app` runtime role (`NOSUPERUSER NOBYPASSRLS`) + `FORCE ROW LEVEL SECURITY` on every tenant-scoped table
 - `runPrivileged` escape hatch with try/finally GUC reset
 - Cross-tenant access regression-tested at the API layer (`rls.e2e-spec.ts`)
+- **Per-tenant branding extracted to data** (P0.11 / ADR-0018): `tenant_branding` table (RLS-isolated) + context-aware `GET /branding` (authed→own, anon→default tenant); generic `DEFAULT_BRANDING` in contracts, TJ-CMC values seed-only; web fetches branding server-side (no hardcoded org identity left). 6 isolation/no-leak e2e tests.
 
 **Gaps vs ToR §3.2**
 - No separate-schema-per-tenant option for high-isolation modules
@@ -113,26 +114,30 @@ A `—` means "not applicable to a NOT STARTED module."
 
 | field | value |
 |---|---|
-| **Status** | NOT STARTED |
-| **Compl. %** | 0 % |
-| **Arch.** | — |
-| **Prod.** | — |
-| **Scale** | — |
-| **Sec.** | — |
-| **Code** | None |
+| **Status** | PARTIAL (RBAC ✅; ABAC pending) |
+| **Compl. %** | 45 % |
+| **Arch.** | 8/10 |
+| **Prod.** | 8/10 |
+| **Scale** | 7/10 |
+| **Sec.** | 8/10 |
+| **Code** | `packages/db/src/schema/rbac.ts`, `apps/api/src/modules/rbac/*`, `apps/api/src/common/authz/*`, `apps/api/src/common/permission-cache/*`, `packages/contracts/src/rbac.ts` |
 
-**Implemented**
-- (none)
+**Implemented (P1.1 / ADR-0019)**
+- Per-tenant `roles` + global `permissions` catalog + `role_permissions` + `user_roles`, all RLS-isolated (migration `0006`).
+- `PERMISSION_CATALOG` + `SYSTEM_ROLES` in `@cmc/contracts` — single source of truth for seed + guard strings.
+- `@Authorize('domain:action')` decorator + `AuthorizeGuard` (ALL-required; 403 + durable `rbac.access.denied` audit). Handles the guards-before-interceptors trap via `runForTenant` in the resolve path.
+- `PermissionCacheService` (Redis, fail-open, TTL 300s, invalidated on assign/remove). `RbacService` (resolve/hasPermission/listRoles/listUserRoles/assign/remove/enforce).
+- `RbacController`: roles list, user-roles list, assign/remove (gated `role:read`/`role:assign`).
+- System roles (`tenant_admin`/`operator`/`auditor`) seeded per tenant; documents `@Authorize`-protected per route. 9 e2e tests; live-validated.
 
-**Gaps**
-- All of ToR §3.3 / §6.1 / §6.2: no roles, no permissions, no policies, no PDP/PEP/PIP, no Rego, no `@AuthorizeWith` guard, no decision cache, no system-role table, no permission inheritance
+**Gaps vs ToR §3.3 / §6.2**
+- No ABAC / OPA / Rego (PDP/PEP/PIP, attribute policies) — RBAC only.
+- ~~No custom (non-system) role CRUD or permission editing API yet~~ ✅ custom-role CRUD landed (P1.4c / ADR-0022): `role:manage` perm, `GET /rbac/permissions` + `POST/PATCH/DELETE /rbac/roles`, system roles immutable, perm-cache invalidation on change, `/admin/roles` editor.
+- No permission inheritance / hierarchy; no decision-cache metrics; system-role immutability is a flag, not a DB trigger.
 
-**Operational consequence**
-Today **every authenticated user can read every document in their tenant.** The only existing access boundary is tenant. Within a tenant, no segregation by clearance, owner, team, or role exists.
+**Complexity to complete to §3.3:** **XL** for OPA-driven ABAC end-to-end (RBAC done).
 
-**Complexity:** **L** for RBAC, **XL** for OPA-driven ABAC end-to-end.
-
-**Sequencing note:** must precede any module where users have different responsibilities (Cases, Workflow approvals, GIS layer editing).
+**Sequencing note:** ✅ satisfied — RBAC now precedes the domain modules (P1.5 Incidents onward ship `@Authorize` from day one).
 
 ---
 
@@ -302,10 +307,16 @@ No LiveKit / Jitsi, no coturn, no signalling. **Complexity: XXL** (operational d
 
 | field | value |
 |---|---|
-| **Status** | NOT STARTED |
-| **Compl. %** | 0 % |
+| **Status** | P1.6 COMPLETE (phases a–c) |
+| **Compl. %** | 60 % (in-app + web center + email + prefs) |
 
-No `notifications` table, no MJML templates, no per-channel workers, no per-user preferences, no quiet-hours logic, no SMTP relay configured, no Web Push VAPID, no webhook delivery.
+**In-app (P1.6a / ADR-0024):** `notifications` table (recipient-scoped, RLS) + self-scoped center (`GET /notifications` + unread-count + mark-read/read-all, auth-only). Best-effort dispatch from `IncidentsService` on assign (→ assignee) + transition (→ reporter+assignee), actor-excluded, in its own tx (never fails the incident op). 6 e2e, suite 159/159, live-validated.
+
+**Web center (P1.6b / ADR-0024):** topbar bell + unread badge (polls unread-count every 30s) + dropdown of latest 8 (deep-link → mark-read) + "Mark all read"; `/notifications` full page; sidebar entry + middleware. Client → server-actions (token stays server-side), fail-safe. Web build green; suite 159/159.
+
+**Email + prefs (P1.6c / ADR-0024):** `MailService` (Nodemailer/`MAIL_*`, best-effort, dev-logs/prod-drops) + **Mailpit** in compose. **Password-reset now emails** (swapped the P1.3 dev-logger → `EmailResetNotifier`, closing that gap). Email-on-notification (`create` sends + stamps `dispatched_at`). `user_notification_prefs` per-kind (RLS, migration `0011`) applied in dispatch; GET/PUT prefs + web toggle grid. Simple HTML templates. +5 e2e, suite 164/164, live-validated (reset + incident emails in Mailpit).
+
+**P1.6 complete (a–c).** Still future: transactional outbox + worker, event bus, quiet-hours, Web Push/VAPID, webhook delivery, MJML.
 
 **Complexity:** **L** for in-platform + email + webhook; web push and mobile push are individually **M**.
 
@@ -329,31 +340,33 @@ Postgres `pg_trgm` extension is installed. Documents list endpoint uses `ILIKE` 
 | field | value |
 |---|---|
 | **Status** | PARTIAL |
-| **Compl. %** | 45 % |
-| **Arch.** | 7/10 |
-| **Prod.** | 7/10 |
-| **Scale** | 6/10 |
-| **Sec.** | 6/10 |
-| **Code** | `apps/api/src/modules/audit/audit.service.ts`, `packages/db/src/schema/audit-log.ts`, `0002_rls_policies.sql` |
+| **Compl. %** | 85 % |
+| **Arch.** | 9/10 |
+| **Prod.** | 8/10 |
+| **Scale** | 7/10 |
+| **Sec.** | 8/10 |
+| **Code** | `apps/api/src/modules/audit/{audit.service,audit-chain.service,audit.controller}.ts`, `packages/db/src/schema/{audit-log,audit-chain-anchor}.ts`, `0002_rls_policies.sql`, `0012`/`0013` |
 
 **Implemented**
 - Append-only table with `tenantId`, `actorId`, `actorType`, `action`, `resourceType`, `resourceId`, `outcome`, `ip`, `userAgent`, `metadata`, `prev_event_hash`, `this_hash`, `occurred_at`
 - RLS: insert permissive, select scoped, update/delete only via bypass
 - Durable-on-demand writes (`runPrivileged` survives request rollback)
 - Audit on login (success/failure/denied), refresh, logout, document init/finalize/download/delete
+- `request_id` (P0.3) + `trace_id` (P0.6) populated on every row
+- **Tamper-evident hash chain** (P1.11a / ADR-0029): `seq` + async sealer fills `prev_event_hash`/`this_hash` per `(tenant, UTC day)` chain; `verifyChain` pinpoints tampered rows
+- **Daily Merkle anchor under S3/MinIO Object Lock (WORM)** (P1.11b): `@nestjs/schedule` cron + `audit_chain_anchor` table; `rootMatches` cross-check; gated verify/seal/anchor endpoints
+- **SIEM export** (P1.12 / ADR-0030): worker tail-reads by durable `seq` cursor (`audit_export_cursor`), ships **RFC 5424 syslog / CEF** via pluggable sink (noop/stdout/file/tcp), at-least-once; gated status/flush endpoints
+- **ClickHouse archive + analytics projection** (P2.2 / ADR-0034): cursor-tail ETL (`projection_cursors`) → `cmc.audit_events` + `audit_daily_stats` MV; gated projection status/flush endpoints (live: 160→160)
 
 **Gaps vs ToR §3.15**
-- `prev_event_hash` / `this_hash` columns exist but nothing populates them — no tamper-evident chain
-- No daily Merkle root / external notary anchor
-- No SIEM forwarder (syslog RFC 5424 / CEF)
-- No retention policy enforcement
-- No legal-hold suspension of deletion
-- WORM property is convention only — `audit_log` policy denies UPDATE/DELETE except for `bypass_rls` which the application code can still set; tightening would require a separate auditor role with `nbypass` or storage-level WORM (S3 Object Lock)
-- No `request_id` / `trace_id` populated (columns exist)
-- No saved-investigation tooling
-- Reads have no pagination yet — assumes admin UI doesn't exist
+- Export side done; a running SIEM (Wazuh/OpenSearch) + managed forwarder (Vector/Fluent Bit) + TLS on the TCP sink → H-tier
+- No retention policy enforcement; no legal-hold suspension
+- Dedicated `audit:read` permission + auditor role (currently reuses `tenant:manage`)
+- `system` (tenant-less) chain verification is privileged-only — no platform-superadmin endpoint yet
+- No saved-investigation tooling; reads have no pagination (no audit explorer UI)
+- ClickHouse retention/TTL for very old `audit_events` (archive itself done — P2.2)
 
-**Complexity to complete:** **M** for hash chain + Merkle anchor + SIEM export; **L** for the audit explorer UI.
+**Complexity to complete:** ~~hash chain + Merkle anchor~~ ✅ done (P1.11); **S** for SIEM export (P1.12); **L** for the audit explorer UI.
 
 ---
 
@@ -374,7 +387,7 @@ No spaces, pages, block editor, version history, comments, page-permissions, tem
 | **Status** | NOT STARTED |
 | **Compl. %** | 0 % |
 
-No Kong / Envoy, no WAF, no quota table, no API key issuance, no per-client rate limit, no OpenAPI doc generation (NestJS Swagger module not installed). The Next.js BFF is the closest thing to a gateway today.
+No Kong / Envoy, no WAF, no quota table, no API key issuance, no per-client rate limit. The Next.js BFF is the closest thing to a gateway today. **OpenAPI doc generation ✅** (P1.10 / ADR-0028): `@nestjs/swagger` + CLI plugin (request DTOs) + Zod-contract response schemas (82 components) served at gated `/v1/openapi.json` (`tenant:manage`) with Swagger UI at web `/admin/api-docs`.
 
 **Complexity:** **L** to add Caddy + a NestJS rate-limit guard + OpenAPI generation; **XL** for the full Kong/Envoy + WAF + quota + analytics surface.
 
@@ -395,10 +408,18 @@ No vector tables, no embedding workers, no LLM gateway, no RAG, no copilot infra
 
 | field | value |
 |---|---|
-| **Status** | NOT STARTED |
-| **Compl. %** | 5 % (seed script + minimal `tenants` lookup) |
+| **Status** | P1.4 COMPLETE (phases a–d) |
+| **Compl. %** | 60 % (foundation + Users + Roles + Tenant settings) |
 
-No UI for users / groups / roles / policies / tenants / feature flags / quotas / SSO config / SMTP config. Sidebar reserves "Administration" but it's disabled. Step-up auth (re-auth + MFA + destructive-action confirmation token) all absent. **Complexity: L.**
+**Foundation (P1.4a / ADR-0022):** `GET /rbac/me` (current user's effective roles+permissions, self-scoped) drives a gated `/admin` section — `getMyAccess()` (fail-closed, request-memoised) + an `/admin` layout redirect for non-admins + the now-enabled "Administration" sidebar entry + middleware protection + an `/admin` overview. The API stays the real authz boundary (every admin endpoint `@Authorize`-gated); the web redirect is UX.
+
+**Users (P1.4b):** `GET/POST/PATCH/DELETE /users` (`user:manage`, RLS → cross-tenant 404) + `/admin/users` (list, create form, per-row activate/deactivate, reset-password-reveal, delete, role add/remove). Passwordless invite → admin-reset (P1.3) sets the first password (no email yet). Deactivate/delete revoke sessions + block re-login; self-deactivate/delete guarded. `SessionsService` extracted to `SessionsModule` to avoid the Auth↔Users DI cycle. Audited. 11 e2e; suite 126/126; web build green; live-validated.
+
+**Roles (P1.4c):** `role:manage` perm + `GET /rbac/permissions` + `GET/POST/PATCH/DELETE /rbac/roles`. System roles immutable (403 on edit/delete); custom-role slug+perm validation (409/400); perm-cache `delTenant` on permission change/delete. `/admin/roles` editor (create + inline edit w/ domain-grouped permission picker; system read-only). 7 e2e; suite 133/133; live-validated.
+
+**Tenant settings (P1.4d):** `tenant:manage` perm + `GET/PATCH /tenant` (rename own tenant) + method-gated `PUT /branding` (localeDefault/logoUrl/copy, copy-merge upsert; `GET /branding` stays public). `/admin/tenant` Identity + Branding forms. 7 e2e; suite 140/140; live-validated.
+
+**P1.4 complete (a–d).** Remaining for a "full" admin console (beyond P1.4 scope): cross-tenant platform-superadmin administration; step-up re-auth for destructive actions; feature flags / quotas / SSO+SMTP config. Deferred by decision. **Complexity (done): L.**
 
 ---
 
@@ -406,12 +427,12 @@ No UI for users / groups / roles / policies / tenants / feature flags / quotas /
 
 | field | value |
 |---|---|
-| **Status** | NOT STARTED |
-| **Compl. %** | 5 % |
+| **Status** | IN PROGRESS (logs + metrics + traces triangle closed) |
+| **Compl. %** | 55 % |
 
-NestJS logger writes to stdout; not JSON-enforced; no Prometheus / Loki / Tempo / Grafana / Alertmanager / Grafana OnCall. `health` controller is liveness-only with no dependency probes.
+Structured JSON logging with `request_id`+`trace_id`+`tenantId`+`userId` (P0.3 / ADR-0010); OTEL traces + trace_id-in-logs (P0.6 / ADR-0013); Prometheus RED metrics + Grafana dashboard (P0.7 / ADR-0014); health probes (P0.8 / ADR-0015); **Loki log aggregation** (pino-loki API + Promtail containers + request_id dashboard, P1.7 / ADR-0025); **Tempo traces + three-signal cross-link** (Loki→Tempo on `traceId`, Tempo→Loki via `tracesToLogsV2`) + **Alertmanager** with a 5xx-ratio rule + target-down rule (P1.8 / ADR-0026). The whole stack is `pnpm obs:up`.
 
-**Complexity:** **L** for OTEL + Prometheus + Loki + Grafana on a single host; **XL** at proper SRE quality.
+**Remaining:** alert **delivery/paging** (Alertmanager receiver is a no-op until a paging target / platform-superadmin recipient exists), Prometheus exemplars (metric→trace jump), log-based metrics, tail sampling, production object-store Tempo/Loki + non-root Tempo. **Complexity:** **L** done; **XL** at proper SRE quality.
 
 ---
 
@@ -475,9 +496,16 @@ This is the **product surface the UI implies**. No live event ticker, no multi-m
 
 | field | value |
 |---|---|
-| **Status** | NOT STARTED |
+| **Status** | P1.5 COMPLETE (phases a–c) |
+| **Compl. %** | 55 % (backend + operator UI + live dashboard) |
 
-No `incidents` table, no severity classification, no roles (Commander/Comms/Ops), no status-page integration, no post-mortem template, no MTTD/MTTR analytics. **Complexity: L–XL.**
+**Backend (P1.5a / ADR-0023):** `incidents` table (severity 1-5, status, free-text type/region/source, summary/description, optional lat/lng, occurred_at, reported_by/assigned_to, resolved_at, soft-delete) under RLS. Status **state machine** (reported→triaged→in_progress→resolved→closed +cancelled, reopen) shared API↔web via `INCIDENT_TRANSITIONS`. 6 `incident:*` permissions (resolve gated above write). CRUD + list/filters/pagination + assign + stats. Audited. 11 e2e, suite 151/151, live-validated.
+
+**Web (P1.5b / ADR-0023):** `/incidents` list (filter bar→URL params, paginated table, gated report form) + `/incidents/[id]` detail with a state-machine-aware Actions panel (reachable transitions only; resolve hidden without `incident:resolve`), member-dropdown assign, inline edit, gated delete. `GET /incidents/assignees`. Nav + middleware wired. Suite 152/152; web build green.
+
+**Dashboard (P1.5c / ADR-0023):** the operational dashboard's incident widgets (hero counts, KPI strip, Active-by-Region/Type bars, Priority Incidents) read `GET /incidents/stats` + `GET /incidents?active=true` (new `active` filter); hardcoded arrays removed; fail-safe. Suite 153/153; live-validated.
+
+**P1.5 complete (a–c).** Still future: severity-driven SLA/auto-escalation, per-incident activity timeline, command roles (Commander/Comms/Ops), post-mortem template, MTTD/MTTR analytics, real geometry (GIS module). **Complexity (done): L–XL.**
 
 ---
 
@@ -487,17 +515,21 @@ No `incidents` table, no severity classification, no roles (Commander/Comms/Ops)
 
 | | |
 |---|---|
-| Status | NOT STARTED |
+| Status | PARTIAL (P2.1 / ADR-0031) — outbox + relay + first producer done; consumers next |
+| Files | `apps/api/src/modules/events/{outbox.service,relay.service,event-publisher,nats-event-publisher,events.controller}.ts`, `packages/db/src/schema/outbox.ts` (0015), `packages/contracts/src/events.ts`, `infra/docker-compose.yml` (nats) |
+| Done | NATS JetStream container; **transactional `outbox`** (atomic write via ambient tx — no dual-write); **relay** → `tenant.{id}.{aggregate}.{event}.v{n}` (at-least-once, JetStream msgID dedup, advisory-locked); `EventPublisher` seam (real NATS lazy-imported only when enabled); **incidents producer** (created/transitioned/assigned); **first durable consumer** — notifications-from-events (P2.4 / ADR-0032: `consumed_events` dedup ledger, `DeliverPolicy.New`, handler/subscriber split, zero-regression inline fallback). Live-validated end-to-end + trace-correlated |
+| Remaining | ClickHouse projection consumer (P2.2/P2.5), dead-letter / max-deliver, outbox + consumed_events pruning, WebSocket fan-out (P2.3), multi-worker scale |
 | Blocks | §3.6, §3.13, §3.20, §3.22, §3.26, §3.27, audit projection, geofence-trigger, etc. |
-| Complexity | M to deploy + integrate first publisher; L for outbox + idempotent consumers + dead-letter |
 
 ### Analytics plane (ClickHouse)
 
 | | |
 |---|---|
-| Status | NOT STARTED |
-| Blocks | §3.5, all dashboards, audit-archive, position-history queries |
-| Complexity | L to deploy single-shard; XL for properly sharded/replicated cluster + materialised views per dashboard |
+| Status | PARTIAL (P2.5 / ADR-0033) — single-shard CH + first projection + MV |
+| Files | `apps/api/src/modules/analytics/{clickhouse.client,clickhouse-client.impl,incident-projection.consumer,incident-projection.subscriber,analytics.module}.ts`, `infra/clickhouse/init/01-schema.sql`, `infra/docker-compose.yml` (clickhouse) |
+| Done | ClickHouse container (HTTP 8123); incident schema (`incident_events` + daily-by-region MV) + audit schema (`audit_events` + daily-stats MV); gated lazy `@clickhouse/client`; **incident projection consumer** (event-bus, DeliverPolicy.All, dedup ledger — P2.5/ADR-0033) + **audit projection** (cursor-tail ETL, `projection_cursors` — P2.2/ADR-0034). Both live-validated end-to-end |
+| Remaining | dashboard-from-CH (P2.6), more MVs + a query API, CH migration tooling, sharding/replication (H-tier), retention/TTL |
+| Blocks | §3.5, dashboards, audit-archive, position-history queries |
 
 ### Search plane (OpenSearch)
 
@@ -547,7 +579,12 @@ No `incidents` table, no severity classification, no roles (Commander/Comms/Ops)
 
 | | |
 |---|---|
-| Status | NOT STARTED |
+| Status | IN PROGRESS — logs ✅ (P0.3/ADR-0010), traces ✅ emit (P0.6/ADR-0013), metrics ✅ (P0.7/ADR-0014); trace collector + alerting + log aggregation pending |
+| Logs | Pino JSON + `request_id` + `trace_id` correlation; Loki shipping → P1.7 |
+| Traces | OTEL `NodeSDK` emits HTTP/DB(`db.tx`)/S3/Redis spans; `X-Trace-Id` header; W3C propagation; trace_id on audit rows. Files: `apps/api/src/tracing.ts`, `request-context.middleware.ts`, `tenant-database.service.ts`. Exporter gated on `OTEL_EXPORTER_OTLP_ENDPOINT`; Tempo collector → P1.8 |
+| Metrics | ✅ `prom-client` `/metrics` (P0.7 / ADR-0014): HTTP RED histogram (matched-route label), DB saturation (`cmc_db_transactions_*`, `cmc_db_pool_max`), Node defaults. Prometheus + Grafana in `infra/observability-compose.yml` (`pnpm obs:up`); dashboard `cmc-api-red.json`. Files: `apps/api/src/modules/metrics/*`. Business metrics + alerting pending |
+| Health probes | ✅ liveness `/health` + readiness `/health/ready` (200/503, parallel timeout-bounded PG/Redis/MinIO probes) + `/health/deep` (authed, per-dep timings) (P0.8 / ADR-0015). Files: `apps/api/src/modules/health/*`. startup + synthetic monitor pending |
+| Alerting | none → P1.8 (Alertmanager) |
 | Blocks | running the system in any non-dev environment safely |
 | Complexity | M to instrument + stack-up; L to operate well |
 
@@ -581,6 +618,21 @@ No `incidents` table, no severity classification, no roles (Commander/Comms/Ops)
 | Observability today | `docker compose logs postgres-backup` |
 | Deferred to | P0.7 (Prometheus metric) · P1.8 (Alertmanager "no fresh backup in 36 h") · P2.14 (Vault-encrypted dump bytes) · P3 (WAL streaming / PITR) |
 
+### Edge / TLS plane (Caddy)
+
+| | |
+|---|---|
+| Status | DONE (edge + app images; full stack live-validated) — 2026-05-25, P0.9 (ADR-0016) + P0.10 (ADR-0017) |
+| Files | `infra/caddy/Caddyfile`, `infra/deploy-compose.yml`, `infra/.env.production.example` |
+| TLS | automatic — Let's Encrypt in prod, internal CA for `*.localhost` dev |
+| Routing | subdomain: `{$APP_HOST}`→web, `{$API_HOST}`→API. Path-based routing now **unblocked** — `/v1` (P1.9 / ADR-0027) removed the web/API path collision (`/documents` vs `/v1/documents`) — but subdomain routing is retained (no edge rework in P1.9) |
+| Edge policy | HSTS + nosniff + X-Frame DENY + Referrer-Policy + `-Server` + gzip; `/metrics` + `/health/deep` → 404 (ADR-0014/0015 follow-ons) |
+| Upstreams | ✅ `api:3001` / `web:3000` compose service names (flipped at P0.10) |
+| App images | ✅ `api` + `web` distroless non-root images built + run in the overlay (P0.10 / ADR-0017); `api` joins external `cmc-net` |
+| Manual | `pnpm infra:up` (core) then `pnpm deploy:up/down/logs/ps/validate` |
+| Validated | full stack: certs issued; HTTPS/2 → API 200; /health/ready 200 all-deps-up (minio via service name); /metrics 404; web 200; all 3 containers healthy |
+| Deferred to | image scanning/SBOM (TD-029) · CI build-push · edge WAF/rate-limit · P4 (mTLS mesh) |
+
 ---
 
 ## Summary table
@@ -599,13 +651,13 @@ No `incidents` table, no severity classification, no roles (Commander/Comms/Ops)
 | 3.10 Workflow | NOT STARTED | 0 % | XL |
 | 3.11 Chat | NOT STARTED | 0 % | XL |
 | 3.12 Video | NOT STARTED | 0 % | XXL |
-| 3.13 Notifications | NOT STARTED | 0 % | L |
+| 3.13 Notifications | P1.6 DONE (a–c) | 60 % | L |
 | 3.14 Search | NOT STARTED | 3 % | XL |
 | 3.15 Audit | PARTIAL | 45 % | M |
 | 3.16 Wiki | NOT STARTED | 0 % | XL |
 | 3.17 API Gateway | NOT STARTED | 0 % | L → XL |
 | 3.18 AI Readiness | NOT STARTED | 2 % | XXL |
-| 3.19 Admin Panel | NOT STARTED | 5 % | L |
+| 3.19 Admin Panel | P1.4 DONE (a–d) | 60 % | L |
 | 3.20 Observability | NOT STARTED | 5 % | L → XL |
 | 3.21 Import/Export | NOT STARTED | 0 % | XL |
 | 3.22 Realtime Collab | NOT STARTED | 0 % | XL |
@@ -613,7 +665,7 @@ No `incidents` table, no severity classification, no roles (Commander/Comms/Ops)
 | 3.24 Media | NOT STARTED | 0 % | L |
 | 3.25 Geo Analytics | NOT STARTED | 0 % | sub-scope of 3.4 |
 | 3.26 Ops Monitoring | NOT STARTED | 0 % | XL |
-| 3.27 Incidents | NOT STARTED | 0 % | L → XL |
+| 3.27 Incidents | P1.5 DONE (a–c) | 55 % | L → XL |
 
 **Aggregate completion against ToR §3 surface:** ~**6 %**.
 This is **the right number for a Phase-1 foundation that has not yet entered Phase 2**.

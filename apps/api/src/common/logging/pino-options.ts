@@ -32,8 +32,10 @@ export function buildPinoOptions(
   logLevel: string,
   requestContext: RequestContextService,
   tenantContext: TenantContextService,
+  lokiUrl?: string,
 ): Params {
   const isProd = nodeEnv === "production";
+  const transport = buildTransport(isProd, logLevel, nodeEnv, lokiUrl);
 
   return {
     pinoHttp: {
@@ -50,7 +52,11 @@ export function buildPinoOptions(
       autoLogging: {
         ignore: (req) => {
           const url = (req as IncomingMessage).url ?? "";
-          return url === "/health" || url === "/health/ready";
+          return (
+            url === "/health" ||
+            url === "/health/ready" ||
+            url === "/metrics"
+          );
         },
       },
       // Per-request structured fields read at log time so each line
@@ -60,6 +66,9 @@ export function buildPinoOptions(
         const tenantCtx = tenantContext.getCurrent();
         return {
           requestId: reqCtx?.requestId,
+          // trace_id of the active OTEL span (P0.6 / ADR-0013) so every
+          // log line joins to its distributed trace in Tempo/Grafana.
+          ...(reqCtx?.traceId ? { traceId: reqCtx.traceId } : {}),
           ...(reqCtx?.correlationId
             ? { correlationId: reqCtx.correlationId }
             : {}),
@@ -134,22 +143,59 @@ export function buildPinoOptions(
         censor: "[REDACTED]",
         remove: false,
       },
-      transport: isProd
-        ? undefined
-        : {
-            target: "pino-pretty",
-            options: {
-              singleLine: true,
-              translateTime: "SYS:HH:MM:ss.l",
-              // `requestId` is the most-clicked field when chasing a
-              // bug; pino-pretty doesn't surface customProps prominently
-              // by default, so we ignore the default messageFormat and
-              // include them via messageFormat below.
-              messageFormat:
-                "[{requestId}] {context} {msg}",
-              ignore: "pid,hostname,req,res,responseTime,requestId,context",
-            },
-          },
+      transport,
     },
   };
+}
+
+/** pino-pretty options for human-readable dev stdout. */
+const PRETTY_OPTIONS = {
+  singleLine: true,
+  translateTime: "SYS:HH:MM:ss.l",
+  // `requestId` is the most-clicked field when chasing a bug; pino-pretty
+  // doesn't surface customProps prominently, so we render them via
+  // messageFormat and drop them from the trailing key=val dump.
+  messageFormat: "[{requestId}] {context} {msg}",
+  ignore: "pid,hostname,req,res,responseTime,requestId,context",
+};
+
+/**
+ * Build the pino transport (P1.7 / ADR-0025).
+ *
+ * Without `lokiUrl` the behaviour is UNCHANGED — dev streams through
+ * pino-pretty, prod writes plain JSON to stdout (transport `undefined`). With
+ * `lokiUrl`, logs fan out to BOTH stdout (pretty in dev / JSON in prod) AND
+ * Loki via the pino-loki transport, so the host-run API's logs land in Grafana.
+ *
+ * Labels are STATIC + low-cardinality (`app`, `env`); high-cardinality fields
+ * (requestId, tenantId, userId) stay inside the JSON log line and are queried
+ * with LogQL `| json` — making them labels would blow up Loki's index.
+ */
+function buildTransport(
+  isProd: boolean,
+  logLevel: string,
+  nodeEnv: string,
+  lokiUrl?: string,
+) {
+  if (!lokiUrl) {
+    return isProd
+      ? undefined
+      : { target: "pino-pretty", options: PRETTY_OPTIONS };
+  }
+  const lokiTarget = {
+    target: "pino-loki",
+    level: logLevel,
+    options: {
+      host: lokiUrl,
+      batching: true,
+      interval: 5,
+      labels: { app: "cmc-api", env: nodeEnv },
+      // A Loki outage must never crash or block the API.
+      silenceErrors: true,
+    },
+  };
+  const stdoutTarget = isProd
+    ? { target: "pino/file", level: logLevel, options: { destination: 1 } }
+    : { target: "pino-pretty", level: logLevel, options: PRETTY_OPTIONS };
+  return { targets: [stdoutTarget, lokiTarget] };
 }

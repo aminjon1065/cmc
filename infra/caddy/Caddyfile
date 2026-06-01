@@ -1,0 +1,67 @@
+# Caddy reverse proxy + automatic TLS for the CMC platform (P0.9 / ADR-0016).
+#
+# Routing is SUBDOMAIN-based, not path-based:
+#   {$APP_HOST}  → the Next.js web app   ({$APP_UPSTREAM})
+#   {$API_HOST}  → the NestJS API        ({$API_UPSTREAM})
+#
+# Why subdomains and not "{$APP_HOST}/v1/* → API": there is no /v1 prefix yet
+# (that's P1.9), and the API's bare paths (/auth, /documents, /health) collide
+# with the web app's own routes (/documents is a page). A clean host split
+# avoids the collision and lets Caddy mint a cert per host automatically.
+#
+# All hosts + upstreams come from the environment (infra/.env.production), so
+# the same file serves dev (localhost / internal TLS) and prod (real domains /
+# Let's Encrypt) with no edits.
+{
+	# ACME account email for Let's Encrypt expiry notices. In dev this is unused
+	# because the *.localhost hosts below resolve to Caddy's internal CA.
+	email {$CADDY_ACME_EMAIL}
+
+	# Honour the standard Caddy admin endpoint on localhost only (default).
+	# Override CADDY_EXTRA_GLOBAL in .env to inject e.g. `auto_https disable_redirects`.
+	{$CADDY_EXTRA_GLOBAL}
+}
+
+# ---- Reusable snippets ----
+
+# Hardening + hygiene applied to every site.
+(common) {
+	encode zstd gzip
+	header {
+		# HSTS — 1 year, include subdomains. Caddy only sends this over HTTPS.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Don't advertise the server software.
+		-Server
+	}
+}
+
+# Block operational endpoints from the public edge. /metrics (ADR-0014) and
+# /health/deep (ADR-0015) are anonymous on the app but must not be reachable
+# from outside — they expose internal timings / dependency detail. Scrapers
+# and operators reach them on the private network / via the app port directly.
+(block_ops) {
+	@ops path /metrics /metrics/* /health/deep /health/deep/*
+	respond @ops 404
+}
+
+# ---- Sites ----
+
+# Web app.
+{$APP_HOST} {
+	import common
+	import block_ops
+	reverse_proxy {$APP_UPSTREAM}
+}
+
+# API.
+{$API_HOST} {
+	import common
+	import block_ops
+	# Caddy's reverse_proxy passes X-Forwarded-For / -Proto / -Host to the
+	# upstream by default, so the API's trust-proxy logic (P0.1) sees the real
+	# client IP and scheme without any explicit header_up directives.
+	reverse_proxy {$API_UPSTREAM}
+}

@@ -7,6 +7,16 @@
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3001";
 
+/**
+ * Every domain route on the API is versioned under `/v1` (ADR-0027). The web
+ * app only ever calls domain routes (never the unversioned `/health` or
+ * `/metrics`), so the prefix is applied unconditionally here — this single
+ * chokepoint covers `authedApiFetch`, `access.ts`, `branding.ts`, and every
+ * server action. To pin a route to a future version, change it here, not at
+ * the call sites.
+ */
+const API_PREFIX = "/v1";
+
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
@@ -22,7 +32,8 @@ export async function apiFetch<T>(
   path: string,
   init: RequestInit = {},
 ): Promise<T> {
-  const url = `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const url = `${API_BASE_URL}${API_PREFIX}${normalizedPath}`;
 
   // IMPORTANT: spreading a `Headers` object via `{...init.headers}` silently
   // drops every header (Headers stores entries internally, not as own enumerable

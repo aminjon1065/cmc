@@ -1,0 +1,17 @@
+# Grafana dashboard provisioning (P0.7 / ADR-0014).
+# Loads every dashboard JSON under /var/lib/grafana/dashboards (mounted
+# from infra/observability/grafana/dashboards) so dashboards are
+# version-controlled as code.
+
+apiVersion: 1
+
+providers:
+  - name: cmc-dashboards
+    orgId: 1
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

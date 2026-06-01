@@ -2,12 +2,17 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { LoginForm } from "@/components/login-form";
 import { Emblem } from "@/components/cmc/emblem";
+import { getPublicBranding } from "@/lib/branding";
 
 export const metadata: Metadata = {
   title: "Sign in",
 };
 
-export default function LoginPage() {
+export default async function LoginPage() {
+  const { copy } = await getPublicBranding();
+  // Split the headline on its newline so the mural keeps its two-line layout
+  // regardless of which tenant's copy is in play.
+  const [headlineL1, headlineL2] = copy.muralHeadline.split("\n");
   return (
     <div
       className="flex min-h-screen w-full"
@@ -63,14 +68,12 @@ export default function LoginPage() {
         <div className="absolute left-9 top-8 flex items-center gap-2.5">
           <Emblem size={32} />
           <div>
-            <div className="text-[13px] font-semibold">
-              Crisis Management Center
-            </div>
+            <div className="text-[13px] font-semibold">{copy.orgName}</div>
             <div
               className="text-[10.5px]"
               style={{ color: "var(--c-fg-3)" }}
             >
-              Civil Defense · TJ
+              {copy.orgShort}
             </div>
           </div>
         </div>
@@ -87,34 +90,42 @@ export default function LoginPage() {
         </div>
 
         <div className="absolute inset-x-9 bottom-9">
-          <div className="cmc-label mb-3">
-            Unified enterprise operational intelligence
-          </div>
+          <div className="cmc-label mb-3">{copy.muralKicker}</div>
           <h1
             className="cmc-display mb-3.5 max-w-[480px] text-[36px] font-bold leading-[1.1]"
             style={{ letterSpacing: "-0.018em" }}
           >
-            Sovereign-grade crisis intelligence,
-            <br />
-            operated at national scale.
+            {headlineL1}
+            {headlineL2 ? (
+              <>
+                <br />
+                {headlineL2}
+              </>
+            ) : null}
           </h1>
           <p
             className="max-w-[460px] text-[12.5px] leading-relaxed"
             style={{ color: "var(--c-fg-3)" }}
           >
-            Geospatial · Realtime · Workflow · Audit · AI — converged into a
-            single command surface for the Republic of Tajikistan&apos;s
-            emergency operations.
+            {copy.muralSubcopy}
           </p>
           <div
             className="mt-5 flex flex-wrap gap-x-4 gap-y-1 text-[10.5px]"
             style={{ color: "var(--c-fg-4)" }}
           >
-            <span>v2.6.0 · Build 2026.05.14</span>
-            <span>·</span>
-            <span>National Data Center · Dushanbe</span>
-            <span>·</span>
-            <span>ISO 27001 · SOC 2 Type II</span>
+            {copy.buildLabel ? (
+              <>
+                <span>{copy.buildLabel}</span>
+                <span>·</span>
+              </>
+            ) : null}
+            <span>{copy.dataCenter}</span>
+            {copy.complianceLine ? (
+              <>
+                <span>·</span>
+                <span>{copy.complianceLine}</span>
+              </>
+            ) : null}
           </div>
         </div>
       </div>

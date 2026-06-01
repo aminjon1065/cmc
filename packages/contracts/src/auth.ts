@@ -40,6 +40,10 @@ export type TokenBundle = z.infer<typeof TokenBundleSchema>;
 
 export const LoginResponseSchema = TokenBundleSchema.extend({
   user: AuthUserSchema,
+  // Discriminator for the MFA two-step flow (P1.2). Optional + defaulted so
+  // existing consumers that don't look at it keep working; a parsed response
+  // always carries `status: "ok"` on the success path.
+  status: z.literal("ok").default("ok"),
 });
 export type LoginResponse = z.infer<typeof LoginResponseSchema>;
 

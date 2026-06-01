@@ -6,6 +6,7 @@ import {
   type ListDocumentsResponse,
 } from "@cmc/contracts";
 import { AppShell } from "@/components/cmc/app-shell";
+import { getBranding } from "@/lib/branding";
 import { UploadForm } from "./upload-form";
 import { DocumentRowActions } from "./document-row-actions";
 
@@ -37,12 +38,14 @@ async function fetchDocuments(): Promise<
 export default async function DocumentsPage() {
   const session = await auth();
   const result = await fetchDocuments();
+  const { copy } = await getBranding();
 
   return (
     <AppShell
       active="docs"
       crumbs={["Knowledge", "Documents"]}
       tenant={session?.tenantSlug}
+      branding={{ orgName: copy.orgName, orgShort: copy.orgShort }}
       user={{
         name: session?.user?.name ?? null,
         role: "Operations Lead · L4",

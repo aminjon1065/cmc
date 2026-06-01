@@ -16,6 +16,11 @@ import { eq, sql } from "drizzle-orm";
 import { createDatabase, schema } from "@cmc/db";
 import { loadConfig } from "../config/configuration";
 import { AuthService } from "../modules/auth/auth.service";
+import { TJ_CMC_BRANDING } from "./seed-branding";
+import {
+  ensureSystemRolesForTenant,
+  assignRoleToUser,
+} from "../modules/rbac/rbac-seed";
 
 loadEnv({ path: resolve(__dirname, "../../.env") });
 
@@ -88,6 +93,53 @@ async function main() {
       );
     } else {
       console.log(`= Admin user ${existingAdmin.email} already exists`);
+    }
+
+    // 3. Tenant branding (P0.11 / ADR-0018). Upsert so re-seeding refreshes
+    //    the copy. This is the ONLY place the TJ-CMC specifics live.
+    await db
+      .insert(schema.tenantBranding)
+      .values({
+        tenantId: tenant.id,
+        localeDefault: TJ_CMC_BRANDING.localeDefault,
+        logoUrl: TJ_CMC_BRANDING.logoUrl,
+        copy: TJ_CMC_BRANDING.copy,
+        theme: TJ_CMC_BRANDING.theme,
+      })
+      .onConflictDoUpdate({
+        target: schema.tenantBranding.tenantId,
+        set: {
+          localeDefault: TJ_CMC_BRANDING.localeDefault,
+          logoUrl: TJ_CMC_BRANDING.logoUrl,
+          copy: TJ_CMC_BRANDING.copy,
+          theme: TJ_CMC_BRANDING.theme,
+          updatedAt: sql`now()`,
+        },
+      });
+    console.log(`✓ Branding set for tenant ${tenant.slug}`);
+
+    // 4. RBAC (P1.1 / ADR-0019): the global permission catalog, the system
+    //    roles for the default tenant, and the admin's tenant_admin grant.
+    const roleIdBySlug = await ensureSystemRolesForTenant(db, tenant.id);
+    console.log(
+      `✓ RBAC: permission catalog + ${roleIdBySlug.size} system roles for ${tenant.slug}`,
+    );
+
+    const adminUser = (
+      await db
+        .select({ id: schema.users.id })
+        .from(schema.users)
+        .where(eq(schema.users.email, adminEmail))
+        .limit(1)
+    )[0];
+    const adminRoleId = roleIdBySlug.get("tenant_admin");
+    if (adminUser && adminRoleId) {
+      await assignRoleToUser(db, {
+        userId: adminUser.id,
+        roleId: adminRoleId,
+        tenantId: tenant.id,
+      });
+      console.log(`✓ Granted tenant_admin to ${adminEmail}`);
     }
 
     console.log("Seed complete.");

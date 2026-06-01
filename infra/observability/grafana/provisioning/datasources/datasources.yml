@@ -1,0 +1,53 @@
+# Grafana datasource provisioning (P0.7 / ADR-0014, P1.7 / ADR-0025,
+# P1.8 / ADR-0026). Auto-registers Prometheus + Loki + Tempo so the checked-in
+# dashboards resolve their datasources with no manual setup, and the three
+# signals cross-link: a log line's traceId → its trace (Loki→Tempo), and a
+# trace span → its logs (Tempo→Loki).
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: cmc-prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: 15s
+
+  # Loki — log aggregation (P1.7 / ADR-0025). `derivedFields` turns the
+  # `traceId` field of a JSON log line into a one-click link to the trace in
+  # Tempo (P1.8) — the log↔trace join key flowing from ADR-0013.
+  - name: Loki
+    uid: cmc-loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: false
+    jsonData:
+      maxLines: 1000
+      derivedFields:
+        - name: TraceID
+          matcherType: regex
+          matcherRegex: '"traceId":"(\w+)"'
+          url: "${__value.raw}"
+          datasourceUid: cmc-tempo
+
+  # Tempo — distributed traces (P1.8 / ADR-0026). `tracesToLogsV2` links a
+  # span back to its logs in Loki (filtered by trace id), closing the loop.
+  - name: Tempo
+    uid: cmc-tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    editable: false
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: cmc-loki
+        filterByTraceID: true
+        spanStartTimeShift: "-5m"
+        spanEndTimeShift: "5m"
+      nodeGraph:
+        enabled: true

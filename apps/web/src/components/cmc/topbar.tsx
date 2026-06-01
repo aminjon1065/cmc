@@ -1,13 +1,16 @@
-import { Bell, ChevronRight, Search } from "lucide-react";
+import { ChevronRight, Search } from "lucide-react";
 import { SignOutButton } from "@/components/sign-out-button";
+import { NotificationBell } from "@/components/cmc/notification-bell";
+import { getNotificationsAction } from "@/app/notifications/actions";
 
-export function Topbar({
+export async function Topbar({
   crumbs = [],
   tenant,
 }: {
   crumbs?: string[];
   tenant?: string | null;
 }) {
+  const { items, unreadCount } = await getNotificationsAction({ limit: 8 });
   return (
     <div
       className="flex h-11 shrink-0 items-center gap-3 px-3.5"
@@ -81,11 +84,7 @@ export function Topbar({
             />
           </>
         )}
-        <Bell
-          size={14}
-          strokeWidth={1.6}
-          style={{ color: "var(--c-fg-3)" }}
-        />
+        <NotificationBell initialCount={unreadCount} initialItems={items} />
         <span
           className="h-4 w-px"
           style={{ background: "var(--c-line-2)" }}

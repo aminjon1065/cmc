@@ -13,33 +13,33 @@ Compact one-row-per-module view. Detail per module is in
 
 | # | Module | Status | Compl. % | Arch | Prod | Scale | Sec | Code location |
 |---|---|---|---|---|---|---|---|---|
-| 3.1 | Identity & Access Management | 🟡 | 40 | 8 | 8 | 7 | 7 | `apps/api/src/modules/auth/`, `apps/web/src/auth.ts` — P0.1 rate-limit + P0.4 session cache added |
-| 3.2 | Multi-Tenancy (shared-schema RLS) | 🟢 | 50 | 9 | 8 | 6 | 9 | `0002_rls_policies.sql`, `tenant-database.service.ts`, `tenant-transaction.interceptor.ts` |
-| 3.3 | RBAC / ABAC Authorization | 🔴 | 0 | — | — | — | — | (none) |
+| 3.1 | Identity & Access Management | 🟡 | 55 | 8 | 8 | 7 | 8 | `apps/api/src/modules/auth/`, `modules/mfa/`, `modules/password-reset/`, `apps/web/src/auth.ts` — + P1.2 TOTP MFA (encrypted secret, backup codes, two-step login); + P1.3 password reset (hashed single-use token, self/admin flows, pluggable notifier, P1.3 / ADR-0021) |
+| 3.2 | Multi-Tenancy (shared-schema RLS) | 🟢 | 58 | 9 | 8 | 6 | 9 | `0002_rls_policies.sql`, `tenant-database.service.ts`; + per-tenant branding extracted to data (P0.11 / ADR-0018); + self-service tenant name + branding editing (P1.4d) |
+| 3.3 | RBAC / ABAC Authorization | 🟡 | 55 | 8 | 8 | 7 | 8 | RBAC ✅ (per-tenant roles + global catalog + `@Authorize` guard + Redis perm cache, P1.1 / ADR-0019); + `GET /rbac/me` (P1.4a); + **custom-role CRUD** + permission catalog + `role:manage` (P1.4c); ABAC/OPA still 🔴 |
 | 3.4 | GIS & Geospatial Intelligence | 🔴 | 2 | — | — | — | — | PostGIS ext. only |
-| 3.5 | Analytics & Reporting | 🔴 | 0 | — | — | — | — | (none — ClickHouse not present) |
-| 3.6 | Realtime Event System | 🔴 | 0 | — | — | — | — | (none — NATS not present) |
+| 3.5 | Analytics & Reporting | 🟡 | 18 | 7 | 7 | 7 | 7 | **ClickHouse single-shard** + **two projections**: incident events → daily-by-region MV (P2.5 / ADR-0033) + **audit log → `audit_events` + daily-stats MV** (cursor ETL, P2.2 / ADR-0034). Next: dashboard-from-CH (P2.6), more MVs, query API |
+| 3.6 | Realtime Event System | 🟡 | 48 | 7 | 7 | 7 | 7 | **Event plane (P2.1 / ADR-0031):** NATS JetStream + transactional `outbox` + relay + incidents producer; **two durable consumers** — notifications-from-events (DeliverPolicy.New — P2.4 / ADR-0032) + ClickHouse projection (DeliverPolicy.All — P2.5 / ADR-0033), shared dedup ledger. Live-validated end-to-end + trace-correlated. Next: WebSocket delivery (P2.3), audit projection (P2.2) |
 | 3.7 | Dashboard Builder | 🔴 | 0 | — | — | — | — | `/dashboard` page is static demo |
 | 3.8 | File Management System | 🟡 | 20 | 8 | 8 | 6 | 7 | `apps/api/src/modules/storage/` |
 | 3.9 | Enterprise Document Mgmt | 🟡 | 10 | 7 | 7 | 5 | 7 | `apps/api/src/modules/documents/` |
 | 3.10 | Workflow / BPM Engine | 🔴 | 0 | — | — | — | — | (none — Temporal not present) |
 | 3.11 | Chat & Messaging | 🔴 | 0 | — | — | — | — | (none) |
 | 3.12 | Video Conferencing | 🔴 | 0 | — | — | — | — | (none — LiveKit not present) |
-| 3.13 | Notification System | 🔴 | 0 | — | — | — | — | (none) |
+| 3.13 | Notification System | 🟢 | 68 | 8 | 8 | 7 | 8 | **P1.6 (a–c / ADR-0024):** in-app + web center (bell/page) + email (Nodemailer/Mailpit) + per-user prefs; **now event-driven** — dispatched by a durable JetStream consumer of incident events (idempotent, decoupled — P2.4 / ADR-0032), inline fallback when NATS off. Future: Web Push, MJML, dead-letter |
 | 3.14 | Search Engine | 🔴 | 3 | — | — | — | — | `ILIKE` substring filter in `documents.list` only |
-| 3.15 | Audit & Activity Logging | 🟡 | 45 | 7 | 7 | 6 | 6 | `apps/api/src/modules/audit/`, `audit-log` schema |
+| 3.15 | Audit & Activity Logging | 🟢 | 85 | 8 | 8 | 7 | 8 | `apps/api/src/modules/audit/`; append-only RLS + **tamper-evident hash chain** + **Merkle anchor under Object Lock (WORM)** (P1.11 / ADR-0029) + **SIEM export** (RFC 5424/CEF, P1.12 / ADR-0030) + **ClickHouse archive/analytics projection** (cursor ETL → `audit_events` + daily-stats MV, P2.2 / ADR-0034). Remaining: `audit:read` perm/auditor role, retention/legal-hold, audit explorer UI |
 | 3.16 | Knowledge Base / Wiki | 🔴 | 0 | — | — | — | — | (none) |
 | 3.17 | API / Integration Gateway | 🔴 | 0 | — | — | — | — | Next.js BFF is implicit edge, no Kong/Envoy |
 | 3.18 | AI-Ready Architecture | 🔴 | 2 | — | — | — | — | pgvector ext. only |
-| 3.19 | Administration Panel | 🔴 | 5 | — | — | — | — | Seed + lookup only; no UI |
-| 3.20 | Monitoring & Observability | 🔴 | 15 | — | — | — | — | Pino JSON + request_id correlation landed (P0.3); metrics + traces + alerting still 🔴 |
+| 3.19 | Administration Panel | 🟢 | 60 | 8 | 8 | 7 | 8 | **P1.4 complete (a–d / ADR-0022):** gated `/admin` (`GET /rbac/me`) + Users CRUD + Roles (catalog + custom-role CRUD) + Tenant settings (name + branding). All endpoints `@Authorize`-gated + audited. Deferred: cross-tenant superadmin, step-up auth |
+| 3.20 | Monitoring & Observability | 🟢 | 55 | 8 | 8 | 7 | 7 | **Logs+metrics+traces triangle closed:** pino JSON+request_id (P0.3), OTEL traces (P0.6), Prometheus/RED+Grafana (P0.7), Loki (P1.7), **Tempo + Loki↔Tempo link + Alertmanager 5xx rule** (P1.8 / ADR-0026). Remaining: alert delivery/paging, exemplars, prod object-store |
 | 3.21 | Data Import/Export | 🔴 | 0 | — | — | — | — | (none) |
 | 3.22 | Realtime Collaboration | 🔴 | 0 | — | — | — | — | (none — Yjs not present) |
 | 3.23 | Task & Case Management | 🔴 | 0 | — | — | — | — | Dashboard shows "Cases Open 142" but no table exists |
 | 3.24 | Media Management | 🔴 | 0 | — | — | — | — | (none — FFmpeg pipeline absent) |
 | 3.25 | Geospatial Analytics | 🔴 | 0 | — | — | — | — | sub-scope of §3.4 |
 | 3.26 | Operational Monitoring Center | 🔴 | 0 | — | — | — | — | Hero ribbon copy hardcoded |
-| 3.27 | Incident / Event Management | 🔴 | 0 | — | — | — | — | (none) |
+| 3.27 | Incident / Event Management | 🟢 | 55 | 8 | 8 | 7 | 8 | **P1.5 complete (a–c / ADR-0023):** backend domain (state-machine, 6 perms, stats, soft-delete, audited) + operator UI `/incidents` (list/detail/transition/assign) + **dashboard on real data**. Future: SLA/escalation, timeline, command roles, geometry (GIS) |
 
 ---
 
@@ -72,15 +72,15 @@ Compact one-row-per-module view. Detail per module is in
 | §5.x | Capability | Status |
 |---|---|---|
 | 5.1 | OLTP (Postgres + PostGIS) | 🟢 |
-| 5.1 | OLAP (ClickHouse) | 🔴 |
+| 5.1 | OLAP (ClickHouse) | 🟡 single-shard CH + incident projection + daily-by-region MV (P2.5 / ADR-0033); sharding/replication + CH migration tooling → H-tier |
 | 5.1 | Cache (Redis) | 🟢 wired via `RedisModule` (P0.2 / ADR-0008); no consumers yet — P0.1 / P0.4 / P1.6 / P2.3 / P2.13 are the upcoming consumers |
 | 5.1 | Search (OpenSearch) | 🔴 |
 | 5.1 | Object storage (MinIO/S3) | 🟢 |
 | 5.1 | Vector DB (pgvector/Qdrant) | 🟡 ext. only |
 | 5.1 | Time-series (TimescaleDB/CH) | 🔴 |
-| 5.1 | Event log (NATS JetStream / Kafka) | 🔴 |
+| 5.1 | Event log (NATS JetStream / Kafka) | 🟡 NATS JetStream + transactional outbox + relay + **first producer (incidents)** (P2.1 / ADR-0031); durable JetStream consumers → P2.2/P2.4 |
 | 5.2 | Postgres responsibilities (state-of-record) | 🟢 |
-| 5.3 | ClickHouse responsibilities | 🔴 |
+| 5.3 | ClickHouse responsibilities | 🟡 `incident_events` + daily-by-region MV (P2.5 / ADR-0033) + `audit_events` archive + daily-stats MV (P2.2 / ADR-0034); more rollups + retention/TTL → later |
 | 5.4 | Event sourcing selectively | 🔴 |
 | 5.5 | Data lake (Parquet on S3) | 🔴 |
 | 5.6 | Indexing strategies | 🟡 reasonable indexes today; BRIN/GIN/partial absent |
@@ -88,7 +88,7 @@ Compact one-row-per-module view. Detail per module is in
 | 5.8 | Archival / retention | 🔴 |
 | 5.9 | ETL/ELT pipelines | 🔴 |
 | 5.10 | Realtime streams | 🔴 |
-| 5.11 | Synchronisation (outbox, saga) | 🔴 |
+| 5.11 | Synchronisation (outbox, saga) | 🟡 transactional outbox landed (P2.1a / ADR-0031); relay + saga/causation orchestration → P2.1b+ |
 
 ---
 
@@ -96,7 +96,7 @@ Compact one-row-per-module view. Detail per module is in
 
 | §6.x | Capability | Status |
 |---|---|---|
-| 6.1 | RBAC | 🔴 |
+| 6.1 | RBAC | 🟢 per-tenant roles + global permission catalog + `@Authorize` guard + Redis-cached permission sets; documents protected (P1.1 / ADR-0019) |
 | 6.2 | ABAC (OPA / Rego) | 🔴 |
 | 6.3 | Tenant isolation (logical) | 🟢 |
 | 6.3 | Tenant isolation (cryptographic — per-tenant DEK) | 🔴 |
@@ -104,10 +104,10 @@ Compact one-row-per-module view. Detail per module is in
 | 6.5 | Audit trails | 🟡 |
 | 6.6 | Immutable WORM logging | 🟡 (policy-level only; no S3 Object Lock) |
 | 6.7 | Encryption at rest | 🟡 (host-level depends on deploy; no app-level field encryption) |
-| 6.8 | Encryption in transit (TLS / mTLS) | 🟡 (depends on deploy reverse proxy; no mTLS) |
+| 6.8 | Encryption in transit (TLS / mTLS) | 🟡 edge TLS via Caddy + automatic Let's Encrypt (P0.9 / ADR-0016); mTLS service-to-service still 🔴 (P4) |
 | 6.9 | Secrets management (Vault) | 🔴 |
 | 6.10 | Session management | 🟢 |
-| 6.11 | MFA (TOTP / WebAuthn / backup codes) | 🔴 |
+| 6.11 | MFA (TOTP / WebAuthn / backup codes) | 🟡 TOTP + one-time backup codes (secret AES-GCM at rest, two-step login) (P1.2 / ADR-0020); WebAuthn + per-tenant enforcement pending |
 | 6.12 | SSO (OIDC / SAML / SCIM) | 🔴 |
 | 6.13 | Device & session monitoring | 🟡 (IP + UA captured; no anomaly detection) |
 | 6.14 | DLP | 🔴 |
@@ -188,16 +188,16 @@ Compact one-row-per-module view. Detail per module is in
 | §11.x | Capability | Status |
 |---|---|---|
 | 11.1 | REST + RFC 7807 errors | 🟢 |
-| 11.1 | URL versioning (/v1/) | 🔴 (no version prefix yet) |
+| 11.1 | URL versioning (/v1/) | 🟢 global `/v1` prefix on all domain routes (P1.9 / ADR-0027); `/health*` + `/metrics` excluded |
 | 11.1 | Cursor pagination | 🔴 (offset only) |
 | 11.1 | Idempotency-Key header | 🔴 |
-| 11.1 | OpenAPI 3.1 generation | 🔴 |
+| 11.1 | OpenAPI 3.1 generation | 🟢 full doc (P1.10 / ADR-0028): request DTOs (CLI plugin) + **Zod-contract response schemas** (zod-to-json-schema, 82 components), tags + global bearer + public overrides post-processed (zero controller decorators), served at gated `/v1/openapi.json` (`tenant:manage` + `OPENAPI_ENABLED`) + **Swagger UI** at web `/admin/api-docs`. Emits valid 3.0.0 (3.1 bump = TD; self-host UI assets = TD) |
 | 11.2 | GraphQL (BFF) | 🔴 |
 | 11.3 | WebSocket APIs | 🔴 |
 | 11.4 | Internal gRPC / mTLS | 🔴 |
 | 11.5 | External APIs (keys, webhooks) | 🔴 |
-| 11.6 | API versioning + sunset headers | 🔴 |
-| 11.7 | API gateway | 🔴 |
+| 11.6 | API versioning + sunset headers | 🟡 `/v1` versioning live (P1.9 / ADR-0027); sunset/deprecation headers deferred — nothing to deprecate yet |
+| 11.7 | API gateway | 🟡 Caddy edge (TLS, security headers, ops-endpoint block, host routing) (P0.9 / ADR-0016); full Kong/Envoy + WAF + quota still 🔴 |
 | 11.8 | Rate limiting | 🟡 auth endpoints only (P0.1 / ADR-0009); non-auth + global → P0.9 |
 | 11.9 | API security (input validation, CORS, CSRF) | 🟢 input validation + CORS; CSRF N/A (bearer) |
 | 11.10 | SDK strategy | 🔴 (contracts package is a start) |
@@ -209,7 +209,7 @@ Compact one-row-per-module view. Detail per module is in
 | §12.x | Capability | Status |
 |---|---|---|
 | 12.1 | Next.js App Router | 🟢 |
-| 12.2 | Design system (shadcn + Tailwind + tokens + Storybook) | 🟡 tokens + Tailwind ✓; shadcn config present but components not adopted; no Storybook |
+| 12.2 | Design system (shadcn + Tailwind + tokens + Storybook) | 🟡 tokens + Tailwind ✓; per-tenant branding copy extracted to data (P0.11 / ADR-0018, `theme` jsonb reserved); shadcn components + per-tenant theming + Storybook still pending (TD-023) |
 | 12.3 | State mgmt (TanStack Query + Zustand) | 🔴 not yet needed |
 | 12.4 | Modular frontend | 🟡 (auth + dashboard + documents pages exist; route-groups not yet) |
 | 12.5 | Workspace UI (sidebar, topbar, right panel, dock) | 🟡 sidebar + topbar; no right panel / dock |
@@ -228,17 +228,17 @@ Compact one-row-per-module view. Detail per module is in
 
 | §13.x | Capability | Status |
 |---|---|---|
-| 13.1 | Docker (multi-stage, distroless, non-root, scanned, SBOM) | 🟡 custom Postgres only; no app Dockerfiles |
+| 13.1 | Docker (multi-stage, distroless, non-root, scanned, SBOM) | 🟡 api + web multi-stage distroless non-root images (P0.10 / ADR-0017) + custom Postgres; scanning + SBOM still 🔴 (TD-029) |
 | 13.2 | Kubernetes | 🔴 |
 | 13.3 | CI/CD | 🟡 CI yes (GHA); no CD yet |
-| 13.4 | Environments (dev/staging/prod/dr) | 🟡 dev only |
+| 13.4 | Environments (dev/staging/prod/dr) | 🟡 dev + a deploy overlay (Caddy edge, `infra/deploy-compose.yml`, `.env.production`) for external serving (P0.9 / ADR-0016); staging/DR envs still pending |
 | 13.5 | IaC (Terraform / Helm) | 🔴 |
 | 13.6 | Backups | 🟢 nightly `pg_dump` → MinIO sidecar (P0.5 / ADR-0012); rotation 7d; `pnpm db:restore` rehearsed |
 | 13.7 | Disaster recovery | 🟡 same-cluster restore path covered; cross-cluster + off-site + PITR still 🔴 |
 | 13.8 | Autoscaling | 🔴 |
 | 13.10 | Logging (Loki) | 🔴 |
-| 13.11 | Tracing (Tempo/Jaeger + OTEL) | 🔴 |
-| 13.12 | Monitoring (Prometheus + Thanos) | 🔴 |
+| 13.11 | Tracing (Tempo/Jaeger + OTEL) | 🟡 OTEL SDK emits HTTP+DB+S3+Redis spans (P0.6 / ADR-0013); Tempo collector deferred to P1.8 |
+| 13.12 | Monitoring (Prometheus + Thanos) | 🟡 Prometheus scraping `/metrics` + Grafana in compose (P0.7 / ADR-0014); Thanos/long-term storage pending |
 | 13.13 | Blue-green deployment | 🔴 |
 | 13.14 | Security scanning (SAST/DAST/dependency/container) | 🟡 Dependabot yes; no Trivy / CodeQL / OWASP ZAP |
 
@@ -248,14 +248,14 @@ Compact one-row-per-module view. Detail per module is in
 
 | §14.x | Capability | Status |
 |---|---|---|
-| 14.1 | Metrics (Prometheus) | 🔴 |
-| 14.2 | Tracing | 🔴 |
-| 14.3 | Logs | 🟡 structured JSON + request_id correlation (P0.3 / ADR-0010); aggregation (Loki) deferred to P1.7 |
+| 14.1 | Metrics (Prometheus) | 🟡 `/metrics` (prom-client): RED histogram + DB saturation + Node defaults; Prometheus+Grafana compose + checked-in dashboard (P0.7 / ADR-0014); business metrics + alerting still pending |
+| 14.2 | Tracing | 🟡 OTEL spans emitted (HTTP/DB/S3/Redis), trace_id on logs + audit, W3C propagation (P0.6 / ADR-0013); collector (Tempo) → P1.8 |
+| 14.3 | Logs | 🟡 structured JSON + request_id **and trace_id** correlation (P0.3 / P0.6); aggregation (Loki) deferred to P1.7 |
 | 14.4 | Alerting + on-call | 🔴 |
 | 14.5 | Audit monitoring (SIEM tail) | 🔴 |
-| 14.6 | SIEM integration | 🔴 |
-| 14.7 | Operational dashboards | 🔴 |
-| 14.8 | Health checks (live/ready/startup/deep/synthetic) | 🟡 liveness only |
+| 14.6 | SIEM integration | 🟡 export side: audit log ships as RFC 5424 syslog / CEF to a file/TCP sink (P1.12 / ADR-0030); a running SIEM (Wazuh/OpenSearch) + a managed forwarder (Vector/Fluent Bit) still 🔴 |
+| 14.7 | Operational dashboards | 🟡 first Grafana dashboard (CMC API — RED + DB) checked in + auto-provisioned (P0.7 / ADR-0014); per-tenant + per-module dashboards pending |
+| 14.8 | Health checks (live/ready/startup/deep/synthetic) | 🟡 liveness + readiness (200/503, pings PG/Redis/MinIO) + deep (per-dep timings, authed) (P0.8 / ADR-0015); startup + external synthetic pending |
 
 ---
 
@@ -264,7 +264,7 @@ Compact one-row-per-module view. Detail per module is in
 | §15.x | Capability | Status |
 |---|---|---|
 | 15.1 | Horizontal scaling | 🔴 (single instance) |
-| 15.2 | Caching (L1/L2/L3) | 🔴 (no app cache; Redis deployed but unused) |
+| 15.2 | Caching (L1/L2/L3) | 🟡 Redis-backed session-active cache (P0.4); broader app cache pending |
 | 15.3 | Distributed systems concerns (CAP / backpressure / circuit-breaker / bulkhead) | 🔴 |
 | 15.4 | High-load GIS | 🔴 |
 | 15.5 | Analytics scaling | 🔴 |

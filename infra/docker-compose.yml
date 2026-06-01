@@ -85,6 +85,32 @@ services:
       retries: 10
       start_period: 5s
 
+  # NATS JetStream — the event plane (P2.1 / ADR-0031). `-js` enables
+  # JetStream; `-sd` is the durable store dir; `-m` exposes the monitoring
+  # port for the healthcheck. The outbox relay publishes here; consumers
+  # subscribe to `tenant.{id}.{aggregate}.{event}.v{n}`.
+  nats:
+    image: nats:2.10-alpine
+    container_name: cmc-nats
+    restart: unless-stopped
+    command:
+      - "-js"
+      - "-sd"
+      - "/data"
+      - "-m"
+      - "8222"
+    ports:
+      - "${NATS_PORT:-4222}:4222"
+      - "${NATS_MONITOR_PORT:-8222}:8222"
+    volumes:
+      - nats_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
   minio:
     image: minio/minio:RELEASE.2024-12-18T13-15-44Z
     container_name: cmc-minio
@@ -116,6 +142,9 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       MINIO_DEFAULT_BUCKETS: ${MINIO_DEFAULT_BUCKETS}
+      # Audit Merkle-anchor bucket (P1.11b / ADR-0029) — created WITH Object Lock
+      # (WORM) enabled; it cannot be enabled on an existing bucket.
+      AUDIT_ANCHOR_BUCKET: ${AUDIT_ANCHOR_BUCKET:-cmc-audit-anchors}
     entrypoint:
       - /bin/sh
       - -c
@@ -126,6 +155,8 @@ services:
           mc mb --ignore-existing "local/$$bucket"
           echo "Bucket ready: $$bucket"
         done
+        mc mb --with-lock --ignore-existing "local/$$AUDIT_ANCHOR_BUCKET"
+        echo "Lock bucket ready: $$AUDIT_ANCHOR_BUCKET"
     restart: "no"
 
   # Nightly pg_dump → MinIO sidecar. See infra/backup/ for the image build
@@ -164,7 +195,58 @@ services:
       BACKUP_RUN_ON_START: ${BACKUP_RUN_ON_START:-false}
       TZ: ${BACKUP_TZ:-UTC}
 
+  # Dev mail sink (P1.6c / ADR-0024): catches ALL outgoing email and shows it
+  # in a web UI — nothing leaves the host. Production points MAIL_* at a real
+  # SMTP server instead. SMTP on 1025, web UI on http://localhost:8025.
+  mailpit:
+    image: axllent/mailpit:v1.21
+    container_name: cmc-mailpit
+    restart: unless-stopped
+    ports:
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+    environment:
+      MP_MAX_MESSAGES: 500
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # ClickHouse — analytical store (P2.5 / ADR-0033). Only the HTTP port (8123)
+  # is published (the native 9000 collides with MinIO; @clickhouse/client uses
+  # HTTP). The init SQL in clickhouse/init creates the schema on first start.
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8-alpine
+    container_name: cmc-clickhouse
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-cmc}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-cmc}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-cmc_dev_clickhouse_change_me}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ports:
+      - "${CLICKHOUSE_HTTP_PORT:-8123}:8123"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./clickhouse/init:/docker-entrypoint-initdb.d:ro
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
 volumes:
+  nats_data:
+  clickhouse_data:
   postgres_data:
     name: cmc-postgres-data
   redis_data:

@@ -11,10 +11,10 @@
 
 | Signal | Spec (ToR §14) | Current state | Severity |
 |---|---|---|---|
-| **Metrics** | Prometheus + Thanos · RED + USE per service · per-tenant breakdown | None — no `/metrics` endpoint, no Prometheus client library imported | S0 |
-| **Logs** | Structured JSON · Loki aggregation · `trace_id` correlated · PII redacted | ✅ Structured JSON (pino) + request_id correlation + PII redact (P0.3 / ADR-0010); aggregation (Loki) deferred to P1.7 | 🟡 partial |
-| **Traces** | OpenTelemetry · Tempo/Jaeger backend · W3C Trace Context propagation · head + tail sampling | None — no SDK, no exporter; the ALS request-context slot is reserved for trace_id at P0.6 | S0 |
-| **Audit** | Append-only · tamper-evident chain · WORM · SIEM-exportable | Append-only ✅ · chain ❌ · WORM convention only · SIEM export ❌ · **request_id ✅ populated post-P0.3** | S1 |
+| **Metrics** | Prometheus + Thanos · RED + USE per service · per-tenant breakdown | ✅ `/metrics` (prom-client): RED histogram + DB saturation + Node defaults; Prometheus+Grafana compose + checked-in dashboard (P0.7 / ADR-0014). Business metrics, per-tenant, Thanos pending | 🟡 partial |
+| **Logs** | Structured JSON · Loki aggregation · `trace_id` correlated · PII redacted | ✅ Structured JSON (pino) + request_id correlation + PII redact (P0.3 / ADR-0010); **Loki aggregation** — pino-loki API + Promtail containers + Grafana request_id logs dashboard (P1.7 / ADR-0025) | ✅ done |
+| **Traces** | OpenTelemetry · Tempo/Jaeger backend · W3C Trace Context propagation · head + tail sampling | ✅ OTEL SDK + auto-instrumentation + trace_id in logs/audit (P0.6 / ADR-0013); **Tempo collector + Loki↔Tempo cross-link** (P1.8 / ADR-0026) | ✅ |
+| **Audit** | Append-only · tamper-evident chain · WORM · SIEM-exportable | Append-only ✅ · **chain ✅ (P1.11a)** · **WORM ✅ — Merkle anchor under Object Lock (P1.11b)** · **SIEM-export ✅ — RFC 5424 / CEF (P1.12 / ADR-0030)** · request_id ✅ (P0.3) · trace_id ✅ (P0.6) | ✅ core done |
 
 The codebase has **two of four pillars partially in place** (audit, logs) and **two of four entirely missing** (metrics, traces).
 
@@ -37,7 +37,7 @@ The codebase has **two of four pillars partially in place** (audit, logs) and **
 ### 2.2 What's still missing
 
 - **`trace_id` / `span_id`** — the ALS slot is reserved; OTEL plumbing lands at P0.6.
-- **Log aggregation.** No Loki / OpenSearch / Vector / Fluent Bit shipper yet → P1.7.
+- ~~**Log aggregation.** No Loki / OpenSearch / Vector / Fluent Bit shipper yet → P1.7.~~ ✅ Loki + Promtail landed (P1.7 / ADR-0025): the host-run API ships via `pino-loki`, Promtail scrapes infra containers, Grafana "CMC · Logs" filters by request_id.
 - **Retention / rotation.** Docker handles size capping; explicit policy lands at P0.9 (deploy concern).
 
 ### 2.3 Remediation status
@@ -48,18 +48,23 @@ The codebase has **two of four pillars partially in place** (audit, logs) and **
 | Middleware sets `req.requestId = randomUUID()`; attach to pino context | XS | ✅ P0.3 |
 | Populate `request_id` on audit log writes | XS | ✅ P0.3 |
 | Redaction list (email-typed properties, password fields, tokens) | S | ✅ P0.3 (email visible per ADR-0010) |
-| Loki + Promtail (or Grafana Agent) in `infra/observability-compose.yml` | S | 🔴 P1.7 |
+| Loki + Promtail (or Grafana Agent) in `infra/observability-compose.yml` | S | ✅ P1.7 (ADR-0025) |
 | Retention via Loki's `compactor` and S3-backend cold tier | M | 🔴 H3 |
 
 ---
 
 ## 3. Metrics audit
 
-### 3.1 What exists
+### 3.1 What exists — ✅ landed 2026-05-25 (P0.7 / ADR-0014)
 
-**Nothing.** No `prom-client`, no OTEL exporter, no `/metrics` endpoint.
+- `prom-client` registry (dedicated, not global) + `GET /metrics` (anonymous, like `/health`).
+- **RED**: `http_request_duration_seconds` histogram by `method, route, status_code` — rate via `_count`, errors via `status_code`, latency via buckets. Route label is the matched pattern (no id-cardinality); unmatched → `<unmatched>`.
+- **DB saturation**: `cmc_db_transactions_in_flight`, `cmc_db_transactions_total{scope,outcome}`, `cmc_db_pool_max` — sourced at the single tx chokepoint (postgres-js exposes no live pool API).
+- **Node defaults** via `collectDefaultMetrics`: event-loop lag, heap, GC, CPU.
+- Prometheus + Grafana in `infra/observability-compose.yml` (`pnpm obs:up`); Grafana auto-provisions the datasource and the checked-in `cmc-api-red.json` dashboard (RED + DB + Node rows).
+- `metrics.e2e-spec.ts` (7 tests) proves format, RED increments, `/metrics`+`/health` exclusion, and no-UUID-leak.
 
-The only signal a Prometheus would see today is whatever Caddy / a future reverse-proxy emits at the edge — and Caddy isn't even configured yet.
+**Still missing:** business metrics (sessions/documents/login outcomes) → P1.x; per-tenant breakdown → H1 cardinality decision; alerting on these series → P1.8; Thanos long-term storage → H3.
 
 ### 3.2 What's needed (ToR §14.1 + §14.3)
 
@@ -88,19 +93,19 @@ ToR §14.1 specifically warns about high-cardinality labels. At H2+ with hundred
 
 | Action | Effort | Roadmap |
 |---|---|---|
-| OTEL SDK + Prometheus exporter + `/metrics` endpoint | S | P0.7 |
-| First Grafana dashboard (RED per route) checked into `infra/observability/dashboards/` | S | P0.7 |
-| DB-pool metric instrumentation in `database.module.ts` | XS | P0.7 |
+| ~~OTEL SDK + Prometheus exporter + `/metrics` endpoint~~ | S | ✅ P0.7 (prom-client, ADR-0014) |
+| ~~First Grafana dashboard (RED per route) checked in~~ | S | ✅ P0.7 (`cmc-api-red.json`) |
+| ~~DB metric instrumentation~~ | XS | ✅ P0.7 (in-flight tx + pool max; exact pool stats await node-`pg`) |
 | Business metrics (sessions, documents, audit) | S | P1.x |
 | `tenant_id` cardinality decision | — | P1 review |
 
 ---
 
-## 4. Tracing audit
+## 4. Tracing audit — ✅ landed (P0.6 / ADR-0013 + P1.8 / ADR-0026)
 
 ### 4.1 What exists
 
-**Nothing.** No OpenTelemetry SDK, no exporter, no W3C Trace Context propagation, no header parsing.
+✅ `@opentelemetry/sdk-node` + auto-instrumentations (HTTP / pg / postgres / redis / aws) emit spans; `trace_id` flows into every log line and audit row; W3C trace-context propagates. **Tempo** (P1.8) stores the traces (OTLP export gated on `OTEL_EXPORTER_OTLP_ENDPOINT`), and Grafana cross-links the three signals — a log line's `traceId` links to its trace (Loki→Tempo), a span links to its logs (Tempo→Loki). Verified: cmc-api traces in Tempo (`GET /incidents`, `POST /auth/login`).
 
 ### 4.2 What's needed
 
@@ -131,13 +136,15 @@ The most useful first trace is **login**:
 
 ## 5. Health probes audit
 
-### 5.1 What exists — `apps/api/src/modules/health/health.controller.ts`
+### 5.1 What exists — ✅ updated 2026-05-25 (P0.8 / ADR-0015)
 
 ```
-GET /health → 200 { status: "ok", version, uptimeSeconds, timestamp }
+GET /health        → 200 { status, version, uptimeSeconds, timestamp }        (liveness, no deps)
+GET /health/ready  → 200 ready / 503 not_ready { status, checks[], timestamp } (PG+Redis+MinIO)
+GET /health/deep   → 200 { status, ..., dependencies[{name,status,latencyMs,error?}] } (authed)
 ```
 
-This is **liveness only.** It does not probe Postgres, Redis (when wired), or MinIO. A Kubernetes / Caddy load balancer using this for readiness would route traffic to a dead API instance whose DB is unreachable.
+Liveness stays dependency-free by design (a dep blip must not trigger a pod kill). Readiness pings Postgres (`select 1`), Redis (`ping`), MinIO (`HeadObject`) in parallel, each bounded by `HEALTH_PROBE_TIMEOUT_MS` (default 2s), and returns 503 when any is down — so an LB/orchestrator routes on the status code (live-verified: dead-S3 → liveness 200, ready 503). Deep adds per-dependency timings + error strings for runbook diagnostics (authenticated; role-gating awaits P1.1 RBAC).
 
 ### 5.2 What's needed (ToR §14.8)
 
@@ -154,17 +161,17 @@ This is **liveness only.** It does not probe Postgres, Redis (when wired), or Mi
 
 | Action | Effort | Roadmap |
 |---|---|---|
-| Implement `/health/ready` | XS | P0.8 |
-| Implement `/health/deep` (admin-only) | S | P0.8 |
+| ~~Implement `/health/ready`~~ | XS | ✅ P0.8 (200/503, ADR-0015) |
+| ~~Implement `/health/deep`~~ | S | ✅ P0.8 (authed; admin role-gate → P1.1) |
 | External synthetic probe (GHA cron hits `/health/ready` from a different region) | XS | H1 |
 
 ---
 
-## 6. Alerting audit
+## 6. Alerting audit — 🟡 pipeline landed (P1.8 / ADR-0026)
 
 ### 6.1 What exists
 
-**Nothing.** No Alertmanager, no rules, no notification routing. Failures today are visible only if a developer is watching `docker logs`.
+✅ **Alertmanager** wired to Prometheus (`rule_files` + `alerting`) with a `5xx ratio > 1% / 5m` rule + an `ApiMetricsTargetDown` (`up==0`) rule; firing alerts are deduped/grouped and visible in the Alertmanager UI (`:9093`). **Remaining:** the delivery receiver is a deliberate no-op — routing alerts to a paging target (Slack / PagerDuty / the platform's notifications) needs a paging destination + platform-superadmin recipient that don't exist yet.
 
 ### 6.2 What's needed (ToR §14.4)
 
@@ -218,9 +225,9 @@ ToR §14.6 calls for:
 - Syslog RFC 5424 + CEF as the export format.
 - Optional outbound integration for tenants that operate their own commercial SIEM.
 
-**State today:** **nothing.** No forwarder, no destination, no format converter.
+**Export side ✅ (P1.12 / ADR-0030):** `AuditExportService` tail-reads `audit_log` by a durable `seq` cursor and ships each row as **RFC 5424 syslog** or **CEF** via a pluggable sink (noop/stdout/file/tcp, RFC 6587 octet-counting). At-least-once (cursor advances post-write+commit; SIEM dedups on row `id`). The "format is the contract" property is locked — the export shape won't churn when a SIEM lands.
 
-**Remediation (P1.12):** a small NestJS worker that tail-reads `audit_log` (LISTEN/NOTIFY or polling cursor) and writes to a file/stream in RFC 5424 + CEF. Even without a SIEM running, this fixes the "format is the contract" property — the platform's export shape is locked.
+**Still 🔴 (H-tier):** a running SIEM (Wazuh / OpenSearch Security Analytics), a managed forwarder (Vector / Fluent Bit) instead of the in-process TCP sink, and TLS on the wire.
 
 ---
 
@@ -269,7 +276,7 @@ The whole observability stack (Prometheus + Loki + Tempo + Grafana + Promtail) f
 A real strength of the codebase: **the audit log is good enough today to be the foundation of observability** *because the columns and discipline are right*. With:
 - `request_id` populated (P0.3)
 - `trace_id` populated (P0.6)
-- Hash chain populated (P1.11)
+- Hash chain + daily Merkle anchor (WORM) populated ✅ (P1.11 / ADR-0029)
 - Streaming export (P1.12)
 - ClickHouse archive (P2.2)
 
@@ -281,10 +288,10 @@ A real strength of the codebase: **the audit log is good enough today to be the 
 
 ### S0 — must address before any non-dev deployment
 
-1. **No structured logs.** Adopt pino; populate `request_id` (P0.3).
-2. **No `/metrics` endpoint.** Add OTEL Prometheus exporter (P0.7).
-3. **No traces.** Add OTEL SDK + Tempo (P0.6).
-4. **No deep health probe.** Add `/health/ready` (P0.8).
+1. ~~**No structured logs.**~~ ✅ pino + `request_id` (P0.3 / ADR-0010).
+2. ~~**No `/metrics` endpoint.**~~ ✅ prom-client + Prometheus/Grafana (P0.7 / ADR-0014).
+3. ~~**No traces.**~~ ✅ OTEL SDK emits HTTP/DB/S3/Redis spans + trace_id (P0.6 / ADR-0013); Tempo collector → P1.8.
+4. ~~**No deep health probe.**~~ ✅ `/health/ready` (200/503) + `/health/deep` (P0.8 / ADR-0015).
 5. **No alerting.** Add Alertmanager + 3 starter rules (P1.8).
 
 ### S1 — high

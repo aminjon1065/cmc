@@ -1,8 +1,10 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { AsyncLocalStorage } from "node:async_hooks";
+import { trace, SpanStatusCode } from "@opentelemetry/api";
 import { sql } from "drizzle-orm";
 import type { Database } from "@cmc/db";
 import { DB } from "./database.tokens";
+import { MetricsService } from "../metrics/metrics.service";
 
 // Belt-and-suspenders even though `set_config(...)` is parameterised:
 // reject any tenantId that's not a canonical UUID before it touches the
@@ -37,8 +39,53 @@ export type TenantTx = Parameters<
 export class TenantDatabaseService {
   private readonly logger = new Logger(TenantDatabaseService.name);
   private readonly txStorage = new AsyncLocalStorage<TenantTx>();
+  // postgres-js (porsager) has no OTEL auto-instrumentation, so we emit a
+  // transaction-level span at the two GUC chokepoints below (P0.6 /
+  // ADR-0013). Each nests under the active HTTP span, giving every request
+  // a DB segment. Statement-level spans await a postgres-js instrumentation
+  // or a migration to node-postgres (`pg`) — documented in ADR-0013.
+  private readonly tracer = trace.getTracer("cmc-db");
 
-  constructor(@Inject(DB) private readonly database: Database) {}
+  constructor(
+    @Inject(DB) private readonly database: Database,
+    private readonly metrics: MetricsService,
+  ) {}
+
+  /**
+   * Run `body` inside a DB span named `db.tx <scope>` AND record it into
+   * the metrics registry (in-flight gauge + total counter, P0.7 /
+   * ADR-0014). This is the single chokepoint for both tenant and
+   * privileged transactions, so it is the honest place to measure DB
+   * saturation (postgres-js exposes no public live pool-stat API).
+   *
+   * With tracing disabled the tracer is a no-op — `body` runs directly,
+   * zero overhead; the metrics calls are plain counter math either way.
+   */
+  private async withSpan<T>(
+    scope: "tenant" | "privileged",
+    body: () => Promise<T>,
+  ): Promise<T> {
+    return this.tracer.startActiveSpan(`db.tx ${scope}`, async (span) => {
+      span.setAttribute("db.system", "postgresql");
+      span.setAttribute("cmc.db.scope", scope);
+      this.metrics.dbTxStart();
+      let outcome: "commit" | "error" = "commit";
+      try {
+        return await body();
+      } catch (err) {
+        outcome = "error";
+        span.recordException(err as Error);
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: err instanceof Error ? err.message : String(err),
+        });
+        throw err;
+      } finally {
+        this.metrics.dbTxEnd(scope, outcome);
+        span.end();
+      }
+    });
+  }
 
   /**
    * Returns the currently active transaction, or undefined if not inside
@@ -81,14 +128,18 @@ export class TenantDatabaseService {
       // value that the rest of the system would not recognise as a tenant.
       throw new Error(`runForTenant called with non-UUID tenantId`);
     }
-    return this.database.db.transaction(async (tx) => {
-      // Use `set_config(name, value, is_local := true)` instead of raw
-      // `SET LOCAL ... = '${x}'` so the value flows through a bind
-      // parameter. SET syntax doesn't accept binds; set_config does and is
-      // semantically identical for string GUCs.
-      await tx.execute(sql`select set_config('app.tenant_id', ${tenantId}, true)`);
-      return this.txStorage.run(tx, () => fn(tx));
-    });
+    return this.withSpan("tenant", () =>
+      this.database.db.transaction(async (tx) => {
+        // Use `set_config(name, value, is_local := true)` instead of raw
+        // `SET LOCAL ... = '${x}'` so the value flows through a bind
+        // parameter. SET syntax doesn't accept binds; set_config does and
+        // is semantically identical for string GUCs.
+        await tx.execute(
+          sql`select set_config('app.tenant_id', ${tenantId}, true)`,
+        );
+        return this.txStorage.run(tx, () => fn(tx));
+      }),
+    );
   }
 
   /**
@@ -107,20 +158,22 @@ export class TenantDatabaseService {
    * the request. The `try/finally` resets it to 'off' before returning.
    */
   async runPrivileged<T>(fn: (tx: TenantTx) => Promise<T>): Promise<T> {
-    return this.database.db.transaction(async (tx) => {
-      await tx.execute(sql`select set_config('app.bypass_rls', 'on', true)`);
-      try {
-        return await this.txStorage.run(tx, () => fn(tx));
-      } finally {
+    return this.withSpan("privileged", () =>
+      this.database.db.transaction(async (tx) => {
+        await tx.execute(sql`select set_config('app.bypass_rls', 'on', true)`);
         try {
-          await tx.execute(
-            sql`select set_config('app.bypass_rls', 'off', true)`,
-          );
-        } catch {
-          // Tx may already be aborted on the error path; nothing to do.
+          return await this.txStorage.run(tx, () => fn(tx));
+        } finally {
+          try {
+            await tx.execute(
+              sql`select set_config('app.bypass_rls', 'off', true)`,
+            );
+          } catch {
+            // Tx may already be aborted on the error path; nothing to do.
+          }
         }
-      }
-    });
+      }),
+    );
   }
 
   /**

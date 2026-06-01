@@ -77,7 +77,7 @@ describe("Request context", () => {
   it("includes request_id in problem+json error bodies", async () => {
     const inbound = randomUUID();
     const res = await request(app.getHttpServer())
-      .get("/auth/me") // protected — no token → 401 via filter
+      .get("/v1/auth/me") // protected — no token → 401 via filter
       .set("X-Request-Id", inbound)
       .expect(401);
     expect(res.headers["x-request-id"]).toBe(inbound);
@@ -89,7 +89,7 @@ describe("Request context", () => {
   it("login success populates audit_log.request_id with the response's id", async () => {
     const inbound = randomUUID();
     const res = await request(app.getHttpServer())
-      .post("/auth/login")
+      .post("/v1/auth/login")
       .set("X-Request-Id", inbound)
       .send({ email: user.email, password: user.password })
       .expect(200);
@@ -109,7 +109,7 @@ describe("Request context", () => {
   it("login failure (durable audit) populates request_id even when the request rolls back", async () => {
     const inbound = randomUUID();
     await request(app.getHttpServer())
-      .post("/auth/login")
+      .post("/v1/auth/login")
       .set("X-Request-Id", inbound)
       .send({ email: user.email, password: "wrong-password-12" })
       .expect(401);
@@ -136,14 +136,14 @@ describe("Request context", () => {
     // Burn through the per-email limit (test env: 3 / 10 s).
     for (let i = 0; i < 3; i++) {
       await request(app.getHttpServer())
-        .post("/auth/login")
+        .post("/v1/auth/login")
         .send({ email: user.email, password: `wrong-pwd-${i}-x` })
         .expect(401);
     }
 
     const denyingId = randomUUID();
     const res = await request(app.getHttpServer())
-      .post("/auth/login")
+      .post("/v1/auth/login")
       .set("X-Request-Id", denyingId)
       .send({ email: user.email, password: "wrong-pwd-final-x" })
       .expect(429);

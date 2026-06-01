@@ -65,6 +65,84 @@ export class AuthRateLimitSpecs {
     ];
   }
 
+  /**
+   * Self-service forgot-password (POST /auth/password/forgot). Per-IP AND
+   * per-email: the email bucket caps how many reset notifications a single
+   * address can trigger (anti-spam), the IP bucket caps a single client. Keys:
+   *   cmc:auth:rate-limit:pwreset:ip:<ip>
+   *   cmc:auth:rate-limit:pwreset:email:<sha256(lowercased-email)>
+   */
+  passwordResetRequestSpecs(input: {
+    ip: string | null;
+    email: string;
+    userAgent?: string | null;
+  }): RateLimitSpec[] {
+    const auditCommon = {
+      action: "password.reset_requested",
+      resourceType: "user",
+      ip: input.ip,
+      userAgent: input.userAgent ?? null,
+      metadata: { email: input.email },
+    };
+    return [
+      {
+        name: "auth-pwreset-ip",
+        keyDescriptor: "ip",
+        limit: this.config.get("PASSWORD_RESET_IP_LIMIT", { infer: true }),
+        windowSec: this.config.get("PASSWORD_RESET_IP_WINDOW_SEC", {
+          infer: true,
+        }),
+        redisKey: input.ip
+          ? `cmc:auth:rate-limit:pwreset:ip:${input.ip}`
+          : null,
+        audit: auditCommon,
+      },
+      {
+        name: "auth-pwreset-email",
+        keyDescriptor: "email",
+        limit: this.config.get("PASSWORD_RESET_EMAIL_LIMIT", { infer: true }),
+        windowSec: this.config.get("PASSWORD_RESET_EMAIL_WINDOW_SEC", {
+          infer: true,
+        }),
+        redisKey: input.email
+          ? `cmc:auth:rate-limit:pwreset:email:${hashEmail(input.email)}`
+          : null,
+        audit: auditCommon,
+      },
+    ];
+  }
+
+  /**
+   * Completion of a reset by token (POST /auth/password/reset). Per-IP only —
+   * there's no email at this step; the token is the secret. Bounds brute-force
+   * guessing of tokens on top of their 256-bit entropy. Key:
+   *   cmc:auth:rate-limit:pwreset-complete:ip:<ip>
+   */
+  passwordResetCompleteSpecs(input: {
+    ip: string | null;
+    userAgent?: string | null;
+  }): RateLimitSpec[] {
+    return [
+      {
+        name: "auth-pwreset-complete-ip",
+        keyDescriptor: "ip",
+        limit: this.config.get("PASSWORD_RESET_IP_LIMIT", { infer: true }),
+        windowSec: this.config.get("PASSWORD_RESET_IP_WINDOW_SEC", {
+          infer: true,
+        }),
+        redisKey: input.ip
+          ? `cmc:auth:rate-limit:pwreset-complete:ip:${input.ip}`
+          : null,
+        audit: {
+          action: "password.reset_completed",
+          resourceType: "user",
+          ip: input.ip,
+          userAgent: input.userAgent ?? null,
+        },
+      },
+    ];
+  }
+
   refreshSpecs(input: {
     ip: string | null;
     userAgent?: string | null;

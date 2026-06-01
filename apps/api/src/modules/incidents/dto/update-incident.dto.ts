@@ -1,0 +1,64 @@
+import {
+  IsInt,
+  IsISO8601,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+} from "class-validator";
+
+/** All fields optional — the controller rejects a fully-empty body. */
+export class UpdateIncidentDto {
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  severity?: number;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
+  type?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  region?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  source?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(300)
+  summary?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(10000)
+  description?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  latitude?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  longitude?: number;
+
+  @IsOptional()
+  @IsISO8601()
+  occurredAt?: string;
+}

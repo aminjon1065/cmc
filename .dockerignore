@@ -1,0 +1,52 @@
+# Docker build context excludes (P0.10 / ADR-0017).
+# Both app images build from the repo root (they need the workspace + lockfile),
+# so this single root .dockerignore keeps the context lean and secrets out.
+
+# Dependencies — reinstalled inside the build stage from the lockfile.
+**/node_modules
+.pnpm-store
+
+# Build artifacts — rebuilt inside the image.
+**/dist
+**/.next
+**/.turbo
+**/build
+**/out
+**/*.tsbuildinfo
+
+# Secrets / env — never bake into an image. (.env.example templates are fine
+# but unneeded in the build, so exclude the whole family.)
+**/.env
+**/.env.*
+infra/.env
+infra/.env.production
+
+# Tests / coverage / reports — not needed at runtime.
+**/coverage
+**/.nyc_output
+**/playwright-report
+**/test-results
+**/test
+**/tests
+**/*.spec.ts
+**/*.e2e-spec.ts
+
+# VCS / tooling / docs.
+.git
+.github
+.vscode
+.idea
+docs
+**/*.md
+!**/README.md
+
+# OS noise.
+**/.DS_Store
+Thumbs.db
+*.log
+
+# Infra that isn't part of an app image build.
+infra/observability
+infra/caddy
+infra/postgres
+infra/backup

@@ -3,16 +3,19 @@ import { ConfigService } from "@nestjs/config";
 import { JwtModule } from "@nestjs/jwt";
 import { AuthService } from "./auth.service";
 import { AuthController } from "./auth.controller";
-import { SessionsService } from "./sessions.service";
 import { AuthRateLimitSpecs } from "./auth-rate-limit.specs";
+import { SessionsModule } from "./sessions.module";
 import { UsersModule } from "../users/users.module";
 import { TenantsModule } from "../tenants/tenants.module";
+import { MfaModule } from "../mfa/mfa.module";
 import type { AppConfig } from "../../config/configuration";
 
 @Module({
   imports: [
     UsersModule,
     TenantsModule,
+    MfaModule,
+    SessionsModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService<AppConfig, true>) => ({
@@ -27,8 +30,10 @@ import type { AppConfig } from "../../config/configuration";
       global: true,
     }),
   ],
-  providers: [AuthService, SessionsService, AuthRateLimitSpecs],
+  providers: [AuthService, AuthRateLimitSpecs],
   controllers: [AuthController],
-  exports: [AuthService, SessionsService],
+  // Re-export SessionsModule so existing consumers that import AuthModule
+  // (e.g. PasswordResetModule) keep resolving SessionsService unchanged.
+  exports: [AuthService, AuthRateLimitSpecs, SessionsModule],
 })
 export class AuthModule {}

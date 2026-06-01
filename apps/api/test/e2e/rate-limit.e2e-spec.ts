@@ -59,7 +59,7 @@ describe("Auth rate limiting", () => {
   it("returns 401 (not 429) for the first few wrong-password attempts", async () => {
     for (let i = 0; i < 2; i++) {
       await request(app.getHttpServer())
-        .post("/auth/login")
+        .post("/v1/auth/login")
         .set("X-Forwarded-For", IP_A)
         .send({ email: user.email, password: "definitely_wrong" })
         .expect(401);
@@ -71,14 +71,14 @@ describe("Auth rate limiting", () => {
   it("per-email limit: 3 wrong attempts on one email → 4th is 429", async () => {
     for (let i = 0; i < 3; i++) {
       await request(app.getHttpServer())
-        .post("/auth/login")
+        .post("/v1/auth/login")
         .set("X-Forwarded-For", IP_A)
         .send({ email: user.email, password: `wrong-pwd-${i}-x` })
         .expect(401);
     }
 
     const res = await request(app.getHttpServer())
-      .post("/auth/login")
+      .post("/v1/auth/login")
       .set("X-Forwarded-For", IP_A)
       .send({ email: user.email, password: "still-wrong" })
       .expect(429);
@@ -98,7 +98,7 @@ describe("Auth rate limiting", () => {
   it("per-IP limit: 5 wrong attempts across 5 distinct emails → 6th is 429", async () => {
     for (let i = 0; i < 5; i++) {
       await request(app.getHttpServer())
-        .post("/auth/login")
+        .post("/v1/auth/login")
         .set("X-Forwarded-For", IP_A)
         // Each attempt is a fresh email so the per-email limit (3) is
         // never reached — only the IP limit (5) accumulates.
@@ -107,7 +107,7 @@ describe("Auth rate limiting", () => {
     }
 
     const res = await request(app.getHttpServer())
-      .post("/auth/login")
+      .post("/v1/auth/login")
       .set("X-Forwarded-For", IP_A)
       .send({ email: "ghost-final@rate.test", password: "no-such-user" })
       .expect(429);
@@ -122,7 +122,7 @@ describe("Auth rate limiting", () => {
     // Exhaust IP_A on novel emails (so per-email is irrelevant).
     for (let i = 0; i < 6; i++) {
       await request(app.getHttpServer())
-        .post("/auth/login")
+        .post("/v1/auth/login")
         .set("X-Forwarded-For", IP_A)
         .send({ email: `ip-a-${i}@rate.test`, password: "wrong-pwd-12" })
         // First 5 → 401; the 6th → 429. Either is fine for this assertion.
@@ -135,7 +135,7 @@ describe("Auth rate limiting", () => {
 
     // From a different IP the counter is fresh — wrong password → 401.
     await request(app.getHttpServer())
-      .post("/auth/login")
+      .post("/v1/auth/login")
       .set("X-Forwarded-For", IP_B)
       .send({ email: "ip-b-clean@rate.test", password: "wrong-pwd-12" })
       .expect(401);
@@ -147,7 +147,7 @@ describe("Auth rate limiting", () => {
     // Three wrong attempts on user.email → per-email limit (3) reached.
     for (let i = 0; i < 3; i++) {
       await request(app.getHttpServer())
-        .post("/auth/login")
+        .post("/v1/auth/login")
         .set("X-Forwarded-For", IP_A)
         .send({ email: user.email, password: "wrong-pwd-12" })
         .expect(401);
@@ -155,7 +155,7 @@ describe("Auth rate limiting", () => {
     // Fourth attempt on the SAME email from the SAME IP → 429 on the
     // per-email key.
     await request(app.getHttpServer())
-      .post("/auth/login")
+      .post("/v1/auth/login")
       .set("X-Forwarded-For", IP_A)
       .send({ email: user.email, password: "wrong-pwd-12" })
       .expect(429);
@@ -164,7 +164,7 @@ describe("Auth rate limiting", () => {
     // (we've consumed 4/5 IP counts, but per-email is fresh). Expect 401
     // (unknown email), not 429.
     await request(app.getHttpServer())
-      .post("/auth/login")
+      .post("/v1/auth/login")
       .set("X-Forwarded-For", IP_A)
       .send({ email: "untouched@rate.test", password: "wrong-pwd-12" })
       .expect(401);
@@ -175,13 +175,13 @@ describe("Auth rate limiting", () => {
   it("writes a denied audit row on rate-limit breach", async () => {
     for (let i = 0; i < 3; i++) {
       await request(app.getHttpServer())
-        .post("/auth/login")
+        .post("/v1/auth/login")
         .set("X-Forwarded-For", IP_A)
         .send({ email: user.email, password: "wrong-pwd-12" })
         .expect(401);
     }
     await request(app.getHttpServer())
-      .post("/auth/login")
+      .post("/v1/auth/login")
       .set("X-Forwarded-For", IP_A)
       .send({ email: user.email, password: "wrong-pwd-12" })
       .expect(429);
@@ -216,7 +216,7 @@ describe("Auth rate limiting", () => {
   it("refresh: 5 garbage tokens → 6th is 429", async () => {
     for (let i = 0; i < 5; i++) {
       await request(app.getHttpServer())
-        .post("/auth/refresh")
+        .post("/v1/auth/refresh")
         .set("X-Forwarded-For", IP_A)
         // Each token is 48+ chars to satisfy the DTO MinLength so we
         // exercise the rate-limit, not the validator.
@@ -224,7 +224,7 @@ describe("Auth rate limiting", () => {
         .expect(401);
     }
     const res = await request(app.getHttpServer())
-      .post("/auth/refresh")
+      .post("/v1/auth/refresh")
       .set("X-Forwarded-For", IP_A)
       .send({ refreshToken: `x`.repeat(48) + "final" })
       .expect(429);

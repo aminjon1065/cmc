@@ -1,0 +1,31 @@
+# Prometheus alerting rules for the CMC platform (P1.8 / ADR-0026).
+groups:
+  - name: cmc-api-availability
+    rules:
+      # Fire when more than 1% of API requests return 5xx over 5 minutes.
+      # `clamp_min(denominator, 1)` avoids a divide-by-zero / NaN when there
+      # is no traffic (ratio → ~0 instead of undefined).
+      - alert: HighHttp5xxRatio
+        expr: |
+          sum(rate(http_request_duration_seconds_count{job="cmc-api",status_code=~"5.."}[5m]))
+          /
+          clamp_min(sum(rate(http_request_duration_seconds_count{job="cmc-api"}[5m])), 1)
+          > 0.01
+        for: 5m
+        labels:
+          severity: critical
+          service: cmc-api
+        annotations:
+          summary: "cmc-api 5xx ratio above 1% (5m)"
+          description: "{{ $value | humanizePercentage }} of cmc-api requests returned 5xx over the last 5 minutes."
+
+      # Meta: the API metrics target is down (no scrape).
+      - alert: ApiMetricsTargetDown
+        expr: up{job="cmc-api"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          service: cmc-api
+        annotations:
+          summary: "cmc-api metrics target is down"
+          description: "Prometheus cannot scrape cmc-api /metrics (host unreachable or API down)."

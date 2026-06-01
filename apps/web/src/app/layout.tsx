@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Onest, JetBrains_Mono } from "next/font/google";
+import { getPublicBranding } from "@/lib/branding";
 import "./globals.css";
 
 const display = Geist({
@@ -20,21 +21,26 @@ const mono = JetBrains_Mono({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  title: {
-    default: "CMC · Operational Intelligence Platform",
-    template: "%s — CMC",
-  },
-  description:
-    "Crisis Management Center · Committee of Emergency Situations and Civil Defense of Tajikistan",
-};
+// Branding-driven document metadata (P0.11 / ADR-0018). Resolved per-request
+// from the default tenant's branding so the title/description aren't hardcoded.
+export async function generateMetadata(): Promise<Metadata> {
+  const { copy } = await getPublicBranding();
+  return {
+    title: {
+      default: copy.metaTitle,
+      template: "%s — CMC",
+    },
+    description: copy.metaDescription,
+  };
+}
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const { localeDefault } = await getPublicBranding();
   return (
     <html
-      lang="en"
+      lang={localeDefault}
       className={`dark ${display.variable} ${ui.variable} ${mono.variable}`}
       suppressHydrationWarning
     >

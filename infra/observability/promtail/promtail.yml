@@ -1,0 +1,39 @@
+# Promtail — ships Docker container logs to Loki (P1.7 / ADR-0025).
+#
+# Scrapes every `cmc-*` container's stdout via the Docker socket. The API
+# itself runs on the HOST (pnpm dev) and ships its OWN structured logs via the
+# pino-loki transport, so we DROP the `cmc-api` container here too (it would be
+# a duplicate when the API is containerised in the deploy compose).
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+  log_level: warn
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 10s
+    relabel_configs:
+      # Keep only cmc-* containers…
+      - source_labels: ["__meta_docker_container_name"]
+        regex: "/cmc-.*"
+        action: keep
+      # …but not cmc-api (it self-ships via pino-loki — avoid duplicates).
+      - source_labels: ["__meta_docker_container_name"]
+        regex: "/cmc-api"
+        action: drop
+      - source_labels: ["__meta_docker_container_name"]
+        regex: "/(.*)"
+        target_label: container
+        replacement: "$1"
+      - source_labels: ["__meta_docker_container_log_stream"]
+        target_label: stream
+      - target_label: job
+        replacement: docker

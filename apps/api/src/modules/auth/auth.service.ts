@@ -4,6 +4,7 @@ import { JwtService } from "@nestjs/jwt";
 import * as argon2 from "argon2";
 import type {
   LoginResponse,
+  MfaRequiredResponse,
   RefreshResponse,
   TokenBundle,
   AuthUser,
@@ -14,6 +15,7 @@ import { UsersService } from "../users/users.service";
 import { TenantsService } from "../tenants/tenants.service";
 import { AuditService } from "../audit/audit.service";
 import { TenantDatabaseService } from "../database/tenant-database.service";
+import { MfaService } from "../mfa/mfa.service";
 import { SessionsService } from "./sessions.service";
 
 export type LoginAttempt = {
@@ -21,6 +23,22 @@ export type LoginAttempt = {
   password: string;
   ip?: string | null;
   userAgent?: string | null;
+};
+
+export type MfaVerifyAttempt = {
+  mfaToken: string;
+  code: string;
+  ip?: string | null;
+  userAgent?: string | null;
+};
+
+/** Claims carried by the short-lived mfa_token between the two login steps. */
+type MfaTokenClaims = {
+  scope: "mfa";
+  sub: string; // user id
+  tid: string; // tenant id
+  iat?: number;
+  exp?: number;
 };
 
 export type RefreshAttempt = {
@@ -39,6 +57,7 @@ export class AuthService {
     private readonly sessions: SessionsService,
     private readonly audit: AuditService,
     private readonly tenantDb: TenantDatabaseService,
+    private readonly mfa: MfaService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService<AppConfig, true>,
   ) {}
@@ -52,11 +71,15 @@ export class AuthService {
    * session creation — happens inside that same transaction so the
    * session insert is co-located with the user lookup.
    */
-  async login(attempt: LoginAttempt): Promise<LoginResponse> {
+  async login(
+    attempt: LoginAttempt,
+  ): Promise<LoginResponse | MfaRequiredResponse> {
     return this.tenantDb.runPrivileged(async () => this.doLogin(attempt));
   }
 
-  private async doLogin(attempt: LoginAttempt): Promise<LoginResponse> {
+  private async doLogin(
+    attempt: LoginAttempt,
+  ): Promise<LoginResponse | MfaRequiredResponse> {
     const candidates = await this.users.findActiveByEmailGlobal(attempt.email);
 
     if (candidates.length === 0) {
@@ -106,15 +129,66 @@ export class AuthService {
       throw new UnauthorizedException("Invalid email or password");
     }
 
-    await this.users.markLoggedIn(user.id);
+    // MFA gate (P1.2 / ADR-0020): if the user has a verified TOTP factor,
+    // STOP here — no session yet. Return a short-lived mfa_token; the client
+    // completes login via POST /auth/mfa/verify. We run inside the login's
+    // privileged tx, so MfaService reads the factor via the same tx.
+    const mfaEnabled = await this.tenantDb.run((tx) =>
+      this.mfa.isMfaEnabled(tx, user.id),
+    );
+    if (mfaEnabled) {
+      const ttl = this.config.get("MFA_TOKEN_TTL_SEC", { infer: true });
+      const mfaToken = await this.jwt.signAsync(
+        { scope: "mfa", sub: user.id, tid: tenant.id } satisfies Omit<
+          MfaTokenClaims,
+          "iat" | "exp"
+        >,
+        { expiresIn: ttl },
+      );
+      await this.audit.record({
+        tenantId: tenant.id,
+        actorId: user.id,
+        actorType: "user",
+        action: "user.login",
+        resourceType: "user",
+        resourceId: user.id,
+        outcome: "success",
+        ip: attempt.ip ?? null,
+        userAgent: attempt.userAgent ?? null,
+        metadata: { step: "password_ok_mfa_required" },
+      });
+      return { status: "mfa_required", mfaToken, expiresInSec: ttl };
+    }
 
-    // Create the session (and its refresh token) — issuing the access
-    // token requires the session id, so we create the row first.
+    await this.users.markLoggedIn(user.id);
+    return this.issueSession({
+      user,
+      tenant,
+      ip: attempt.ip ?? null,
+      userAgent: attempt.userAgent ?? null,
+      via: "password",
+    });
+  }
+
+  /**
+   * Mint a session + token bundle for an authenticated user. Shared by the
+   * no-MFA login path and the post-MFA-verify path. Must run inside a
+   * privileged tx (session insert is co-located with the user lookup).
+   */
+  private async issueSession(params: {
+    user: { id: string; email: string; name: string; tenantId: string };
+    tenant: { id: string; slug: string };
+    ip: string | null;
+    userAgent: string | null;
+    via: "password" | "mfa";
+  }): Promise<LoginResponse> {
+    const { user, tenant } = params;
+
     const { session, plainRefreshToken } = await this.sessions.create({
       tenantId: tenant.id,
       userId: user.id,
-      ip: attempt.ip ?? null,
-      userAgent: attempt.userAgent ?? null,
+      ip: params.ip,
+      userAgent: params.userAgent,
       refreshTokenLifetimeSec: this.config.get("JWT_REFRESH_TTL_SEC", {
         infer: true,
       }),
@@ -144,18 +218,94 @@ export class AuthService {
       resourceType: "user",
       resourceId: user.id,
       outcome: "success",
-      ip: attempt.ip ?? null,
-      userAgent: attempt.userAgent ?? null,
-      metadata: { sessionId: session.id, familyId: session.familyId },
+      ip: params.ip,
+      userAgent: params.userAgent,
+      metadata: {
+        sessionId: session.id,
+        familyId: session.familyId,
+        via: params.via,
+      },
     });
 
     return {
+      status: "ok",
       user: authUser,
       accessToken: tokens.accessToken,
       accessTokenExpiresAt: tokens.accessTokenExpiresAt,
       refreshToken: plainRefreshToken,
       refreshTokenExpiresAt: session.expiresAt.toISOString(),
     };
+  }
+
+  // ---------- MFA second step ----------
+
+  /**
+   * Complete a two-step login: validate the mfa_token, verify the TOTP or
+   * backup code, then issue the real session. Runs privileged (no tenant
+   * context exists yet — same as login).
+   */
+  async verifyMfa(attempt: MfaVerifyAttempt): Promise<LoginResponse> {
+    return this.tenantDb.runPrivileged(async () => this.doVerifyMfa(attempt));
+  }
+
+  private async doVerifyMfa(attempt: MfaVerifyAttempt): Promise<LoginResponse> {
+    let claims: MfaTokenClaims;
+    try {
+      claims = await this.jwt.verifyAsync<MfaTokenClaims>(attempt.mfaToken);
+    } catch {
+      await this.recordMfaFailure(null, null, attempt, "invalid_mfa_token");
+      throw new UnauthorizedException("Invalid or expired MFA token");
+    }
+    if (claims.scope !== "mfa") {
+      await this.recordMfaFailure(
+        claims.sub ?? null,
+        claims.tid ?? null,
+        attempt,
+        "wrong_token_scope",
+      );
+      throw new UnauthorizedException("Invalid MFA token");
+    }
+
+    const ok = await this.tenantDb.run((tx) =>
+      this.mfa.verifyForUser(tx, claims.sub, attempt.code),
+    );
+    if (!ok) {
+      await this.recordMfaFailure(
+        claims.sub,
+        claims.tid,
+        attempt,
+        "wrong_code",
+      );
+      throw new UnauthorizedException("Invalid code");
+    }
+
+    // Re-load user + tenant to mint the session.
+    const tenant = await this.tenants.findById(claims.tid);
+    const user = await this.users.findById(claims.sub);
+    if (
+      !tenant ||
+      !user ||
+      tenant.deletedAt ||
+      user.deletedAt ||
+      !user.isActive
+    ) {
+      await this.recordMfaFailure(
+        claims.sub,
+        claims.tid,
+        attempt,
+        "user_or_tenant_inactive",
+      );
+      throw new UnauthorizedException("Invalid code");
+    }
+
+    await this.users.markLoggedIn(user.id);
+    return this.issueSession({
+      user,
+      tenant,
+      ip: attempt.ip ?? null,
+      userAgent: attempt.userAgent ?? null,
+      via: "mfa",
+    });
   }
 
   // ---------- Refresh ----------
@@ -317,6 +467,27 @@ export class AuthService {
       metadata: { email: attempt.email, reason },
       // Caller throws 401 right after — make sure the audit row survives
       // the request rollback.
+      durable: true,
+    });
+  }
+
+  private async recordMfaFailure(
+    actorId: string | null,
+    tenantId: string | null,
+    attempt: MfaVerifyAttempt,
+    reason: string,
+  ): Promise<void> {
+    await this.audit.record({
+      tenantId,
+      actorId,
+      actorType: actorId ? "user" : "anonymous",
+      action: "user.mfa_verify",
+      resourceType: "user",
+      resourceId: actorId,
+      outcome: "failure",
+      ip: attempt.ip ?? null,
+      userAgent: attempt.userAgent ?? null,
+      metadata: { reason },
       durable: true,
     });
   }

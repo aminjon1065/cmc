@@ -14,6 +14,11 @@ const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ??
   "http://localhost:3001";
 
+// NextAuth talks to the API directly (not via apiFetch), so it carries its own
+// copy of the `/v1` version prefix (ADR-0027). Keep in lockstep with
+// `lib/api.ts`'s API_PREFIX.
+const API_V1 = `${API_BASE_URL}/v1`;
+
 /**
  * Refresh the API access token a little before it actually expires so we
  * never serve a request with a token that's about to die on the wire.
@@ -46,7 +51,7 @@ async function refreshApiToken(refreshToken: string): Promise<RefreshResult> {
 
   const promise = (async (): Promise<RefreshResult> => {
     try {
-      const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+      const res = await fetch(`${API_V1}/auth/refresh`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ refreshToken }),
@@ -93,7 +98,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const parsed = LoginRequestSchema.safeParse(raw);
         if (!parsed.success) return null;
 
-        const res = await fetch(`${API_BASE_URL}/auth/login`, {
+        const res = await fetch(`${API_V1}/auth/login`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(parsed.data),
@@ -196,7 +201,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           : null;
       if (!token?.accessToken) return;
       try {
-        await fetch(`${API_BASE_URL}/auth/logout`, {
+        await fetch(`${API_V1}/auth/logout`, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${token.accessToken}`,

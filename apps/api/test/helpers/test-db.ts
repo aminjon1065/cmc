@@ -47,6 +47,11 @@ export async function truncateAll(
   await client.unsafe(`
     TRUNCATE TABLE
       audit_log,
+      audit_chain_anchor,
+      audit_export_cursor,
+      outbox,
+      consumed_events,
+      projection_cursors,
       sessions,
       documents,
       users,
@@ -55,22 +60,24 @@ export async function truncateAll(
   `);
 
   if (redis) {
-    await wipeAuthKeys(redis);
+    // Wipe both auth state (rate-limit + session-active cache, `cmc:auth:*`)
+    // and RBAC permission cache (`cmc:authz:*`) so cases don't bleed.
+    await wipeKeys(redis, "cmc:auth:*");
+    await wipeKeys(redis, "cmc:authz:*");
   }
 }
 
 /**
- * SCAN-and-DEL every `cmc:auth:*` key (rate-limit counters AND
- * session-active cache). SCAN (not KEYS) so accidentally-large key
- * spaces don't block Redis on test runs.
+ * SCAN-and-DEL every key matching `pattern`. SCAN (not KEYS) so an
+ * accidentally-large key space doesn't block Redis on test runs.
  */
-async function wipeAuthKeys(redis: Redis): Promise<void> {
+async function wipeKeys(redis: Redis, pattern: string): Promise<void> {
   let cursor = "0";
   do {
     const [next, batch] = await redis.scan(
       cursor,
       "MATCH",
-      "cmc:auth:*",
+      pattern,
       "COUNT",
       100,
     );

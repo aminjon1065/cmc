@@ -1,0 +1,151 @@
+# Deploy-time overlay: app images + Caddy reverse proxy + automatic TLS
+# (P0.9 / ADR-0016, P0.10 / ADR-0017).
+#
+# SEPARATE from infra/docker-compose.yml (core data services) so the edge +
+# app images are brought up only when deploying externally:
+#
+#   pnpm infra:up       # FIRST — Postgres / Redis / MinIO on the cmc-net network
+#   pnpm deploy:up      # build + start api + web + Caddy
+#   pnpm deploy:down    # stop
+#   pnpm deploy:logs    # tail
+#   pnpm deploy:ps      # status
+#   pnpm deploy:validate # caddy validate the config (no run)
+#
+# Config is env-driven via infra/.env.production (copy from the .example).
+#
+# The `api` service joins the EXTERNAL `cmc-net` network (created by
+# infra/docker-compose.yml) so it can reach postgres / redis / minio by their
+# service names. Caddy + web sit on the deploy network and reach the API by its
+# service name. host.docker.internal remains available (extra_hosts) as a
+# fallback for a host-run app during a transitional deploy.
+
+name: cmc-deploy
+
+services:
+  # ---------- API (NestJS) ----------
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    image: cmc/api:latest
+    container_name: cmc-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      # Data services reached by their cmc-net service names.
+      DATABASE_URL: ${DATABASE_URL:-postgresql://cmc_app:cmc_app_dev_password_change_me@postgres:5432/cmc}
+      DATABASE_OWNER_URL: ${DATABASE_OWNER_URL:-postgresql://cmc:cmc_dev_password_change_me@postgres:5432/cmc}
+      REDIS_URL: ${REDIS_URL:-redis://:cmc_dev_redis_change_me@redis:6379}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      # Public endpoint for pre-signed URLs handed to the browser — the API host.
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-https://${API_HOST}}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-cmc-admin}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-cmc_dev_minio_change_me}
+      S3_BUCKET_FILES: ${S3_BUCKET_FILES:-cmc-files}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set for a deploy}
+      # CORS: allow the web origin through the edge.
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://${APP_HOST}}
+      # Optional OTLP collector — unset means "create spans, export nothing"
+      # (no localhost:4318 fallback noise).
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    networks:
+      - default
+      - cmc-net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      # distroless has no shell/wget — use the bundled node to hit liveness.
+      test: ["CMD", "/nodejs/bin/node", "-e", "fetch('http://localhost:3001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ---------- Web (Next.js standalone) ----------
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      args:
+        # NEXT_PUBLIC_* is inlined at BUILD time — point the browser at the API
+        # host served by Caddy.
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-https://${API_HOST}}
+    image: cmc/web:latest
+    container_name: cmc-web
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+      # Server-side calls from Auth.js to the API (inside the deploy network).
+      API_BASE_URL: ${API_BASE_URL:-http://api:3001}
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set for a deploy}
+      AUTH_TRUST_HOST: "true"
+    networks:
+      - default
+    healthcheck:
+      test: ["CMD", "/nodejs/bin/node", "-e", "fetch('http://localhost:3000/login').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ---------- Edge (Caddy) ----------
+  caddy:
+    image: caddy:2.8-alpine
+    container_name: cmc-caddy
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+      web:
+        condition: service_started
+    ports:
+      - "80:80"
+      - "443:443"
+      # HTTP/3 (QUIC) — same port as 443 but UDP.
+      - "443:443/udp"
+    environment:
+      APP_HOST: ${APP_HOST}
+      API_HOST: ${API_HOST}
+      # Default to the compose service names now that api + web run here
+      # (P0.10). Override to host.docker.internal:PORT for a transitional
+      # host-run app.
+      APP_UPSTREAM: ${APP_UPSTREAM:-web:3000}
+      API_UPSTREAM: ${API_UPSTREAM:-api:3001}
+      CADDY_ACME_EMAIL: ${CADDY_ACME_EMAIL:-admin@example.com}
+      CADDY_EXTRA_GLOBAL: ${CADDY_EXTRA_GLOBAL:-}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Persist issued certificates + ACME account across restarts so a
+      # redeploy doesn't re-request certs (and hit Let's Encrypt rate limits).
+      - caddy_data:/data
+      - caddy_config:/config
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      # Probe Caddy's own HTTP listener (:80) — it always answers (a redirect
+      # to HTTPS). `--spider` returns success on any HTTP response including a
+      # 3xx, so this confirms the proxy process is serving. (The admin API on
+      # :2019 is disabled by default, so don't probe that.)
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  caddy_data:
+    name: cmc-caddy-data
+  caddy_config:
+    name: cmc-caddy-config
+
+networks:
+  default:
+    name: cmc-deploy-net
+  # The core data-services network from infra/docker-compose.yml. External so
+  # the API can reach postgres / redis / minio by service name. Bring the core
+  # stack up first (`pnpm infra:up`).
+  cmc-net:
+    external: true

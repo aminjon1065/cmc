@@ -1,0 +1,25 @@
+# Alertmanager routing (P1.8 / ADR-0026).
+#
+# Prometheus evaluates the rules in observability/prometheus/rules and pushes
+# firing alerts here; Alertmanager dedupes/groups them and they're visible in
+# the UI (http://localhost:9093). The default receiver is intentionally a
+# NO-OP for now — paging/chat delivery (Slack, PagerDuty, or a webhook into the
+# platform's notifications) is wired when a paging target exists. To deliver,
+# add a `webhook_configs` / `slack_configs` block to the receiver below.
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: default
+  group_by: ["alertname", "service"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: default
+    # No delivery configured yet — alerts are visible in the Alertmanager UI.
+    # Example webhook delivery (uncomment + point at your target):
+    # webhook_configs:
+    #   - url: https://example.invalid/alerts
+    #     send_resolved: true

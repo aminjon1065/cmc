@@ -13,7 +13,7 @@ export async function loginAs(
   user: TestUser,
 ): Promise<LoginResponse> {
   const res = await request(app.getHttpServer())
-    .post("/auth/login")
+    .post("/v1/auth/login")
     .send({ email: user.email, password: user.password });
 
   if (res.status !== 200) {
@@ -33,7 +33,7 @@ export async function refresh(
   refreshToken: string,
 ): Promise<RefreshResponse> {
   const res = await request(app.getHttpServer())
-    .post("/auth/refresh")
+    .post("/v1/auth/refresh")
     .send({ refreshToken });
   if (res.status !== 200) {
     throw new Error(
