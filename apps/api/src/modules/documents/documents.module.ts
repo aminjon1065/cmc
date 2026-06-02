@@ -3,9 +3,10 @@ import { DocumentsService } from "./documents.service";
 import { RetentionService } from "./retention.service";
 import { DocumentsController } from "./documents.controller";
 import { FoldersModule } from "../folders/folders.module";
+import { SearchModule } from "../search/search.module";
 
 @Module({
-  imports: [FoldersModule],
+  imports: [FoldersModule, SearchModule],
   providers: [DocumentsService, RetentionService],
   controllers: [DocumentsController],
   exports: [DocumentsService],

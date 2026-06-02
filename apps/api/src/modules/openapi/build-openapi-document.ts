@@ -81,6 +81,7 @@ const RESPONSE_SCHEMA: Record<string, string> = {
   "get /v1/notifications/preferences": "NotificationPrefsResponse",
   // documents
   "get /v1/documents": "ListDocumentsResponse",
+  "get /v1/documents/search": "DocumentSearchResponse",
   "get /v1/documents/{id}": "DocumentResponse",
   "post /v1/documents/upload-init": "UploadInitResponse",
   "post /v1/documents/multipart/init": "MultipartInitResponse",
@@ -99,6 +100,8 @@ const RESPONSE_SCHEMA: Record<string, string> = {
   "post /v1/documents/retention/sweep": "RetentionSweepResponse",
   "post /v1/documents/{id}/retention": "DocumentResponse",
   "post /v1/documents/{id}/legal-hold": "DocumentResponse",
+  // search reindex (P3.6)
+  "post /v1/documents/reindex": "ReindexResponse",
   // folders (P3.3)
   "get /v1/folders": "FoldersListResponse",
   "post /v1/folders": "FolderResponse",

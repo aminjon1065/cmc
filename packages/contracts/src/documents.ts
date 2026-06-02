@@ -124,6 +124,25 @@ export type RetentionSweepResponse = z.infer<
   typeof RetentionSweepResponseSchema
 >;
 
+// ---------- search reindex (P3.6) ----------
+
+export const ReindexResponseSchema = z.object({
+  /** Documents pushed into the search index (0 when the index is disabled). */
+  indexed: z.number().int().nonnegative(),
+});
+export type ReindexResponse = z.infer<typeof ReindexResponseSchema>;
+
+// ---------- document search (P3.6b) ----------
+
+export const DocumentSearchResponseSchema = z.object({
+  documents: z.array(DocumentSchema),
+  /** Which engine served the results: OpenSearch when enabled, else Postgres. */
+  backend: z.enum(["opensearch", "postgres"]),
+});
+export type DocumentSearchResponse = z.infer<
+  typeof DocumentSearchResponseSchema
+>;
+
 export const UploadInitResponseSchema = z.object({
   document: DocumentSchema,
   upload: z.object({

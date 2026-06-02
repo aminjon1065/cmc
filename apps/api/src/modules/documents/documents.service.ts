@@ -2,12 +2,24 @@ import { createHash } from "crypto";
 import {
   BadRequestException,
   ForbiddenException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { and, asc, count, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNull,
+  or,
+  sql,
+} from "drizzle-orm";
 import { schema } from "@cmc/db";
 import type { AppConfig } from "../../config/configuration";
 import { TenantDatabaseService } from "../database/tenant-database.service";
@@ -17,6 +29,7 @@ import { StorageService } from "../storage/storage.service";
 import { PreviewService } from "../previews/preview.service";
 import { FoldersService } from "../folders/folders.service";
 import { FolderAccessService } from "../folders/folder-access.service";
+import { SEARCH_INDEX, type SearchIndex } from "../search/search-index";
 
 export type ListDocumentsParams = {
   q?: string;
@@ -43,8 +56,39 @@ export class DocumentsService {
     private readonly previews: PreviewService,
     private readonly folders: FoldersService,
     private readonly folderAccess: FolderAccessService,
+    @Inject(SEARCH_INDEX) private readonly searchIndex: SearchIndex,
     private readonly config: ConfigService<AppConfig, true>,
   ) {}
+
+  /** Best-effort search index upsert; never throws (search is non-critical). */
+  private async indexDoc(doc: DocRow): Promise<void> {
+    if (!this.searchIndex.active) return;
+    try {
+      await this.searchIndex.indexDocument({
+        id: doc.id,
+        tenantId: doc.tenantId,
+        name: doc.name,
+        description: doc.description,
+        mimeType: doc.mimeType,
+        folderId: doc.folderId,
+        status: doc.status,
+        createdAt: doc.createdAt.toISOString(),
+        updatedAt: doc.updatedAt.toISOString(),
+      });
+    } catch (err) {
+      this.logger.warn(`index failed for ${doc.id}: ${msg(err)}`);
+    }
+  }
+
+  /** Best-effort search index removal; never throws. */
+  private async unindexDoc(tenantId: string, id: string): Promise<void> {
+    if (!this.searchIndex.active) return;
+    try {
+      await this.searchIndex.deleteDocument(tenantId, id);
+    } catch (err) {
+      this.logger.warn(`unindex failed for ${id}: ${msg(err)}`);
+    }
+  }
 
   /**
    * Filing into a folder requires write access to it (P3.3b): 400 if the folder
@@ -207,8 +251,10 @@ export class DocumentsService {
       metadata: { sizeBytes: head.contentLength, etag: head.etag },
     });
 
-    // Record v1 (P3.4) + queue a preview — both best-effort, never block finalize.
+    // Record v1 (P3.4) + index for search (P3.6) + queue a preview — all
+    // best-effort, never block finalize.
     await this.recordInitialVersion(updated!);
+    await this.indexDoc(updated!);
     await this.previews.enqueue(ctx.tenantId, documentId);
     return updated!;
   }
@@ -379,6 +425,7 @@ export class DocumentsService {
       metadata: { sizeBytes: head.contentLength, parts: parts.length },
     });
     await this.recordInitialVersion(updated!); // v1 (P3.4)
+    await this.indexDoc(updated!); // P3.6
     await this.previews.enqueue(ctx.tenantId, documentId);
     return updated!;
   }
@@ -534,6 +581,7 @@ export class DocumentsService {
       outcome: "success",
       metadata: { folderId },
     });
+    await this.indexDoc(updated[0]!); // P3.6 — folderId changed
     return updated[0]!;
   }
 
@@ -714,7 +762,9 @@ export class DocumentsService {
       metadata: { versionNo: pending.versionNo },
     });
     await this.previews.enqueue(ctx.tenantId, documentId);
-    return this.getByIdOrFail(documentId);
+    const current = await this.getByIdOrFail(documentId);
+    await this.indexDoc(current); // P3.6 — bytes/mime changed
+    return current;
   }
 
   async listVersions(documentId: string) {
@@ -813,7 +863,9 @@ export class DocumentsService {
       outcome: "success",
       metadata: { versionNo },
     });
-    return this.getByIdOrFail(documentId);
+    const current = await this.getByIdOrFail(documentId);
+    await this.indexDoc(current); // P3.6 — bytes/mime changed
+    return current;
   }
 
   private async maxVersionNo(documentId: string): Promise<number> {
@@ -926,6 +978,7 @@ export class DocumentsService {
       outcome: "success",
       metadata: { name: existing.name },
     });
+    await this.unindexDoc(ctx.tenantId, documentId); // P3.6
   }
 
   // ---------- retention + legal hold (P3.5 / ADR-0050) ----------
@@ -977,6 +1030,91 @@ export class DocumentsService {
       outcome: "success",
     });
     return updated!;
+  }
+
+  // ---------- search reindex (P3.6) ----------
+
+  /**
+   * Re-push every ready, non-deleted document in the current tenant into the
+   * search index. A maintenance/backfill hook for when the index is enabled
+   * after documents already exist (or after a mapping change). No-op when the
+   * index is the noop. Returns the number of documents indexed.
+   */
+  async reindex(): Promise<{ indexed: number }> {
+    const ctx = this.tenantContext.requireCurrent();
+    if (!this.searchIndex.active) return { indexed: 0 };
+
+    const rows = await this.tenantDb.run((tx) =>
+      tx
+        .select()
+        .from(schema.documents)
+        .where(
+          and(
+            isNull(schema.documents.deletedAt),
+            eq(schema.documents.status, "ready"),
+          ),
+        ),
+    );
+    for (const doc of rows) {
+      await this.indexDoc(doc);
+    }
+
+    await this.audit.record({
+      tenantId: ctx.tenantId,
+      actorId: ctx.userId,
+      actorType: "user",
+      action: "document.reindex",
+      resourceType: "document",
+      resourceId: null,
+      outcome: "success",
+      metadata: { indexed: rows.length },
+    });
+    return { indexed: rows.length };
+  }
+
+  /**
+   * OpenSearch-backed document search, post-filtered by folder access (P3.6b).
+   *
+   * OpenSearch only knows the tenant, so its hits are post-filtered through the
+   * same folder-access predicate the list uses (`documentListCondition`, P3.3b),
+   * applied during an RLS-scoped hydration — so restricted-subtree docs the
+   * caller can't read and any stray cross-tenant id both drop out. When the
+   * index is disabled (Noop), it falls back to the Postgres `list` (ILIKE),
+   * which already enforces the same access rules.
+   */
+  async searchDocuments(
+    query: string,
+    limit?: number,
+  ): Promise<{ documents: DocRow[]; backend: "opensearch" | "postgres" }> {
+    const lim = clamp(limit ?? 20, 1, 100);
+
+    if (!this.searchIndex.active) {
+      const r = await this.list({ q: query, limit: lim });
+      return { documents: r.items, backend: "postgres" };
+    }
+
+    const ctx = this.tenantContext.requireCurrent();
+    const hits = await this.searchIndex.search(ctx.tenantId, query, lim);
+    if (hits.length === 0) return { documents: [], backend: "opensearch" };
+
+    const ids = hits.map((h) => h.id);
+    const accessCond = this.folderAccess.documentListCondition(
+      await this.folderAccess.resolveContext(),
+    );
+    const filters = [
+      inArray(schema.documents.id, ids),
+      isNull(schema.documents.deletedAt),
+      eq(schema.documents.status, "ready"),
+    ];
+    if (accessCond) filters.push(accessCond);
+
+    const rows = await this.tenantDb.run((tx) =>
+      tx.select().from(schema.documents).where(and(...filters)),
+    );
+    // Preserve OpenSearch relevance order (the SQL fetch is unordered).
+    const rank = new Map(ids.map((id, i) => [id, i] as const));
+    rows.sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
+    return { documents: rows, backend: "opensearch" };
   }
 
   // ---------- internal ----------

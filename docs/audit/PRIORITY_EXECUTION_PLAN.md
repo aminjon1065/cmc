@@ -660,12 +660,42 @@ Per-folder + per-document rules. Nightly retention sweeper. Legal-hold flag susp
 **Deferred:** hard-purge job (reclaim object bytes); folder-level legal hold + dedicated compliance perm; explicit per-doc expiry date (vs `updated_at` anchor); retention for non-document domains.
 **Depends on:** P3.4.
 
-### P3.6 — OpenSearch + permission-aware indexing
-Phase-3 search.
+### P3.6 — OpenSearch + permission-aware indexing ✅ **DONE (2026-06-02)**
+Phase-3 search. Split a/b: **a** = the indexing substrate (gated seam + best-effort document indexer); **b** = the permission-aware search query + endpoint (post-filter via folder access). ADR-0051.
+**Decisions (confirmed):** documents only (incidents/cases stay on Postgres FTS for now); direct best-effort indexing from `DocumentsService` (no outbox/queue); search results post-filtered through `FolderAccessService` (P3.6b).
+
+#### P3.6a — OpenSearch substrate + document indexer ✅ **DONE (2026-06-02)**
+- **Gated-lazy seam** (`modules/search/search-index.ts`): `SEARCH_INDEX` token + `SearchIndex` interface (`ensureIndex`/`indexDocument`/`deleteDocument`/`search`/`ping`/`close`) + `NoopSearchIndex` + `createSearchIndex` factory that dynamic-imports `RealSearchIndex` (`@opensearch-project/opensearch`) only when `OPENSEARCH_ENABLED` — so the driver never enters jest. Mirrors the ClickHouse seam (P2.5). `SearchIndexBootstrap` (OnModuleInit) `ensureIndex`es the `cmc-documents` index (keyword/text/date mapping) at boot when active.
+- **Indexer**: `DocumentsService` injects `SEARCH_INDEX`; best-effort `indexDoc`/`unindexDoc` (try/catch → warn, never block the write path) called on finalize, multipart-complete, version-finalize, version-restore, move (index) + soft-delete (unindex). **`reindex()`** (`POST /v1/documents/reindex`, `document:write`) backfills all ready, non-deleted docs in the tenant (count returned) — for enabling the index after data exists. `ReindexResponse` contract + OpenAPI entry.
+- **Infra**: `opensearch` compose service (2.17.1 single-node, security plugin disabled — DEV ONLY, memlock, `_cluster/health` healthcheck) + `opensearch_data` volume. Config: `OPENSEARCH_ENABLED` (default off), `OPENSEARCH_URL`, `OPENSEARCH_INDEX_PREFIX`.
+- **Validated**: suite **325/325** (43 suites; +5), `tsc`/`eslint`/`nest build` clean. e2e `documents-search-index` (faked seam): indexes on finalize, unindexes on delete, re-indexes on move (folderId change), reindex reports count + skips non-ready, **indexing failures do not break the write path**. **Live smoke** (real OpenSearch 2.17.1): ensureIndex idempotent, ping, index → search by name + description, tenant isolation, delete + 404-swallow.
+- **Deferred → P3.6b**: the permission-aware search query/endpoint.
+
+#### P3.6b — Permission-aware search query + endpoint ✅ **DONE (2026-06-02)**
+- **`DocumentsService.searchDocuments(query, limit)`**: queries OpenSearch (`multi_match` on `name^2`+`description`, `term tenantId`) → hits in relevance order → **post-filter + hydrate** in one RLS-scoped SQL fetch that applies `FolderAccessService.documentListCondition` (the *same* predicate the list uses, P3.3b) so restricted-subtree docs the caller can't read + any stray cross-tenant id drop out → rows re-sorted into the OpenSearch score order. When the index is disabled (Noop), it **falls back** to the Postgres `list` (ILIKE, same access filter). Response carries `backend: "opensearch" | "postgres"`.
+- **`GET /v1/documents/search?q=&limit=`** (`document:read`), declared before `:id` so the literal path isn't captured by the UUID route; empty `q` → 400. `DocumentSearchResponse` contract + OpenAPI entry.
+- **Validated**: suite **332/332** (44 suites; +7). e2e `documents-search`: relevance order preserved through hydration; restricted-folder doc filtered for non-grantee (admin bypasses; a grant unlocks); cross-tenant id dropped by RLS; Postgres fallback when index off; empty-`q` 400; `document:read` enforced. **Live smoke** (real OpenSearch): name^2 outranks description-only, non-match + cross-tenant excluded, scores descending. `tsc`/`eslint`/`nest build` clean.
+- **ADR-0051** (covers a+b).
+**Deferred:** pre-filter/back-fill pass (top-`limit` mostly-inaccessible returns < limit); durable/outbox indexer (best-effort can drift); content extraction (Tika/OCR); other domains + hybrid BM25+vector (P3.7+).
+**Depends on:** P3.6a, P3.3b.
 **Depends on:** P1.1, P2.1.
 
-### P3.7 — Federated search at `/v1/search`
-Fan-out to OpenSearch + ClickHouse-aggregated metadata + Postgres FTS for transactional records.
+### P3.7 — Federated search at `/v1/search` ✅ **DONE (2026-06-02)**
+Fan-out to OpenSearch (documents) + Postgres FTS (incidents/cases). Split a/b: **a** = federated backend + RRF merge; **b** = web global-search UI. ADR-0052. ClickHouse-aggregated facets deferred to a later item (confirmed).
+**Decisions (confirmed):** merge by **Reciprocal Rank Fusion** (rank-based — OpenSearch BM25 vs Postgres `ts_rank` have incompatible scales); CH facets deferred; backend + web UI (a/b).
+
+#### P3.7a — Federated backend + RRF merge ✅ **DONE (2026-06-02)**
+- **`SearchService` rewrite**: incidents/cases via Postgres FTS (P2.11); documents via OpenSearch when `SEARCH_INDEX.active` (hits → access-filtered RLS-scoped hydration → restore OpenSearch order), else FTS fallback. Each domain gated by the caller's read perm + RLS. Per-domain ranked lists fused by **RRF** (`score = 1/(k+rank)`, k=60; ties → raw score then id). `SearchResult` gains `source: "opensearch" | "postgres"`.
+- **Folder-access gap closed**: the documents domain in `/v1/search` now applies `FolderAccessService.documentListCondition` + `status='ready'` (both the OpenSearch hydration and the FTS fallback) — the original P2.11 search leaked restricted-folder doc titles/snippets to non-grantees. `SearchModule` imports `FoldersModule`.
+- **Validated**: suite **336/336** (45 suites; +4). e2e `search-federated` (faked seam): OpenSearch docs + FTS incidents merged with correct `source` flags + non-increasing RRF; restricted-folder doc hidden from a non-grantee (admin bypasses); FTS fallback when index off (still folder-filtered); no docs without `document:read`. Existing `search.e2e` (6) still green (RRF scores > 0, non-increasing). **Live smoke** (`search-federated.live-smoke.ts`, real OpenSearch): finalized upload indexed (P3.6a) → `/v1/search` returns it `source=opensearch` fused with an FTS incident `source=postgres`; `/v1/documents/search` `backend=opensearch`. `tsc`/`eslint`/`nest build` clean.
+- **Deferred → P3.7b**: web global-search UI + ADR-0052.
+
+#### P3.7b — Web global search UI ✅ **DONE (2026-06-02)**
+- **`/search` page** (server component reading `?q=` → `authedApiFetch('/v1/search')`) + client `SearchBox` (pushes `?q=`). Results **grouped by type** (Incidents/Cases/Documents) with a per-row **source badge** (opensearch/postgres); incidents link to detail, documents to the list, cases render plain (no detail page yet). Sidebar "Search" entry enabled; `/search` added to the auth-protected middleware matcher.
+- **Validated**: `next lint` + `next build` clean (`/search` route built, 2.28 kB). Runtime smoke: `/search?q=…` unauth → 307 → `/login?next=…` (middleware live); `/login` → 200. No API/contract changes → API suite unchanged (336/336).
+- **ADR-0052** (covers P3.7a+b).
+**Deferred:** command-palette (Cmd-K) quick-search; per-document + case detail pages; highlight snippets; result facets.
+**Depends on:** P3.7a.
 **Depends on:** P3.6.
 
 ### P3.8 — Visual workflow builder (MVP)

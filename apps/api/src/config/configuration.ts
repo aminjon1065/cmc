@@ -92,6 +92,18 @@ const EnvSchema = z.object({
     .positive()
     .default(300),
 
+  // --- Search engine / OpenSearch (P3.6 / ADR-0051) ---
+  // When enabled, documents are indexed into OpenSearch (best-effort) and the
+  // OpenSearch-backed search path is available. Off by default → a noop index +
+  // Postgres FTS remains the search (the gated-lazy-seam pattern; the driver is
+  // dynamic-imported, never in jest). INDEX_PREFIX namespaces indices per env.
+  OPENSEARCH_ENABLED: z
+    .string()
+    .default("false")
+    .transform((v) => v.toLowerCase() === "true"),
+  OPENSEARCH_URL: z.string().url().default("http://localhost:9200"),
+  OPENSEARCH_INDEX_PREFIX: z.string().default("cmc"),
+
   // --- Event plane / NATS JetStream (P2.1 / ADR-0031) ---
   // The outbox relay publishes to NATS; consumers subscribe. Used by the relay
   // (P2.1b) — the outbox write side (P2.1a) is pure Postgres and needs no

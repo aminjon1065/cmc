@@ -55,7 +55,7 @@ const NAV: NavGroup[] = [
     items: [
       { id: "analytics", label: "Analytics", icon: BarChart3, disabled: true },
       { id: "ai", label: "AI Assistant", icon: Sparkles, disabled: true },
-      { id: "search", label: "Search", icon: Search, disabled: true },
+      { id: "search", label: "Search", icon: Search, href: "/search" },
     ],
   },
   {

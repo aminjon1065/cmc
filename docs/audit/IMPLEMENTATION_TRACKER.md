@@ -539,16 +539,19 @@ This is the **product surface the UI implies**. No live event ticker, no multi-m
 
 | | |
 |---|---|
-| Status | INTERIM DONE (P2.11 / ADR-0041) — Postgres `tsvector` |
-| Done | GIN `to_tsvector('simple')` indexes on incidents/cases/documents (migration 0020); `GET /v1/search` cross-domain fan-out (`websearch_to_tsquery` + `ts_rank`), RBAC-filtered + RLS-scoped, merged by score |
-| Remaining | OpenSearch (Phase-3): stemming/fuzzy/per-language, highlight, global ranking, more domains, search UI |
-| Files | `apps/api/src/modules/search/{search.service,search.controller,search.module}.ts`, `packages/contracts/src/search.ts` |
+| Status | FEDERATED (P3.7 / ADR-0052) — OpenSearch docs + Postgres FTS incidents/cases |
+| Done | GIN `to_tsvector('simple')` indexes on incidents/cases/documents (migration 0020). `GET /v1/search` now fans out: documents via OpenSearch when enabled (FTS fallback), incidents/cases via `websearch_to_tsquery`+`ts_rank`; **fused by Reciprocal Rank Fusion** (k=60) so BM25 vs ts_rank scales don't fight. Per-domain RBAC + RLS. Documents domain folder-access filtered + `status='ready'` (closed the P2.11 leak of restricted-folder titles). `SearchResult.source` flag. |
+| UI | Web `/search` page (P3.7b): server-component query → grouped-by-type results with source badges; sidebar entry + protected route |
+| Remaining | Stemming/fuzzy/per-language; highlight (`ts_headline` / OpenSearch highlight); more domains (messages, wiki); CH-aggregated facets; hybrid BM25+vector; command-palette quick-search |
+| Files | `apps/api/src/modules/search/{search.service,search.controller,search.module,search-index*}.ts`, `packages/contracts/src/search.ts`, `apps/web/src/app/search/{page,search-box}.tsx` |
 
 ### Search plane (OpenSearch)
 
 | | |
 |---|---|
-| Status | NOT STARTED |
+| Status | DOCUMENT SEARCH DONE (P3.6 / ADR-0051) |
+| Done | Gated-lazy `SEARCH_INDEX` seam (`modules/search/search-index{,.impl}.ts`): Noop unless `OPENSEARCH_ENABLED`, real driver dynamic-imported (never in jest). `opensearch` compose service (2.17.1 single-node) + `opensearch_data` volume + `OPENSEARCH_*` config. `cmc-documents` index (keyword/text/date mapping) ensured at boot. **Indexer (P3.6a):** best-effort in `DocumentsService` (index on finalize/multipart-complete/version-finalize/version-restore/move; unindex on soft-delete; never blocks the write path) + `reindex` backfill (`POST /v1/documents/reindex`). **Search (P3.6b):** `GET /v1/documents/search` (`multi_match` name^2/description, `term tenantId`) → post-filter + RLS-scoped hydration via `FolderAccessService.documentListCondition` (restricted subtrees + cross-tenant ids drop) → re-sorted to OpenSearch score order; Postgres `list` fallback when index off (`backend` flag). e2e (faked seam) + live smoke (real OpenSearch: ranking name^2, tenant isolation, descending scores, delete). |
+| Remaining | Federated `/v1/search` fan-out (P3.7); messages/other domains; hybrid BM25+vector; highlight; stemming/fuzzy/per-language; content extraction (Tika/OCR); durable/outbox indexer; search UI |
 | Blocks | §3.14, parts of §3.8/§3.9 |
 | Complexity | L to deploy + index documents/messages; XL for permission-aware indexing + hybrid BM25+vector |
 
