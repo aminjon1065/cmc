@@ -60,6 +60,8 @@ export async function truncateAll(
       gis_layers,
       case_activity,
       cases,
+      workflow_runs,
+      workflows,
       users,
       tenants
     RESTART IDENTITY CASCADE

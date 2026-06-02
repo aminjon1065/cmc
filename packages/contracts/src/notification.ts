@@ -14,6 +14,8 @@ export const NOTIFICATION_KINDS = [
   // and the unacknowledged-escalation fan-out.
   "incident.response",
   "incident.escalated",
+  // Visual-workflow notify node (P3.8 / ADR-0053).
+  "workflow.notify",
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 

@@ -699,7 +699,32 @@ Fan-out to OpenSearch (documents) + Postgres FTS (incidents/cases). Split a/b: *
 **Depends on:** P3.6.
 
 ### P3.8 — Visual workflow builder (MVP)
-React Flow + node library + compile-to-Temporal.
+React Flow + node library + compile-to-Temporal. Split a/b/c/d. ADR-0053 (at P3.8d close).
+**Decisions (confirmed):** **generic interpreter workflow** (graph stored as data; one Temporal workflow walks the DAG — no worker redeploy to add/edit a graph); **focused node set** (start, end, notify, delay, condition, create_incident); **manual + event-triggered** start.
+
+#### P3.8a — Definition model + CRUD + DAG validation ✅ **DONE (2026-06-02)**
+- **`workflows` table** (`definition` JSONB `{nodes,edges}`, `version`, `enabled`, `trigger_type`/`trigger_event`, RLS, soft-delete) + migration 0025 (CHECK `trigger_type IN ('manual','event')`). Added to `truncateAll`.
+- **Contracts** (`workflow.ts`): node-type discriminated union (per-type config: notify/delay/condition/create_incident), edges (with `branch` for conditions), `WorkflowDefinition`, `validateWorkflowDefinition()` (one start, ≥1 end, edges ref nodes, condition has true+false, action nodes 1 outgoing, reachable, acyclic), `Workflow` + CRUD + validate shapes. `workflow:read/write/run` perms (operator: read+run; auditor: read; admin `*`).
+- **`WorkflowsService` + Controller**: Zod-parse bodies in the service (deep union — class-validator unwieldy; `@Body() unknown` passes the global ValidationPipe). CRUD + `POST /workflows/validate` (editor feedback). Drafts may be saved incomplete; **enabling requires a valid DAG** (400 otherwise, reason in problem+json `detail`). OpenAPI entries.
+- **Validated**: suite **342/342** (46 suites; +6). e2e `workflows`: CRUD + version bump on definition change; enable-gates-on-valid-DAG; `/validate` (valid/invalid/condition graph); malformed node config → 400; `workflow:*` RBAC; cross-tenant RLS → 404. `tsc`/`eslint`/`nest build` clean, migration 0025.
+- **Deferred → P3.8b**: the interpreter + run engine.
+
+#### P3.8b — Interpreter Temporal workflow + run engine ✅ **DONE (2026-06-02)**
+- **`workflow_runs` table** (immutable graph snapshot + `status`/`trigger`/`input`/`output`/`error`/`temporal_workflow_id`/`started_by`, RLS, migration 0026, CHECK status). Added to `truncateAll`.
+- **Generic interpreter** (`temporal/workflows/workflow-interpreter.workflow.ts`): one Temporal workflow walks any DAG passed as `args.definition` — start/end/delay(`sleep`)/condition (`context[path]===equals` → true/false branch) in-workflow; notify/create_incident via activities. Determinism-safe (only `@temporalio/workflow` + a type-only activity contract; graph types declared locally — no `@cmc/contracts` runtime in the sandbox). Step-limit guard. Reports status via `markRunStatus`.
+- **Activities** (`workflow-interpreter.{types,activities}.ts`, built from `db` + `notifications`): `markRunStatus` (run row pending→running→completed/failed + output/error/finishedAt), `executeNotify` (`workflow.notify` kind, recipient = `toUserId` or initiator), `executeCreateIncident` (inserts an incident, returns id → `context.lastIncidentId`). Registered in `TemporalWorker`.
+- **Run engine** (`WorkflowsService.startRun`/`run`, injects `TEMPORAL_CLIENT`): snapshots the (valid-DAG) graph into a run row, starts `workflowInterpreter` (`wf-run:<id>`), stamps `temporalWorkflowId`; start-failure marks the run failed. `POST /v1/workflows/:id/run` (`workflow:run`, 202) + `GET /:id/runs` + `GET /runs/:runId` (`workflow:read`). Contracts: `WorkflowRun` + statuses + run req/resps. `startRun` is reused by P3.8c (event trigger, system actor). OpenAPI entries.
+- **Validated**: suite **346/346** (47 suites; +4). e2e `workflow-runs` (faked Temporal seam): run snapshots + starts the interpreter with the run id + graph; list/get runs; run rejects an invalid DAG (400, no start); `workflow:run` + cross-tenant 404. **Live smoke** (real Temporal worker, `createApplicationContext` with `TEMPORAL_ENABLED`): start→notify→create_incident→end runs to `completed`, real incident + `workflow.notify` notification created, output + finishedAt set. `tsc`/`eslint`/`nest build` clean, migration 0026.
+- **Deferred → P3.8c**: event-triggered auto-start.
+**Depends on:** P3.8a, P3.1.
+
+#### P3.8c — Event-triggered auto-start
+Bind `trigger_event` to a domain event subject; on a matching consumed event, auto-start the workflow (system actor) with the event as input. e2e + live smoke.
+**Depends on:** P3.8b, P2.1.
+
+#### P3.8d — React Flow web editor + run UI + ADR-0053 + close P3.8
+`/workflows` list + `/workflows/:id` editor (palette, edges, node config, save/validate), run button + run-status view, sidebar entry. Web live smoke. ADR-0053 (a–d).
+**Depends on:** P3.8c.
 **Depends on:** P3.1.
 
 ### P3.9 — External API + API keys + per-tenant quota

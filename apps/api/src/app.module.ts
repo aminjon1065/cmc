@@ -25,6 +25,7 @@ import { IncidentsModule } from "./modules/incidents/incidents.module";
 import { CasesModule } from "./modules/cases/cases.module";
 import { GisModule } from "./modules/gis/gis.module";
 import { SearchModule } from "./modules/search/search.module";
+import { WorkflowsModule } from "./modules/workflows/workflows.module";
 import { NotificationsModule } from "./modules/notifications/notifications.module";
 import { IncidentNotificationsModule } from "./modules/incident-notifications/incident-notifications.module";
 import { OpenApiModule } from "./modules/openapi/openapi.module";
@@ -112,6 +113,7 @@ import { loadConfig } from "./config/configuration";
     CasesModule,
     GisModule,
     SearchModule,
+    WorkflowsModule,
     NotificationsModule,
     IncidentNotificationsModule,
     OpenApiModule,

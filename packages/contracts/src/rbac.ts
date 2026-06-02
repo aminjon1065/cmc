@@ -130,6 +130,14 @@ export const PERMISSION_CATALOG = [
     description:
       "Manage folder restrictions + grants; bypass restricted-folder access (P3.3b)",
   },
+  // Workflows (P3.8 — visual builder).
+  { domain: "workflow", action: "read", description: "View workflows + runs" },
+  {
+    domain: "workflow",
+    action: "write",
+    description: "Create, edit, enable, and delete workflows",
+  },
+  { domain: "workflow", action: "run", description: "Manually run workflows" },
 ] as const satisfies readonly PermissionDef[];
 
 /** Helper: the `${domain}:${action}` string for a catalog entry. */
@@ -182,6 +190,8 @@ export const SYSTEM_ROLES: readonly SystemRoleDef[] = [
       "folder:read",
       "folder:write",
       "folder:delete",
+      "workflow:read",
+      "workflow:run",
     ],
   },
   {
@@ -197,6 +207,7 @@ export const SYSTEM_ROLES: readonly SystemRoleDef[] = [
       "case:read",
       "gis_layer:read",
       "folder:read",
+      "workflow:read",
     ],
   },
 ] as const;

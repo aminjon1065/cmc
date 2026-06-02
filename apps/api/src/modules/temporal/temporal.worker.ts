@@ -13,6 +13,7 @@ import { NotificationsService } from "../notifications/notifications.service";
 import { RbacService } from "../rbac/rbac.service";
 import { buildCaseSlaActivities } from "./activities/case-sla.activities";
 import { buildIncidentResponseActivities } from "./activities/incident-response.activities";
+import { buildWorkflowInterpreterActivities } from "./activities/workflow-interpreter.activities";
 
 /**
  * In-process Temporal worker (P3.1 / ADR-0045). Polls the task queue and runs
@@ -63,6 +64,10 @@ export class TemporalWorker implements OnModuleInit, OnModuleDestroy {
           outbox: this.outbox,
           notifications: this.notifications,
           rbac: this.rbac,
+        }),
+        ...buildWorkflowInterpreterActivities({
+          db: this.db,
+          notifications: this.notifications,
         }),
       },
     });

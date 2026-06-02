@@ -27,3 +27,5 @@ export * from "./gis-layers";
 export * from "./gis-features";
 export * from "./cases";
 export * from "./case-activity";
+export * from "./workflows";
+export * from "./workflow-runs";

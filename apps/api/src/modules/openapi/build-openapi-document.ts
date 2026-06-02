@@ -112,6 +112,15 @@ const RESPONSE_SCHEMA: Record<string, string> = {
   "patch /v1/folders/{id}/restrict": "FolderResponse",
   "get /v1/folders/{id}/grants": "FolderGrantsListResponse",
   "post /v1/folders/{id}/grants": "FolderGrantResponse",
+  // workflows (P3.8)
+  "get /v1/workflows": "WorkflowsListResponse",
+  "post /v1/workflows": "WorkflowResponse",
+  "post /v1/workflows/validate": "ValidateWorkflowResponse",
+  "get /v1/workflows/runs/{runId}": "WorkflowRunResponse",
+  "get /v1/workflows/{id}": "WorkflowResponse",
+  "patch /v1/workflows/{id}": "WorkflowResponse",
+  "get /v1/workflows/{id}/runs": "WorkflowRunsListResponse",
+  "post /v1/workflows/{id}/run": "WorkflowRunResponse",
   // audit chain
   "get /v1/audit/chain/verify": "AuditChainVerifyResponse",
   "post /v1/audit/chain/seal": "AuditSealResponse",
