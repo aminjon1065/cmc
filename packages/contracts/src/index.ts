@@ -20,3 +20,4 @@ export * from "./audit";
 export * from "./events";
 export * from "./realtime";
 export * from "./analytics";
+export * from "./gis";

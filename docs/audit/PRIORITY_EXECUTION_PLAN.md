@@ -505,17 +505,16 @@ These close gaps from current `main` that **cannot wait** for any new module.
 **Deferred:** more CH widgets (by-region trend, audit activity, MTTR); realtime dashboard refresh via P2.3.
 **Depends on:** P2.5 ✅.
 
-### P2.7 — GIS substrate (schemas + RLS + endpoints)
+### P2.7 — GIS substrate (schemas + RLS + endpoints) 🔄 **IN PROGRESS (P2.7a done 2026-06-02)**
 **Why:** the platform's spatial commitment. Phase-2 entry into the GIS plane.
 **Cost:** L (2 wk).
-**How:**
-- `gis_layers` (id, tenant_id, name, kind, style jsonb, schema jsonb, source_uri, public flag, created_by, ...).
-- `gis_features` (id, tenant_id, layer_id, geometry geometry(GeometryZ, 4326), properties jsonb, lifecycle metadata).
-- GIST + tenant indexes.
-- RLS on both tables.
-- Endpoints: layer CRUD; feature CRUD; bbox-filtered list.
-- Permissions: `gis:layer:read`, `gis:layer:edit`, `gis:feature:write`.
-**Depends on:** P1.1.
+**Note:** the dev Postgres image already ships **PostGIS** (`cmc/postgres:16-postgis-pgvector`) — no infra switch; the migration just `CREATE EXTENSION IF NOT EXISTS postgis` (idempotent, runs as the migration owner so the test DB is self-sufficient).
+**Delivered (P2.7a — schema + migration + contracts + perms):**
+- `gis_layers` (name, kind, style/schema jsonb, source_uri, is_public, created_by, soft-delete) + `gis_features` (`geometry geometry(GeometryZ, 4326)` via a Drizzle `customType`, properties jsonb, soft-delete). Migration **0018**: extension + tables + **GIST** index on geometry + tenant/layer btree indexes + **RLS** (two-GUC) on both. Applied to dev + `cmc_test`; geometry round-trip verified (`ST_GeomFromGeoJSON`/`ST_AsGeoJSON`).
+- Contracts `@cmc/contracts/gis` (GeoJSON geometry, layer/feature CRUD + bbox query + list responses). Permissions `gis:layer:read`/`gis:layer:edit`/`gis:feature:write` in the catalog + granted to operator (read + feature:write) / auditor (read) / tenant_admin (`*`).
+- **Validated**: suite **244/244** (31 suites), API `tsc` + db build clean, no new failures (exit-1 = pre-existing OTEL post-teardown log noise).
+**Remaining (P2.7b):** `GisService` + `GisController` — layer CRUD; feature CRUD (`ST_GeomFromGeoJSON` insert / `ST_AsGeoJSON` read); bbox-filtered list (`&&` / `ST_MakeEnvelope`); tenant-scoped via RLS; audited. e2e (CRUD + bbox + RBAC + isolation) + ADR-0037 + close P2.7.
+**Depends on:** P1.1 ✅.
 
 ### P2.8 — Custom NestJS tile server
 **Why:** vector tiles per-tenant.

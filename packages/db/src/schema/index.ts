@@ -20,3 +20,5 @@ export * from "./password-resets";
 export * from "./incidents";
 export * from "./notifications";
 export * from "./user-notification-prefs";
+export * from "./gis-layers";
+export * from "./gis-features";

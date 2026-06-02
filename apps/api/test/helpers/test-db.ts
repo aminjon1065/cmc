@@ -54,6 +54,8 @@ export async function truncateAll(
       projection_cursors,
       sessions,
       documents,
+      gis_features,
+      gis_layers,
       users,
       tenants
     RESTART IDENTITY CASCADE

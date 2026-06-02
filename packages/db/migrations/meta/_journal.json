@@ -127,6 +127,13 @@
       "when": 1780346137544,
       "tag": "0017_tired_black_knight",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1780371060819,
+      "tag": "0018_modern_johnny_blaze",
+      "breakpoints": true
     }
   ]
 }

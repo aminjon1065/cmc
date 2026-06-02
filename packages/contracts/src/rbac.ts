@@ -88,6 +88,18 @@ export const PERMISSION_CATALOG = [
     description: "Resolve / close incidents",
   },
   { domain: "incident", action: "delete", description: "Delete incidents" },
+  // GIS / spatial (P2.7).
+  { domain: "gis", action: "layer:read", description: "View GIS layers + features" },
+  {
+    domain: "gis",
+    action: "layer:edit",
+    description: "Create, edit, and delete GIS layers",
+  },
+  {
+    domain: "gis",
+    action: "feature:write",
+    description: "Create, edit, and delete GIS features",
+  },
 ] as const satisfies readonly PermissionDef[];
 
 /** Helper: the `${domain}:${action}` string for a catalog entry. */
@@ -130,6 +142,8 @@ export const SYSTEM_ROLES: readonly SystemRoleDef[] = [
       "incident:write",
       "incident:assign",
       "incident:resolve",
+      "gis:layer:read",
+      "gis:feature:write",
     ],
   },
   {
@@ -142,6 +156,7 @@ export const SYSTEM_ROLES: readonly SystemRoleDef[] = [
       "audit:read",
       "role:read",
       "incident:read",
+      "gis:layer:read",
     ],
   },
 ] as const;
