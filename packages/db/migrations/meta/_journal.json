@@ -190,6 +190,13 @@
       "when": 1780401283049,
       "tag": "0026_serious_mathemanic",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1780411715342,
+      "tag": "0027_wooden_warstar",
+      "breakpoints": true
     }
   ]
 }

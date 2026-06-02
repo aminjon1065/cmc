@@ -23,7 +23,8 @@ export default auth((req) => {
     nextUrl.pathname.startsWith("/admin") ||
     nextUrl.pathname.startsWith("/incidents") ||
     nextUrl.pathname.startsWith("/notifications") ||
-    nextUrl.pathname.startsWith("/search");
+    nextUrl.pathname.startsWith("/search") ||
+    nextUrl.pathname.startsWith("/workflows");
 
   if (isProtected && !isAuthed) {
     const loginUrl = new URL("/login", nextUrl);

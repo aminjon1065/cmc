@@ -62,6 +62,7 @@ export async function truncateAll(
       cases,
       workflow_runs,
       workflows,
+      api_keys,
       users,
       tenants
     RESTART IDENTITY CASCADE

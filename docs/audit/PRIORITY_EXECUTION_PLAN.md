@@ -698,8 +698,8 @@ Fan-out to OpenSearch (documents) + Postgres FTS (incidents/cases). Split a/b: *
 **Depends on:** P3.7a.
 **Depends on:** P3.6.
 
-### P3.8 — Visual workflow builder (MVP)
-React Flow + node library + compile-to-Temporal. Split a/b/c/d. ADR-0053 (at P3.8d close).
+### P3.8 — Visual workflow builder (MVP) ✅ **DONE (2026-06-02)**
+React Flow + node library + compile-to-Temporal. Split a/b/c/d. ADR-0053.
 **Decisions (confirmed):** **generic interpreter workflow** (graph stored as data; one Temporal workflow walks the DAG — no worker redeploy to add/edit a graph); **focused node set** (start, end, notify, delay, condition, create_incident); **manual + event-triggered** start.
 
 #### P3.8a — Definition model + CRUD + DAG validation ✅ **DONE (2026-06-02)**
@@ -718,12 +718,19 @@ React Flow + node library + compile-to-Temporal. Split a/b/c/d. ADR-0053 (at P3.
 - **Deferred → P3.8c**: event-triggered auto-start.
 **Depends on:** P3.8a, P3.1.
 
-#### P3.8c — Event-triggered auto-start
-Bind `trigger_event` to a domain event subject; on a matching consumed event, auto-start the workflow (system actor) with the event as input. e2e + live smoke.
+#### P3.8c — Event-triggered auto-start ✅ **DONE (2026-06-02)**
+- **`WorkflowEventConsumer.handle(env)`** (pure, testable): for a consumed event, computes `${aggregateType}.${eventType}`, finds enabled event-bound workflows in the tenant, and (after a single `EventDedupService.claim`) starts a run of each via `WorkflowsService.startTriggeredRun` (system actor, `trigger='event'`, event payload as input). Dedup is claimed only when a match exists — the common no-match event writes no ledger row.
+- **`WorkflowsService.findEnabledEventWorkflows` + `startTriggeredRun`**: context-free (run in `runForTenant`, no request) so the consumer works outside a request; invalid graphs skipped (logged).
+- **`WorkflowEventSubscriber`**: durable JetStream consumer (`workflow-trigger`, `filter_subjects: ["tenant.>"]`, `DeliverPolicy.New`), gated on `NATS_ENABLED` + skipped in tests, `nats` dynamic-imported, `nak`-on-failure → at-least-once (dedup makes redelivery safe). Mirrors the P2.4b incident-notifications subscriber.
+- **Validated**: suite **351/351** (48 suites; +5). e2e `workflow-triggers` (faked Temporal seam): matching event auto-starts the workflow (run `trigger='event'`, input = payload); idempotent on event id (redelivery → one run); no-match writes no dedup row; disabled workflow not triggered; multiple workflows bound to one event all start. **Live smoke** (real Temporal worker, `createApplicationContext`): feeding the consumer a synthetic `incident.created` auto-starts → interpreter runs to `completed` (real incident + `workflow.notify`); redelivery deduped. `tsc`/`eslint`/`nest build` clean.
+- **Deferred → P3.8d**: the React Flow web editor + ADR-0053.
 **Depends on:** P3.8b, P2.1.
 
-#### P3.8d — React Flow web editor + run UI + ADR-0053 + close P3.8
-`/workflows` list + `/workflows/:id` editor (palette, edges, node config, save/validate), run button + run-status view, sidebar entry. Web live smoke. ADR-0053 (a–d).
+#### P3.8d — React Flow web editor ✅ **DONE (2026-06-02)**
+- **`@xyflow/react`** dep. **`/workflows`** (list: name/trigger/status/nodes/version + "New workflow" client button → creates draft → opens editor). **`/workflows/:id`** editor — React Flow canvas + node palette (one button per type), drag-to-connect edges (condition edges auto-labelled true/false), per-node config inspector, name/enabled/trigger toolbar, **Validate / Save / Run** + recent-runs panel. Server actions (`authedApiFetch`) back create/save/validate/run/list-runs/delete. Sidebar "Workflows" entry enabled; `/workflows` added to the protected middleware matcher.
+- **Validated**: `next lint` + `next build` clean (`/workflows` 2.22 kB, `/workflows/[id]` 59.3 kB incl. React Flow). Runtime smoke: both routes 307→`/login` unauthenticated (middleware live). No API/contract changes → API suite unchanged (351/351).
+- **ADR-0053** (covers P3.8a–d).
+**Deferred:** loops/parallel/sub-workflows/human-approval/HTTP nodes; run-step visualisation; editor polish (undo/autosave).
 **Depends on:** P3.8c.
 **Depends on:** P3.1.
 

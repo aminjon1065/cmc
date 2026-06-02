@@ -104,6 +104,13 @@ const EnvSchema = z.object({
   OPENSEARCH_URL: z.string().url().default("http://localhost:9200"),
   OPENSEARCH_INDEX_PREFIX: z.string().default("cmc"),
 
+  // --- API keys / external API quota (P3.9 / ADR-0054) ---
+  // Fixed-window Redis quota for API-key requests: per individual key + per
+  // tenant aggregate. JWT (interactive) requests are unaffected.
+  API_KEY_RATE_WINDOW_SEC: z.coerce.number().int().positive().default(60),
+  API_KEY_RATE_LIMIT: z.coerce.number().int().positive().default(120),
+  API_KEY_TENANT_RATE_LIMIT: z.coerce.number().int().positive().default(600),
+
   // --- Event plane / NATS JetStream (P2.1 / ADR-0031) ---
   // The outbox relay publishes to NATS; consumers subscribe. Used by the relay
   // (P2.1b) — the outbox write side (P2.1a) is pure Postgres and needs no

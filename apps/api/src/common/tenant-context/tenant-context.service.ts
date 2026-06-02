@@ -12,6 +12,15 @@ export type TenantContext = {
   email: string;
   /** Session id (`sid` claim on the access JWT). */
   sessionId: string;
+  /**
+   * How the request was authenticated (P3.9 / ADR-0054). Absent/"user" = JWT
+   * session; "apikey" = an API key, whose permissions are `apiKeyScopes`.
+   */
+  principalType?: "user" | "apikey";
+  /** The authenticating API key's id (api-key principals only). */
+  apiKeyId?: string;
+  /** The API key's granted permission strings (api-key principals only). */
+  apiKeyScopes?: string[];
 };
 
 /**

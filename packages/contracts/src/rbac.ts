@@ -138,6 +138,12 @@ export const PERMISSION_CATALOG = [
     description: "Create, edit, enable, and delete workflows",
   },
   { domain: "workflow", action: "run", description: "Manually run workflows" },
+  // API keys (P3.9 — external API access).
+  {
+    domain: "api_key",
+    action: "manage",
+    description: "Create, list, and revoke API keys for programmatic access",
+  },
 ] as const satisfies readonly PermissionDef[];
 
 /** Helper: the `${domain}:${action}` string for a catalog entry. */

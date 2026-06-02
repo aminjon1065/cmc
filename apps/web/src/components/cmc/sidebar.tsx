@@ -62,7 +62,7 @@ const NAV: NavGroup[] = [
     id: "work",
     label: "Work",
     items: [
-      { id: "workflow", label: "Workflows", icon: Network, disabled: true },
+      { id: "workflow", label: "Workflows", icon: Network, href: "/workflows" },
       { id: "cases", label: "Cases & Incidents", icon: Briefcase, disabled: true },
     ],
   },

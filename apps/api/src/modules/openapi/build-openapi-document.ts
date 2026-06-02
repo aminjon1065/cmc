@@ -121,6 +121,9 @@ const RESPONSE_SCHEMA: Record<string, string> = {
   "patch /v1/workflows/{id}": "WorkflowResponse",
   "get /v1/workflows/{id}/runs": "WorkflowRunsListResponse",
   "post /v1/workflows/{id}/run": "WorkflowRunResponse",
+  // api keys (P3.9)
+  "get /v1/api-keys": "ApiKeysListResponse",
+  "post /v1/api-keys": "ApiKeyCreatedResponse",
   // audit chain
   "get /v1/audit/chain/verify": "AuditChainVerifyResponse",
   "post /v1/audit/chain/seal": "AuditSealResponse",

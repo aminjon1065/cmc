@@ -65,6 +65,20 @@ export class RbacService {
     tenantId: string,
     userId: string,
   ): Promise<Set<Permission>> {
+    // API-key principal (P3.9 / ADR-0054): permissions are the key's scopes,
+    // not the bound user's roles. Branch BEFORE the cache so we never read or
+    // poison the creator's role-derived permission cache. Only applies when the
+    // ambient request IS this api-key principal (same tenant + bound user) —
+    // cross-user resolution (admin tooling) is unaffected.
+    const ambient = this.tenantContext.getCurrent();
+    if (
+      ambient?.principalType === "apikey" &&
+      ambient.tenantId === tenantId &&
+      ambient.userId === userId
+    ) {
+      return new Set<Permission>((ambient.apiKeyScopes ?? []) as Permission[]);
+    }
+
     const cached = await this.permCache.get(tenantId, userId);
     if (cached) return cached;
 

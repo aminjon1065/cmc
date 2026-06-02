@@ -377,4 +377,97 @@ export class WorkflowsService {
     );
     return rows.map((r) => this.toRunContract(r));
   }
+
+  // ---------- event triggers (P3.8c) ----------
+
+  /**
+   * Enabled, event-triggered workflows in a tenant bound to `eventToken`
+   * (`${aggregateType}.${eventType}`, e.g. `incident.created`). Context-free
+   * (runs in `runForTenant`) so the NATS consumer can call it without a request.
+   */
+  async findEnabledEventWorkflows(
+    tenantId: string,
+    eventToken: string,
+  ): Promise<Array<{ id: string; version: number; definition: unknown }>> {
+    return this.tenantDb.runForTenant(tenantId, async () => {
+      const tx = this.tenantDb.getCurrentTx()!;
+      return tx
+        .select({
+          id: schema.workflows.id,
+          version: schema.workflows.version,
+          definition: schema.workflows.definition,
+        })
+        .from(schema.workflows)
+        .where(
+          and(
+            eq(schema.workflows.triggerType, "event"),
+            eq(schema.workflows.triggerEvent, eventToken),
+            eq(schema.workflows.enabled, true),
+            isNull(schema.workflows.deletedAt),
+          ),
+        );
+    });
+  }
+
+  /**
+   * Start a run from an event trigger (system actor, no request context).
+   * Snapshots + starts the interpreter; invalid graphs are skipped (logged).
+   */
+  async startTriggeredRun(
+    tenantId: string,
+    wf: { id: string; version: number; definition: unknown },
+    payload: Record<string, unknown>,
+  ): Promise<void> {
+    const definition = wf.definition as WorkflowDefinition;
+    if (validateWorkflowDefinition(definition).length > 0) {
+      this.logger.warn(`event-trigger skipped invalid workflow ${wf.id}`);
+      return;
+    }
+    const runId = await this.tenantDb.runForTenant(tenantId, async () => {
+      const tx = this.tenantDb.getCurrentTx()!;
+      const [r] = await tx
+        .insert(schema.workflowRuns)
+        .values({
+          tenantId,
+          workflowId: wf.id,
+          workflowVersion: wf.version,
+          definition,
+          status: "pending",
+          trigger: "event",
+          input: payload,
+          startedBy: null,
+        })
+        .returning({ id: schema.workflowRuns.id });
+      return r!.id;
+    });
+
+    const temporalWorkflowId = `wf-run:${runId}`;
+    try {
+      await this.temporal.start({
+        workflowType: "workflowInterpreter",
+        workflowId: temporalWorkflowId,
+        args: [{ runId, tenantId, startedBy: null, definition, input: payload }],
+      });
+      await this.tenantDb.runForTenant(tenantId, async () => {
+        const tx = this.tenantDb.getCurrentTx()!;
+        await tx
+          .update(schema.workflowRuns)
+          .set({ temporalWorkflowId })
+          .where(eq(schema.workflowRuns.id, runId));
+      });
+    } catch (err) {
+      this.logger.warn(`event-trigger run ${runId} failed to start: ${msg(err)}`);
+      await this.tenantDb.runForTenant(tenantId, async () => {
+        const tx = this.tenantDb.getCurrentTx()!;
+        await tx
+          .update(schema.workflowRuns)
+          .set({
+            status: "failed",
+            error: "Failed to start execution.",
+            finishedAt: sql`now()`,
+          })
+          .where(eq(schema.workflowRuns.id, runId));
+      });
+    }
+  }
 }
