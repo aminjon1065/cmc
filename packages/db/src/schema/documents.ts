@@ -8,6 +8,7 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { tenants } from "./tenants";
 import { users } from "./users";
 
@@ -78,6 +79,11 @@ export const documents = pgTable(
       t.status,
     ),
     uploadedByIdx: index("documents_uploaded_by_idx").on(t.uploadedBy),
+    // Full-text search (P2.11 / ADR-0041).
+    ftsIdx: index("documents_fts_idx").using(
+      "gin",
+      sql`to_tsvector('simple', coalesce(${t.name}, '') || ' ' || coalesce(${t.description}, ''))`,
+    ),
   }),
 );
 

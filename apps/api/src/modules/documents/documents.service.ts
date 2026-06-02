@@ -177,6 +177,214 @@ export class DocumentsService {
     return updated!;
   }
 
+  // ---------- multipart upload (P2.12 / ADR-0042) ----------
+
+  async initMultipart(input: {
+    name: string;
+    mimeType: string;
+    sizeBytes: number;
+    description?: string | null;
+  }) {
+    const ctx = this.tenantContext.requireCurrent();
+    const max = this.config.get("DOCUMENTS_MAX_UPLOAD_BYTES", { infer: true });
+    if (input.sizeBytes > max) {
+      throw new BadRequestException(
+        `File exceeds the ${max} byte limit (declared ${input.sizeBytes}).`,
+      );
+    }
+
+    const bucket = this.config.get("S3_BUCKET_FILES", { infer: true });
+    const partSize = this.config.get("DOCUMENTS_MULTIPART_PART_SIZE", {
+      infer: true,
+    });
+    const partCount = Math.max(1, Math.ceil(input.sizeBytes / partSize));
+
+    const [row] = await this.tenantDb.run((tx) =>
+      tx
+        .insert(schema.documents)
+        .values({
+          tenantId: ctx.tenantId,
+          name: input.name,
+          description: input.description ?? null,
+          mimeType: input.mimeType,
+          sizeBytes: input.sizeBytes,
+          storageBucket: bucket,
+          storageKey: "pending",
+          status: "uploading",
+          uploadedBy: ctx.userId,
+        })
+        .returning(),
+    );
+    if (!row) throw new Error("Failed to insert document row");
+
+    const storageKey = this.buildStorageKey(ctx.tenantId, row.id);
+    const uploadId = await this.storage.createMultipartUpload({
+      bucket,
+      key: storageKey,
+      contentType: input.mimeType,
+    });
+
+    // Persist the storage key + uploadId so complete/abort don't trust the
+    // client for the uploadId.
+    const [document] = await this.tenantDb.run((tx) =>
+      tx
+        .update(schema.documents)
+        .set({
+          storageKey,
+          metadata: sql`coalesce(metadata, '{}'::jsonb) || ${JSON.stringify({
+            multipart: { uploadId, partSize, partCount },
+          })}::jsonb`,
+          updatedAt: sql`now()`,
+        })
+        .where(eq(schema.documents.id, row.id))
+        .returning(),
+    );
+
+    const ttl = this.config.get("DOCUMENTS_UPLOAD_URL_TTL_SEC", { infer: true });
+    const parts: Array<{ partNumber: number; url: string }> = [];
+    for (let n = 1; n <= partCount; n++) {
+      const url = await this.storage.presignUploadPart({
+        bucket,
+        key: storageKey,
+        uploadId,
+        partNumber: n,
+        ttlSec: ttl,
+      });
+      parts.push({ partNumber: n, url });
+    }
+
+    await this.audit.record({
+      tenantId: ctx.tenantId,
+      actorId: ctx.userId,
+      actorType: "user",
+      action: "document.multipart_init",
+      resourceType: "document",
+      resourceId: document!.id,
+      outcome: "success",
+      metadata: { name: input.name, sizeBytes: input.sizeBytes, partCount },
+    });
+
+    return {
+      document: document!,
+      uploadId,
+      partSize,
+      parts,
+      expiresAt: new Date(Date.now() + ttl * 1000).toISOString(),
+    };
+  }
+
+  async completeMultipart(
+    documentId: string,
+    parts: Array<{ partNumber: number; etag: string }>,
+  ) {
+    const ctx = this.tenantContext.requireCurrent();
+    const existing = await this.findById(documentId);
+    if (!existing) throw new NotFoundException();
+    if (existing.uploadedBy !== ctx.userId) {
+      throw new ForbiddenException("Document belongs to another user.");
+    }
+    if (existing.status === "ready") return existing; // idempotent
+
+    const uploadId = this.multipartUploadId(existing.metadata);
+    if (!uploadId) {
+      throw new BadRequestException("Not a multipart upload.");
+    }
+
+    try {
+      await this.storage.completeMultipartUpload({
+        bucket: existing.storageBucket,
+        key: existing.storageKey,
+        uploadId,
+        parts,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `multipart complete failed for ${documentId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      await this.markFailed(documentId, "multipart_complete_failed");
+      throw new BadRequestException("Failed to assemble multipart upload.");
+    }
+
+    const head = await this.storage.head({
+      bucket: existing.storageBucket,
+      key: existing.storageKey,
+    });
+    if (!head.exists) {
+      await this.markFailed(documentId, "object_missing");
+      throw new BadRequestException("Assembled object missing in storage.");
+    }
+
+    const [updated] = await this.tenantDb.run((tx) =>
+      tx
+        .update(schema.documents)
+        .set({
+          status: "ready",
+          etag: head.etag ?? null,
+          sizeBytes: head.contentLength ?? existing.sizeBytes,
+          updatedAt: sql`now()`,
+        })
+        .where(eq(schema.documents.id, documentId))
+        .returning(),
+    );
+
+    await this.audit.record({
+      tenantId: ctx.tenantId,
+      actorId: ctx.userId,
+      actorType: "user",
+      action: "document.multipart_complete",
+      resourceType: "document",
+      resourceId: documentId,
+      outcome: "success",
+      metadata: { sizeBytes: head.contentLength, parts: parts.length },
+    });
+    return updated!;
+  }
+
+  async abortMultipart(documentId: string): Promise<void> {
+    const ctx = this.tenantContext.requireCurrent();
+    const existing = await this.findById(documentId);
+    if (!existing) throw new NotFoundException();
+    if (existing.uploadedBy !== ctx.userId) {
+      throw new ForbiddenException("Document belongs to another user.");
+    }
+
+    const uploadId = this.multipartUploadId(existing.metadata);
+    if (uploadId) {
+      try {
+        await this.storage.abortMultipartUpload({
+          bucket: existing.storageBucket,
+          key: existing.storageKey,
+          uploadId,
+        });
+      } catch (err) {
+        this.logger.warn(
+          `multipart abort failed for ${documentId}: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
+    }
+    await this.markFailed(documentId, "multipart_aborted");
+
+    await this.audit.record({
+      tenantId: ctx.tenantId,
+      actorId: ctx.userId,
+      actorType: "user",
+      action: "document.multipart_abort",
+      resourceType: "document",
+      resourceId: documentId,
+      outcome: "success",
+    });
+  }
+
+  private multipartUploadId(metadata: unknown): string | null {
+    const mp = (metadata as { multipart?: { uploadId?: string } } | null)
+      ?.multipart;
+    return mp?.uploadId ?? null;
+  }
+
   // ---------- list / get ----------
 
   async list(params: ListDocumentsParams) {

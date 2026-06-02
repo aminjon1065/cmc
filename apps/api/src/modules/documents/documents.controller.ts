@@ -17,6 +17,7 @@ import type {
   DownloadUrlResponse,
   FinalizeUploadResponse,
   ListDocumentsResponse,
+  MultipartInitResponse,
   UploadInitResponse,
 } from "@cmc/contracts";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
@@ -24,6 +25,7 @@ import { AuthorizeGuard } from "../../common/authz/authorize.guard";
 import { Authorize } from "../../common/authz/authorize.decorator";
 import { DocumentsService } from "./documents.service";
 import { UploadInitDto } from "./dto/upload-init.dto";
+import { MultipartCompleteDto } from "./dto/multipart-complete.dto";
 
 type DocumentRow = {
   id: string;
@@ -114,6 +116,49 @@ export class DocumentsController {
         expiresAt: upload.expiresAt,
       },
     };
+  }
+
+  // ---------- multipart upload (P2.12 / ADR-0042) ----------
+
+  @Post("multipart/init")
+  @Authorize("document:write")
+  @HttpCode(HttpStatus.CREATED)
+  async initMultipart(
+    @Body() body: UploadInitDto,
+  ): Promise<MultipartInitResponse> {
+    const r = await this.documents.initMultipart({
+      name: body.name,
+      mimeType: body.mimeType,
+      sizeBytes: body.sizeBytes,
+      description: body.description ?? null,
+    });
+    return {
+      document: toContract(r.document),
+      uploadId: r.uploadId,
+      partSize: r.partSize,
+      parts: r.parts,
+      expiresAt: r.expiresAt,
+    };
+  }
+
+  @Post(":id/multipart/complete")
+  @Authorize("document:write")
+  @HttpCode(HttpStatus.OK)
+  async completeMultipart(
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Body() body: MultipartCompleteDto,
+  ): Promise<DocumentResponse> {
+    const doc = await this.documents.completeMultipart(id, body.parts);
+    return { document: toContract(doc) };
+  }
+
+  @Post(":id/multipart/abort")
+  @Authorize("document:write")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async abortMultipart(
+    @Param("id", new ParseUUIDPipe()) id: string,
+  ): Promise<void> {
+    await this.documents.abortMultipart(id);
   }
 
   @Post(":id/finalize")

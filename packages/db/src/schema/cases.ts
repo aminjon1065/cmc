@@ -7,6 +7,7 @@ import {
   timestamp,
   index,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { tenants } from "./tenants";
 import { users } from "./users";
 
@@ -61,6 +62,11 @@ export const cases = pgTable(
     statusIdx: index("cases_status_idx").on(t.tenantId, t.status),
     assignedIdx: index("cases_assigned_idx").on(t.assignedTo),
     dueIdx: index("cases_due_idx").on(t.dueAt),
+    // Full-text search (P2.11 / ADR-0041).
+    ftsIdx: index("cases_fts_idx").using(
+      "gin",
+      sql`to_tsvector('simple', coalesce(${t.title}, '') || ' ' || coalesce(${t.description}, '') || ' ' || coalesce(${t.type}, ''))`,
+    ),
   }),
 );
 

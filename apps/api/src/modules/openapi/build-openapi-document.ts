@@ -83,6 +83,8 @@ const RESPONSE_SCHEMA: Record<string, string> = {
   "get /v1/documents": "ListDocumentsResponse",
   "get /v1/documents/{id}": "DocumentResponse",
   "post /v1/documents/upload-init": "UploadInitResponse",
+  "post /v1/documents/multipart/init": "MultipartInitResponse",
+  "post /v1/documents/{id}/multipart/complete": "DocumentResponse",
   "post /v1/documents/{id}/finalize": "FinalizeUploadResponse",
   "get /v1/documents/{id}/download-url": "DownloadUrlResponse",
   // audit chain
@@ -100,6 +102,8 @@ const RESPONSE_SCHEMA: Record<string, string> = {
   "get /v1/realtime/status": "RealtimeStatusResponse",
   // analytics
   "get /v1/analytics/dashboard": "DashboardAnalyticsResponse",
+  // search
+  "get /v1/search": "SearchResponse",
   // gis
   "get /v1/gis/layers": "GisLayersListResponse",
   "post /v1/gis/layers": "GisLayerResponse",
@@ -136,6 +140,7 @@ const TAG_BY_PREFIX: Array<[string, string]> = [
   ["/v1/tenant", "tenant"],
   ["/v1/incidents", "incidents"],
   ["/v1/cases", "cases"],
+  ["/v1/search", "search"],
   ["/v1/notifications", "notifications"],
   ["/v1/documents", "documents"],
   ["/v1/branding", "branding"],

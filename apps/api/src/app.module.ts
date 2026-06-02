@@ -22,6 +22,7 @@ import { PasswordResetModule } from "./modules/password-reset/password-reset.mod
 import { IncidentsModule } from "./modules/incidents/incidents.module";
 import { CasesModule } from "./modules/cases/cases.module";
 import { GisModule } from "./modules/gis/gis.module";
+import { SearchModule } from "./modules/search/search.module";
 import { NotificationsModule } from "./modules/notifications/notifications.module";
 import { IncidentNotificationsModule } from "./modules/incident-notifications/incident-notifications.module";
 import { OpenApiModule } from "./modules/openapi/openapi.module";
@@ -104,6 +105,7 @@ import { loadConfig } from "./config/configuration";
     IncidentsModule,
     CasesModule,
     GisModule,
+    SearchModule,
     NotificationsModule,
     IncidentNotificationsModule,
     OpenApiModule,

@@ -8,6 +8,7 @@ import {
   timestamp,
   index,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { tenants } from "./tenants";
 import { users } from "./users";
 
@@ -72,6 +73,12 @@ export const incidents = pgTable(
     severityIdx: index("incidents_severity_idx").on(t.tenantId, t.severity),
     occurredIdx: index("incidents_occurred_idx").on(t.occurredAt),
     assignedIdx: index("incidents_assigned_idx").on(t.assignedTo),
+    // Full-text search (P2.11 / ADR-0041): GIN over a language-neutral
+    // (`simple`) tsvector of the human-readable fields.
+    ftsIdx: index("incidents_fts_idx").using(
+      "gin",
+      sql`to_tsvector('simple', coalesce(${t.summary}, '') || ' ' || coalesce(${t.description}, '') || ' ' || coalesce(${t.type}, '') || ' ' || coalesce(${t.region}, ''))`,
+    ),
   }),
 );
 

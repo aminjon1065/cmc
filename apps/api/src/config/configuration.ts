@@ -103,6 +103,13 @@ const EnvSchema = z.object({
     .positive()
     .default(100 * 1024 * 1024),
   DOCUMENTS_UPLOAD_URL_TTL_SEC: z.coerce.number().int().positive().default(300),
+  // Multipart upload (P2.12 / ADR-0042). Part size for resumable large-file
+  // uploads; S3 requires non-final parts ≥ 5 MiB. Default 8 MiB.
+  DOCUMENTS_MULTIPART_PART_SIZE: z.coerce
+    .number()
+    .int()
+    .min(5 * 1024 * 1024)
+    .default(8 * 1024 * 1024),
   DOCUMENTS_DOWNLOAD_URL_TTL_SEC: z.coerce
     .number()
     .int()

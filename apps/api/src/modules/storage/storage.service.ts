@@ -1,10 +1,14 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import {
+  AbortMultipartUploadCommand,
+  CompleteMultipartUploadCommand,
+  CreateMultipartUploadCommand,
   DeleteObjectCommand,
   HeadObjectCommand,
   PutObjectCommand,
   GetObjectCommand,
+  UploadPartCommand,
   type S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -106,6 +110,77 @@ export class StorageService {
       method: "GET",
       expiresAt: new Date(Date.now() + input.ttlSec * 1000).toISOString(),
     };
+  }
+
+  // ---------- multipart upload (P2.12 / ADR-0042) ----------
+
+  /** Start an S3 multipart upload; returns the uploadId. */
+  async createMultipartUpload(input: {
+    bucket: string;
+    key: string;
+    contentType: string;
+  }): Promise<string> {
+    const res = await this.internal.send(
+      new CreateMultipartUploadCommand({
+        Bucket: input.bucket,
+        Key: input.key,
+        ContentType: input.contentType,
+      }),
+    );
+    if (!res.UploadId) throw new Error("S3 did not return an UploadId");
+    return res.UploadId;
+  }
+
+  /** Pre-sign a single UploadPart PUT (minted on the public client). */
+  async presignUploadPart(input: {
+    bucket: string;
+    key: string;
+    uploadId: string;
+    partNumber: number;
+    ttlSec: number;
+  }): Promise<string> {
+    const cmd = new UploadPartCommand({
+      Bucket: input.bucket,
+      Key: input.key,
+      UploadId: input.uploadId,
+      PartNumber: input.partNumber,
+    });
+    return getSignedUrl(this.publicClient, cmd, { expiresIn: input.ttlSec });
+  }
+
+  /** Assemble the uploaded parts into the final object. */
+  async completeMultipartUpload(input: {
+    bucket: string;
+    key: string;
+    uploadId: string;
+    parts: Array<{ partNumber: number; etag: string }>;
+  }): Promise<void> {
+    const Parts = [...input.parts]
+      .sort((a, b) => a.partNumber - b.partNumber)
+      .map((p) => ({ PartNumber: p.partNumber, ETag: p.etag }));
+    await this.internal.send(
+      new CompleteMultipartUploadCommand({
+        Bucket: input.bucket,
+        Key: input.key,
+        UploadId: input.uploadId,
+        MultipartUpload: { Parts },
+      }),
+    );
+  }
+
+  /** Discard an in-flight multipart upload (frees the staged parts). */
+  async abortMultipartUpload(input: {
+    bucket: string;
+    key: string;
+    uploadId: string;
+  }): Promise<void> {
+    await this.internal.send(
+      new AbortMultipartUploadCommand({
+        Bucket: input.bucket,
+        Key: input.key,
+        UploadId: input.uploadId,
+      }),
+    );
   }
 
   // ---------- direct ops (server-side) ----------

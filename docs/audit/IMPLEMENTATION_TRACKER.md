@@ -535,6 +535,15 @@ This is the **product surface the UI implies**. No live event ticker, no multi-m
 | Remaining | more MVs/widgets (by-region trend, audit activity, MTTR), saved reports, parameterised CH bindings, CH migration tooling, sharding/replication (H-tier), retention/TTL |
 | Blocks | §3.5, dashboards, audit-archive, position-history queries |
 
+### Search plane (Postgres FTS interim → OpenSearch)
+
+| | |
+|---|---|
+| Status | INTERIM DONE (P2.11 / ADR-0041) — Postgres `tsvector` |
+| Done | GIN `to_tsvector('simple')` indexes on incidents/cases/documents (migration 0020); `GET /v1/search` cross-domain fan-out (`websearch_to_tsquery` + `ts_rank`), RBAC-filtered + RLS-scoped, merged by score |
+| Remaining | OpenSearch (Phase-3): stemming/fuzzy/per-language, highlight, global ranking, more domains, search UI |
+| Files | `apps/api/src/modules/search/{search.service,search.controller,search.module}.ts`, `packages/contracts/src/search.ts` |
+
 ### Search plane (OpenSearch)
 
 | | |

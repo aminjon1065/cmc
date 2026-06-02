@@ -552,10 +552,14 @@ These close gaps from current `main` that **cannot wait** for any new module.
 **Deferred:** config-driven case types, assignment policies, **SLA escalation cron** (→ Temporal P3.1; `due_at` stored), linked artifacts (incident/document/gis_feature), per-tenant `case_number`, **web UI** (dashboard "Cases Open" stays hardcoded until a cases UI lands), case events consumer.
 **Depends on:** P1.1 ✅, P1.5 ✅, P2.7 ✅.
 
-### P2.11 — Postgres `tsvector` search
+### P2.11 — Postgres `tsvector` search ✅ **COMPLETED 2026-06-02**
 **Why:** OpenSearch is Phase-3; this is the interim.
 **Cost:** M (3–5 d).
-**How:** GIN index on `to_tsvector(name || ' ' || coalesce(description, ''))` for documents and incidents. Cross-domain `/v1/search` endpoint fanning out per-domain Postgres FTS queries and merging by score.
+**Delivered:**
+- **GIN `to_tsvector('simple', …)` expression indexes** (migration 0020, via drizzle schema) on incidents (summary/description/type/region), cases (title/description/type), documents (name/description).
+- `GET /v1/search?q=` (`SearchService` + `SearchController`, JWT-only): resolves caller perms → fans out per readable domain (`incident:read`/`case:read`/`document:read`), each RLS-scoped `websearch_to_tsquery('simple')` + `ts_rank`, merged by score → uniform `SearchResult` (type/id/title/snippet/score). User `q` always parameterised.
+- **Validated**: suite **267/267** (34 suites; +6 search), `tsc`/`eslint`/`nest build` clean. **Live smoke**: `flood` → 4 ranked cross-domain results; `zarafshan` → 1 incident. ADR-0041.
+**Deferred:** stemming / per-language configs / fuzzy (→ OpenSearch P3), `ts_headline` highlight snippets, global (vs per-domain-top-N) ranking, more domains, a web search UI.
 
 ### P2.12 — Multipart upload + tus.io
 **Why:** large-file handling. ToR §15.8.

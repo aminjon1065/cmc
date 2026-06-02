@@ -26,7 +26,7 @@ Compact one-row-per-module view. Detail per module is in
 | 3.11 | Chat & Messaging | 🔴 | 0 | — | — | — | — | (none) |
 | 3.12 | Video Conferencing | 🔴 | 0 | — | — | — | — | (none — LiveKit not present) |
 | 3.13 | Notification System | 🟢 | 68 | 8 | 8 | 7 | 8 | **P1.6 (a–c / ADR-0024):** in-app + web center (bell/page) + email (Nodemailer/Mailpit) + per-user prefs; **now event-driven** — dispatched by a durable JetStream consumer of incident events (idempotent, decoupled — P2.4 / ADR-0032), inline fallback when NATS off. Future: Web Push, MJML, dead-letter |
-| 3.14 | Search Engine | 🔴 | 3 | — | — | — | — | `ILIKE` substring filter in `documents.list` only |
+| 3.14 | Search Engine | 🟡 | 30 | 7 | 7 | 6 | 7 | **Cross-domain Postgres FTS (P2.11 / ADR-0041):** GIN `tsvector` on incidents/cases/documents + `GET /v1/search` (`websearch_to_tsquery`+`ts_rank`, RBAC-filtered, RLS-scoped, merged). Interim before OpenSearch (Phase-3: stemming/fuzzy/per-language, highlight, search UI) |
 | 3.15 | Audit & Activity Logging | 🟢 | 85 | 8 | 8 | 7 | 8 | `apps/api/src/modules/audit/`; append-only RLS + **tamper-evident hash chain** + **Merkle anchor under Object Lock (WORM)** (P1.11 / ADR-0029) + **SIEM export** (RFC 5424/CEF, P1.12 / ADR-0030) + **ClickHouse archive/analytics projection** (cursor ETL → `audit_events` + daily-stats MV, P2.2 / ADR-0034). Remaining: `audit:read` perm/auditor role, retention/legal-hold, audit explorer UI |
 | 3.16 | Knowledge Base / Wiki | 🔴 | 0 | — | — | — | — | (none) |
 | 3.17 | API / Integration Gateway | 🔴 | 0 | — | — | — | — | Next.js BFF is implicit edge, no Kong/Envoy |
@@ -74,7 +74,7 @@ Compact one-row-per-module view. Detail per module is in
 | 5.1 | OLTP (Postgres + PostGIS) | 🟢 |
 | 5.1 | OLAP (ClickHouse) | 🟡 single-shard CH + incident projection + daily-by-region MV (P2.5 / ADR-0033); sharding/replication + CH migration tooling → H-tier |
 | 5.1 | Cache (Redis) | 🟢 wired via `RedisModule` (P0.2 / ADR-0008); no consumers yet — P0.1 / P0.4 / P1.6 / P2.3 / P2.13 are the upcoming consumers |
-| 5.1 | Search (OpenSearch) | 🔴 |
+| 5.1 | Search (OpenSearch) | 🟡 interim Postgres FTS live (P2.11 / ADR-0041); OpenSearch cluster = Phase-3 |
 | 5.1 | Object storage (MinIO/S3) | 🟢 |
 | 5.1 | Vector DB (pgvector/Qdrant) | 🟡 ext. only |
 | 5.1 | Time-series (TimescaleDB/CH) | 🔴 |

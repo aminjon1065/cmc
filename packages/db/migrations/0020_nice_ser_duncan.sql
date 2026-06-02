@@ -1,0 +1,3 @@
+CREATE INDEX "documents_fts_idx" ON "documents" USING gin (to_tsvector('simple', coalesce("name", '') || ' ' || coalesce("description", '')));--> statement-breakpoint
+CREATE INDEX "incidents_fts_idx" ON "incidents" USING gin (to_tsvector('simple', coalesce("summary", '') || ' ' || coalesce("description", '') || ' ' || coalesce("type", '') || ' ' || coalesce("region", '')));--> statement-breakpoint
+CREATE INDEX "cases_fts_idx" ON "cases" USING gin (to_tsvector('simple', coalesce("title", '') || ' ' || coalesce("description", '') || ' ' || coalesce("type", '')));

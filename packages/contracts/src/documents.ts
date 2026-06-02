@@ -62,6 +62,47 @@ export type FinalizeUploadResponse = z.infer<
   typeof FinalizeUploadResponseSchema
 >;
 
+// ---------- multipart upload (P2.12 / ADR-0042) ----------
+
+export const MultipartInitRequestSchema = z.object({
+  name: z.string().min(1).max(512),
+  mimeType: z.string().min(1).max(255),
+  sizeBytes: z.number().int().positive(),
+  description: z.string().max(2000).optional(),
+});
+export type MultipartInitRequest = z.infer<typeof MultipartInitRequestSchema>;
+
+export const MultipartPartUrlSchema = z.object({
+  partNumber: z.number().int().positive(),
+  url: z.string().url(),
+});
+export type MultipartPartUrl = z.infer<typeof MultipartPartUrlSchema>;
+
+export const MultipartInitResponseSchema = z.object({
+  document: DocumentSchema,
+  uploadId: z.string(),
+  partSize: z.number().int().positive(),
+  parts: z.array(MultipartPartUrlSchema),
+  expiresAt: z.string().datetime(),
+});
+export type MultipartInitResponse = z.infer<
+  typeof MultipartInitResponseSchema
+>;
+
+export const MultipartCompleteRequestSchema = z.object({
+  parts: z
+    .array(
+      z.object({
+        partNumber: z.number().int().positive(),
+        etag: z.string().min(1),
+      }),
+    )
+    .min(1),
+});
+export type MultipartCompleteRequest = z.infer<
+  typeof MultipartCompleteRequestSchema
+>;
+
 // ---------- download URL ----------
 
 export const DownloadUrlResponseSchema = z.object({
