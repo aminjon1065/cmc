@@ -134,6 +134,13 @@
       "when": 1780371060819,
       "tag": "0018_modern_johnny_blaze",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1780376839931,
+      "tag": "0019_deep_talon",
+      "breakpoints": true
     }
   ]
 }

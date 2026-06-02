@@ -15,6 +15,7 @@ export * from "./password-reset";
 export * from "./users";
 export * from "./tenants";
 export * from "./incident";
+export * from "./case";
 export * from "./notification";
 export * from "./audit";
 export * from "./events";

@@ -20,6 +20,7 @@ import { RbacModule } from "./modules/rbac/rbac.module";
 import { MfaModule } from "./modules/mfa/mfa.module";
 import { PasswordResetModule } from "./modules/password-reset/password-reset.module";
 import { IncidentsModule } from "./modules/incidents/incidents.module";
+import { CasesModule } from "./modules/cases/cases.module";
 import { GisModule } from "./modules/gis/gis.module";
 import { NotificationsModule } from "./modules/notifications/notifications.module";
 import { IncidentNotificationsModule } from "./modules/incident-notifications/incident-notifications.module";
@@ -101,6 +102,7 @@ import { loadConfig } from "./config/configuration";
     DocumentsModule,
     BrandingModule,
     IncidentsModule,
+    CasesModule,
     GisModule,
     NotificationsModule,
     IncidentNotificationsModule,

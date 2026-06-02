@@ -35,7 +35,7 @@ Compact one-row-per-module view. Detail per module is in
 | 3.20 | Monitoring & Observability | 🟢 | 55 | 8 | 8 | 7 | 7 | **Logs+metrics+traces triangle closed:** pino JSON+request_id (P0.3), OTEL traces (P0.6), Prometheus/RED+Grafana (P0.7), Loki (P1.7), **Tempo + Loki↔Tempo link + Alertmanager 5xx rule** (P1.8 / ADR-0026). Remaining: alert delivery/paging, exemplars, prod object-store |
 | 3.21 | Data Import/Export | 🔴 | 0 | — | — | — | — | (none) |
 | 3.22 | Realtime Collaboration | 🔴 | 0 | — | — | — | — | (none — Yjs not present) |
-| 3.23 | Task & Case Management | 🔴 | 0 | — | — | — | — | Dashboard shows "Cases Open 142" but no table exists |
+| 3.23 | Task & Case Management | 🟡 | 45 | 8 | 7 | 7 | 8 | **Cases backend (P2.10 / ADR-0040):** `cases` + `case_activity`, state machine, assign, **activity timeline** + comments, stats, RLS, audited, outbox events, `case:*` RBAC. Future: web UI (dashboard "Cases Open" still hardcoded), config-driven types, SLA cron (Temporal), linked artifacts |
 | 3.24 | Media Management | 🔴 | 0 | — | — | — | — | (none — FFmpeg pipeline absent) |
 | 3.25 | Geospatial Analytics | 🔴 | 0 | — | — | — | — | sub-scope of §3.4 |
 | 3.26 | Operational Monitoring Center | 🔴 | 0 | — | — | — | — | Hero ribbon copy hardcoded |

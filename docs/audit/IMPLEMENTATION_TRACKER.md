@@ -466,7 +466,7 @@ No Yjs, no WebSocket-backed CRDT provider, no presence cursors, no anchored comm
 |---|---|
 | **Status** | NOT STARTED |
 
-No `cases` table, no case types, no SLA timers, no assignment policies, no activity timeline. Dashboard UI references "Cases Open" with hardcoded "142" — this is the second highest-value module gap after the GIS map. **Complexity: L–XL.**
+**Backend done (P2.10 / ADR-0040):** `cases` + `case_activity` (state machine, priority+CHECK, assignee, `due_at`, soft-delete, RLS); `/v1/cases` CRUD + transition (resolve-gate) + assign + **comment/activity timeline** + stats; tenant-scoped, audited, outbox events; `case:*` RBAC. **Remaining:** web UI (dashboard "Cases Open 142" still hardcoded), config-driven case types, SLA escalation cron (→ Temporal P3.1; `due_at` stored), assignment policies, linked artifacts (incident/document/gis_feature), `case_number`, case events consumer. **Complexity (done): L; remaining: L.**
 
 ---
 
@@ -668,7 +668,7 @@ This is the **product surface the UI implies**. No live event ticker, no multi-m
 | 3.20 Observability | NOT STARTED | 5 % | L → XL |
 | 3.21 Import/Export | NOT STARTED | 0 % | XL |
 | 3.22 Realtime Collab | NOT STARTED | 0 % | XL |
-| 3.23 Cases | NOT STARTED | 0 % | L → XL |
+| 3.23 Cases | IN PROGRESS (backend, P2.10) | 45 % | L (web UI + SLA/types/links) |
 | 3.24 Media | NOT STARTED | 0 % | L |
 | 3.25 Geo Analytics | NOT STARTED | 0 % | sub-scope of 3.4 |
 | 3.26 Ops Monitoring | NOT STARTED | 0 % | XL |

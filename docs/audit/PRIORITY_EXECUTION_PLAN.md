@@ -543,11 +543,14 @@ These close gaps from current `main` that **cannot wait** for any new module.
 **Deferred:** on-map editing (draw/move), clustering/heatmap, a shipped basemap, realtime layer updates (P2.3 hook).
 **Depends on:** P2.8 ✅.
 
-### P2.10 — Cases module
+### P2.10 — Cases module ✅ **COMPLETED 2026-06-02 (backend MVP)**
 **Why:** the second domain user-of-the-platform module.
 **Cost:** L (2 wk).
-**How:** per-tenant case types (config-driven), assignment policies, SLA timer (cron until Temporal arrives at P3.1), activity timeline, linked artifacts (incidents, documents, gis_features).
-**Depends on:** P1.1, P1.5, P2.7.
+**Delivered (backend, modelled on incidents P1.5):**
+- `cases` (title, type, priority 1..5+CHECK, status state-machine, assignee, `due_at` SLA, soft-delete) + `case_activity` timeline; migration 0019 + **RLS** on both. `CasesService` + `/v1/cases` (CRUD, transition w/ resolve-gate, assign, **comment + activity timeline**, stats); tenant-scoped, audited, **outbox events** (`case.created/transitioned/assigned`). Perms `case:read/create/write/assign/resolve/delete`.
+- **Validated**: suite **261/261** (33 suites; +7 cases), `tsc`/`eslint`/`nest build` clean. **Live smoke**: create → in_progress → comment → activity `created/status_changed/comment` → stats `openTotal:1`. ADR-0040.
+**Deferred:** config-driven case types, assignment policies, **SLA escalation cron** (→ Temporal P3.1; `due_at` stored), linked artifacts (incident/document/gis_feature), per-tenant `case_number`, **web UI** (dashboard "Cases Open" stays hardcoded until a cases UI lands), case events consumer.
+**Depends on:** P1.1 ✅, P1.5 ✅, P2.7 ✅.
 
 ### P2.11 — Postgres `tsvector` search
 **Why:** OpenSearch is Phase-3; this is the interim.
