@@ -518,17 +518,17 @@ This is the **product surface the UI implies**. No live event ticker, no multi-m
 | Status | PARTIAL (P2.1 / ADR-0031) — outbox + relay + first producer done; consumers next |
 | Files | `apps/api/src/modules/events/{outbox.service,relay.service,event-publisher,nats-event-publisher,events.controller}.ts`, `packages/db/src/schema/outbox.ts` (0015), `packages/contracts/src/events.ts`, `infra/docker-compose.yml` (nats) |
 | Done | NATS JetStream container; **transactional `outbox`** (atomic write via ambient tx — no dual-write); **relay** → `tenant.{id}.{aggregate}.{event}.v{n}` (at-least-once, JetStream msgID dedup, advisory-locked); `EventPublisher` seam (real NATS lazy-imported only when enabled); **incidents producer** (created/transitioned/assigned); **first durable consumer** — notifications-from-events (P2.4 / ADR-0032: `consumed_events` dedup ledger, `DeliverPolicy.New`, handler/subscriber split, zero-regression inline fallback). Live-validated end-to-end + trace-correlated |
-| Remaining | ClickHouse projection consumer (P2.2/P2.5), dead-letter / max-deliver, outbox + consumed_events pruning, WebSocket fan-out (P2.3), multi-worker scale |
+| Remaining | dead-letter / max-deliver, outbox + consumed_events pruning, WebSocket fan-out (P2.3b — gateway scaffolded P2.3a), multi-worker scale |
 | Blocks | §3.6, §3.13, §3.20, §3.22, §3.26, §3.27, audit projection, geofence-trigger, etc. |
 
 ### Analytics plane (ClickHouse)
 
 | | |
 |---|---|
-| Status | PARTIAL (P2.5 / ADR-0033) — single-shard CH + first projection + MV |
-| Files | `apps/api/src/modules/analytics/{clickhouse.client,clickhouse-client.impl,incident-projection.consumer,incident-projection.subscriber,analytics.module}.ts`, `infra/clickhouse/init/01-schema.sql`, `infra/docker-compose.yml` (clickhouse) |
-| Done | ClickHouse container (HTTP 8123); incident schema (`incident_events` + daily-by-region MV) + audit schema (`audit_events` + daily-stats MV); gated lazy `@clickhouse/client`; **incident projection consumer** (event-bus, DeliverPolicy.All, dedup ledger — P2.5/ADR-0033) + **audit projection** (cursor-tail ETL, `projection_cursors` — P2.2/ADR-0034). Both live-validated end-to-end |
-| Remaining | dashboard-from-CH (P2.6), more MVs + a query API, CH migration tooling, sharding/replication (H-tier), retention/TTL |
+| Status | PARTIAL (P2.5/P2.2/P2.6) — single-shard CH + 2 projections + MVs + query API |
+| Files | `apps/api/src/modules/analytics/{clickhouse.client,clickhouse-client.impl,incident-projection.consumer,incident-projection.subscriber,audit-projection.service,dashboard-analytics.service,dashboard-trend,analytics.controller,analytics.module}.ts`, `infra/clickhouse/init/{01-schema,02-audit}.sql`, `infra/docker-compose.yml` (clickhouse) |
+| Done | ClickHouse container (HTTP 8123); incident schema (`incident_events` + daily-by-region MV) + audit schema (`audit_events` + daily-stats MV); gated lazy `@clickhouse/client`; **incident projection consumer** (event-bus, DeliverPolicy.All, dedup ledger — P2.5/ADR-0033) + **audit projection** (cursor-tail ETL, `projection_cursors` — P2.2/ADR-0034). Both live-validated end-to-end. **Query API**: `DashboardAnalyticsService` + `GET /v1/analytics/dashboard` (tenant-scoped CH incident trend, gap-filled, `incident:read`) → web dashboard `TrendChart` (P2.6/ADR-0036) |
+| Remaining | more MVs/widgets (by-region trend, audit activity, MTTR), saved reports, parameterised CH bindings, CH migration tooling, sharding/replication (H-tier), retention/TTL |
 | Blocks | §3.5, dashboards, audit-archive, position-history queries |
 
 ### Search plane (OpenSearch)
@@ -551,9 +551,12 @@ This is the **product surface the UI implies**. No live event ticker, no multi-m
 
 | | |
 |---|---|
-| Status | NOT STARTED |
+| Status | DONE (P2.3 / ADR-0035 — 2026-06-02) — single-instance |
+| Done | `RealtimeModule` in `apps/api` (in-process, not a separate app — reuses JwtService/RBAC/NATS/config). Native `ws`, `noServer` server on the HTTP `upgrade` event (gated `REALTIME_ENABLED`); **auth-before-handshake** (`WsAuthService`: JWT verify + session-active; `cmc-bearer` subprotocol or `?access_token=`). JSON protocol (`@cmc/contracts/realtime`); **tenant-isolated + fail-closed per-subscription RBAC** subscriptions (perms resolved at connect), NATS-style matcher, in-memory registry. `RealtimeFanoutSubscriber` (ephemeral JetStream, `DeliverPolicy.New`, `tenant.>` → `broadcast()`). `GET /v1/realtime/status`. 14 tests; full-chain live smoke (POST incident → WS event). |
+| Remaining | browser client hook/UI (with P2.6); **Redis pub/sub** cross-instance fan-out (multi-instance); mid-connection RBAC-revocation; presence/optimistic-updates (§7.3/§7.5) |
+| Files | `apps/api/src/modules/realtime/{realtime.gateway,realtime-registry.service,realtime-fanout.subscriber,ws-auth.service,subject-match,subject-permission,realtime.controller,realtime.module}.ts`, `packages/contracts/src/realtime.ts` |
 | Blocks | §3.11, §3.22, §3.26 |
-| Complexity | L (gateway + Redis pub/sub fan-out) |
+| Complexity | L (gateway done; Redis pub/sub fan-out = the remaining scale piece) |
 
 ### Redis substrate (cache / queue / pub-sub host)
 

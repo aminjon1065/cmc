@@ -4,6 +4,8 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { authedApiFetch } from "@/lib/server-api";
 import {
+  type DashboardAnalyticsResponse,
+  DashboardAnalyticsResponseSchema,
   type IncidentStatsResponse,
   IncidentStatsResponseSchema,
   type IncidentSummary,
@@ -13,6 +15,7 @@ import { AppShell } from "@/components/cmc/app-shell";
 import { getBranding } from "@/lib/branding";
 import { KPI } from "@/components/cmc/kpi";
 import { PercentBar } from "@/components/cmc/percent-bar";
+import { TrendChart } from "@/components/cmc/trend-chart";
 import { SeverityBadge } from "@/components/cmc/incident-badges";
 
 export const metadata: Metadata = {
@@ -58,10 +61,27 @@ async function fetchPriority(): Promise<IncidentSummary[]> {
   }
 }
 
+/** ClickHouse-backed incident trend over the last 14 days (P2.6 / ADR-0036). */
+async function fetchTrend(): Promise<DashboardAnalyticsResponse | null> {
+  try {
+    const raw = await authedApiFetch<unknown>("/analytics/dashboard?days=14");
+    const parsed = DashboardAnalyticsResponseSchema.safeParse(raw);
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
 export default async function DashboardPage() {
   const session = await auth();
   const { copy } = await getBranding();
-  const [stats, priority] = await Promise.all([fetchStats(), fetchPriority()]);
+  const [stats, priority, trend] = await Promise.all([
+    fetchStats(),
+    fetchPriority(),
+    fetchTrend(),
+  ]);
+  const trendOk = trend?.source === "clickhouse" && trend.incidentTrend.length > 0;
+  const trendTotal = trend?.incidentTrend.reduce((a, p) => a + p.count, 0) ?? 0;
 
   const activeTotal = stats?.activeTotal ?? 0;
   const sev = (n: number) => stats?.bySeverity[String(n)] ?? 0;
@@ -125,6 +145,31 @@ export default async function DashboardPage() {
         <KPI label="SEV-3 Open" value={String(sev(3))} accent="var(--c-sev-3)" />
         <KPI label="Regions Affected" value={String(byRegion.length)} accent="var(--c-info)" />
         <KPI label="Incident Types" value={String(byType.length)} accent="var(--c-ok)" />
+      </div>
+
+      {/* Incident trend — ClickHouse-backed historical series (P2.6 / ADR-0036) */}
+      <div className="px-5 pt-2.5">
+        <div className="cmc-card">
+          <div className="cmc-card-header">
+            <span className="cmc-label">Incident Trend · 14d</span>
+            <div className="flex-1" />
+            <span
+              className="cmc-mono text-[10.5px]"
+              style={{ color: "var(--c-fg-3)" }}
+            >
+              {trendOk ? `${trendTotal} reported` : "analytics unavailable"}
+            </span>
+          </div>
+          <div className="p-3">
+            {trendOk ? (
+              <TrendChart data={trend!.incidentTrend} />
+            ) : (
+              <div className="text-[11.5px]" style={{ color: "var(--c-fg-4)" }}>
+                Trend analytics unavailable.
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Main grid */}

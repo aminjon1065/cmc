@@ -7,6 +7,8 @@ import {
 import { IncidentProjectionConsumer } from "./incident-projection.consumer";
 import { IncidentProjectionSubscriber } from "./incident-projection.subscriber";
 import { AuditProjectionService } from "./audit-projection.service";
+import { DashboardAnalyticsService } from "./dashboard-analytics.service";
+import { AnalyticsController } from "./analytics.controller";
 
 /**
  * Analytics plane (P2.5 / ADR-0033). Provides the ClickHouse client (real when
@@ -16,6 +18,7 @@ import { AuditProjectionService } from "./audit-projection.service";
  */
 @Global()
 @Module({
+  controllers: [AnalyticsController],
   providers: [
     {
       provide: CLICKHOUSE_CLIENT,
@@ -25,11 +28,13 @@ import { AuditProjectionService } from "./audit-projection.service";
     IncidentProjectionConsumer,
     IncidentProjectionSubscriber,
     AuditProjectionService,
+    DashboardAnalyticsService,
   ],
   exports: [
     CLICKHOUSE_CLIENT,
     IncidentProjectionConsumer,
     AuditProjectionService,
+    DashboardAnalyticsService,
   ],
 })
 export class AnalyticsModule {}

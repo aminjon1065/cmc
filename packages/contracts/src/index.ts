@@ -18,3 +18,5 @@ export * from "./incident";
 export * from "./notification";
 export * from "./audit";
 export * from "./events";
+export * from "./realtime";
+export * from "./analytics";

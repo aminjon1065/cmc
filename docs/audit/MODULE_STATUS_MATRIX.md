@@ -17,9 +17,9 @@ Compact one-row-per-module view. Detail per module is in
 | 3.2 | Multi-Tenancy (shared-schema RLS) | 🟢 | 58 | 9 | 8 | 6 | 9 | `0002_rls_policies.sql`, `tenant-database.service.ts`; + per-tenant branding extracted to data (P0.11 / ADR-0018); + self-service tenant name + branding editing (P1.4d) |
 | 3.3 | RBAC / ABAC Authorization | 🟡 | 55 | 8 | 8 | 7 | 8 | RBAC ✅ (per-tenant roles + global catalog + `@Authorize` guard + Redis perm cache, P1.1 / ADR-0019); + `GET /rbac/me` (P1.4a); + **custom-role CRUD** + permission catalog + `role:manage` (P1.4c); ABAC/OPA still 🔴 |
 | 3.4 | GIS & Geospatial Intelligence | 🔴 | 2 | — | — | — | — | PostGIS ext. only |
-| 3.5 | Analytics & Reporting | 🟡 | 18 | 7 | 7 | 7 | 7 | **ClickHouse single-shard** + **two projections**: incident events → daily-by-region MV (P2.5 / ADR-0033) + **audit log → `audit_events` + daily-stats MV** (cursor ETL, P2.2 / ADR-0034). Next: dashboard-from-CH (P2.6), more MVs, query API |
-| 3.6 | Realtime Event System | 🟡 | 48 | 7 | 7 | 7 | 7 | **Event plane (P2.1 / ADR-0031):** NATS JetStream + transactional `outbox` + relay + incidents producer; **two durable consumers** — notifications-from-events (DeliverPolicy.New — P2.4 / ADR-0032) + ClickHouse projection (DeliverPolicy.All — P2.5 / ADR-0033), shared dedup ledger. Live-validated end-to-end + trace-correlated. Next: WebSocket delivery (P2.3), audit projection (P2.2) |
-| 3.7 | Dashboard Builder | 🔴 | 0 | — | — | — | — | `/dashboard` page is static demo |
+| 3.5 | Analytics & Reporting | 🟡 | 24 | 7 | 7 | 7 | 7 | **ClickHouse single-shard** + **two projections** (incident events → daily-by-region MV, P2.5/ADR-0033; audit log → `audit_events` + daily-stats MV cursor ETL, P2.2/ADR-0034) + **query API**: `GET /v1/analytics/dashboard` (tenant-scoped CH incident trend, gap-filled, `incident:read`) feeding the dashboard (P2.6 / ADR-0036). Next: more MVs/widgets (by-region trend, audit activity, MTTR), saved reports |
+| 3.6 | Realtime Event System | 🟡 | 48 | 7 | 7 | 7 | 7 | **Event plane (P2.1 / ADR-0031):** NATS JetStream + transactional `outbox` + relay + incidents producer; **two durable consumers** — notifications-from-events (DeliverPolicy.New — P2.4 / ADR-0032) + ClickHouse projection (DeliverPolicy.All — P2.5 / ADR-0033), shared dedup ledger. Live-validated end-to-end + trace-correlated. **WebSocket gateway done (P2.3 / ADR-0035)** — NATS→WS fan-out to tenant-isolated, RBAC-checked subscriptions (full-chain live-smoked). Audit projection done (P2.2 / ADR-0034) |
+| 3.7 | Dashboard Builder | 🔴 | 0 | — | — | — | — | `/dashboard` now renders **real** data (snapshot from OLTP P1.5c + CH-backed incident trend P2.6/ADR-0036); still a fixed layout, no user-built/configurable dashboards |
 | 3.8 | File Management System | 🟡 | 20 | 8 | 8 | 6 | 7 | `apps/api/src/modules/storage/` |
 | 3.9 | Enterprise Document Mgmt | 🟡 | 10 | 7 | 7 | 5 | 7 | `apps/api/src/modules/documents/` |
 | 3.10 | Workflow / BPM Engine | 🔴 | 0 | — | — | — | — | (none — Temporal not present) |
@@ -120,10 +120,10 @@ Compact one-row-per-module view. Detail per module is in
 
 | §7.x | Capability | Status |
 |---|---|---|
-| 7.1 | WebSocket gateway | 🔴 |
+| 7.1 | WebSocket gateway | 🟢 | **P2.3 / ADR-0035**: `ws` gateway in apps/api on the HTTP upgrade event, auth-before-handshake (JWT + session), tenant-isolated + fail-closed RBAC subscriptions, ephemeral NATS fan-out (`DeliverPolicy.New`) → `broadcast()`, status endpoint. Full-chain live-smoked. Single-instance (Redis fan-out = scale follow-on) |
 | 7.2 | Realtime synchronisation | 🔴 |
 | 7.3 | Presence | 🔴 |
-| 7.4 | Event streams to clients | 🔴 |
+| 7.4 | Event streams to clients | 🟡 | Events fan out to subscribed sockets end-to-end (P2.3 / ADR-0035); browser client hook/UI is the follow-on (with P2.6) |
 | 7.5 | Optimistic updates | 🔴 |
 | 7.6 | Distributed events | 🔴 |
 | 7.7 | Reliable notifications | 🔴 |
@@ -193,7 +193,7 @@ Compact one-row-per-module view. Detail per module is in
 | 11.1 | Idempotency-Key header | 🔴 |
 | 11.1 | OpenAPI 3.1 generation | 🟢 full doc (P1.10 / ADR-0028): request DTOs (CLI plugin) + **Zod-contract response schemas** (zod-to-json-schema, 82 components), tags + global bearer + public overrides post-processed (zero controller decorators), served at gated `/v1/openapi.json` (`tenant:manage` + `OPENAPI_ENABLED`) + **Swagger UI** at web `/admin/api-docs`. Emits valid 3.0.0 (3.1 bump = TD; self-host UI assets = TD) |
 | 11.2 | GraphQL (BFF) | 🔴 |
-| 11.3 | WebSocket APIs | 🔴 |
+| 11.3 | WebSocket APIs | 🟡 `/v1/realtime` gateway live (P2.3 / ADR-0035): typed JSON protocol in `@cmc/contracts/realtime`, auth + tenant + RBAC scoped subscriptions. Not in the OpenAPI doc (WS ≠ REST); browser client = follow-on |
 | 11.4 | Internal gRPC / mTLS | 🔴 |
 | 11.5 | External APIs (keys, webhooks) | 🔴 |
 | 11.6 | API versioning + sunset headers | 🟡 `/v1` versioning live (P1.9 / ADR-0027); sunset/deprecation headers deferred — nothing to deprecate yet |

@@ -26,6 +26,7 @@ import { OpenApiModule } from "./modules/openapi/openapi.module";
 import { MailModule } from "./common/mail/mail.module";
 import { EventsModule } from "./modules/events/events.module";
 import { AnalyticsModule } from "./modules/analytics/analytics.module";
+import { RealtimeModule } from "./modules/realtime/realtime.module";
 import { TenantContextModule } from "./common/tenant-context/tenant-context.module";
 import { TenantContextMiddleware } from "./common/tenant-context/tenant-context.middleware";
 import { TenantContextService } from "./common/tenant-context/tenant-context.service";
@@ -87,6 +88,7 @@ import { loadConfig } from "./config/configuration";
     MailModule,
     EventsModule,
     AnalyticsModule,
+    RealtimeModule,
 
     // --- Domain modules ---
     HealthModule,

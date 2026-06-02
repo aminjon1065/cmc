@@ -461,11 +461,20 @@ These close gaps from current `main` that **cannot wait** for any new module.
 - **Live-validated**: 160 Postgres audit rows → 160 CH `audit_events` (exact); `audit_daily_stats` MV → `user.login 88, incident.created 15, …`. Suite **223/223** (+4 tests). ADR-0034.
 **Depends on:** P2.1 ✅, P2.5 ✅.
 
-### P2.3 — WebSocket gateway (separate NestJS app)
+### P2.3 — WebSocket gateway ✅ **COMPLETED 2026-06-02**
 **Why:** Realtime plane.
 **Cost:** L (1–2 wk).
-**How:** new app `apps/realtime` (NestJS w/ `@nestjs/websockets`). JWT verified on upgrade (shared `JWT_SECRET`). Subject pattern `tenant:X:domain:Y:resource:Z`. Subscribes to NATS subjects and re-publishes filtered by subscription patterns. Per-subscription permission check via P1.1 RBAC. Redis pub/sub for cross-instance fanout (forward-looking; single instance today).
-**Depends on:** P2.1, P1.1.
+**Decision (P2.3a):** built **in `apps/api`**, not a separate `apps/realtime` app — reuses the global `JwtService`, P1.1 `RbacService` (P2.3b), the NATS connection, config, and the test harness; the gateway is kept modular so it can be extracted to its own app when WS load justifies isolating it. Native `ws` (standard browser WebSocket, no client lib), attached to the existing HTTP server's `upgrade` event (no Nest WS adapter → zero blast radius on the suite).
+**Delivered (P2.3a — gateway + auth + subscriptions):**
+- `RealtimeModule` (@Global): a `noServer` `ws` server hooked to the HTTP `upgrade` event at bootstrap (gated `REALTIME_ENABLED`). **Auth before handshake** — `WsAuthService` verifies the access JWT (HS256+issuer, like `TenantContextMiddleware`) + confirms the session is active; failed auth → plain `401`, no `101`. Token via the `cmc-bearer` subprotocol (preferred) or `?access_token=` fallback.
+- JSON protocol (`@cmc/contracts/realtime`): `subscribe`/`unsubscribe`/`ping` ⇄ `welcome`/`subscribed`/`unsubscribed`/`event`/`pong`/`error`. **Tenant-isolated subscriptions** — a pattern must be literally `tenant.<ownTenantId>.…` (cross-tenant / `tenant.*` / `system` rejected). In-memory `RealtimeRegistryService` (NATS-style subject matcher) + `broadcast()` fan-out seam + `GET /v1/realtime/status` (`tenant:manage`).
+- **Validated**: suite **235/235** (30 suites; +12 incl. pure matcher + live sockets), eslint/tsc/build clean; live smoke (booted API, real WS) — subprotocol auth → welcome → own-tenant subscribe accepted / wildcard rejected → ping/pong → status.
+**Delivered (P2.3b — NATS fan-out + RBAC):**
+- `RealtimeFanoutSubscriber`: **ephemeral** JetStream consumer (per-process — realtime is fan-out, not a work queue, so every instance sees every event; a shared durable would load-balance and starve sockets), `DeliverPolicy.New` (live, not history), filter `tenant.>` → `registry.broadcast()` to matching sockets; best-effort ack; `nats` dynamic-imported.
+- **Per-subscription RBAC** (fail-closed): a `subject → permission` map (`incident → incident:read`; unmapped / wildcard-aggregate → rejected) checked against permissions resolved **once at connect** (`RbacService.resolvePermissions`). A role-less user is rejected even within its own tenant.
+- **Validated**: suite **237/237** (30 suites; +2 RBAC tests, 14 realtime total), eslint/tsc/build clean. **Full-chain live smoke** (NATS on): `POST /v1/incidents` → outbox → relay → NATS → ephemeral fan-out → `broadcast()` → subscribed WS socket received `tenant.<id>.incident.created.v1`. ADR-0035.
+**Deferred (follow-on):** browser client hook/UI (pairs with P2.6 dashboard); **Redis pub/sub** cross-instance fan-out (multi-instance scale); mid-connection RBAC-revocation (bounded by session TTL today).
+**Depends on:** P2.1 ✅, P1.1 ✅.
 
 ### P2.4 — Notifications consumed from events ✅ **COMPLETED 2026-06-01**
 **Why:** decouple incident-triggers-notification from a direct service call.
@@ -486,11 +495,15 @@ These close gaps from current `main` that **cannot wait** for any new module.
 **Depends on:** P2.1 ✅.
 **Unblocks:** P2.2, P2.6.
 
-### P2.6 — Dashboard data — replace hardcoded arrays
-**Why:** the dashboard demo data has been visible since 0.0.1 — replace with CH-backed metrics.
+### P2.6 — Dashboard data — CH-backed metrics ✅ **COMPLETED 2026-06-02**
+**Why:** add the historical analytics the OLTP snapshot can't serve (the snapshot widgets already went real in P1.5c).
 **Cost:** M (3–5 d).
-**How:** `MetricsService` in the API that runs ClickHouse queries; dashboard server component reads through `authedApiFetch('/v1/metrics/...')`.
-**Depends on:** P2.5.
+**Delivered:**
+- `DashboardAnalyticsService` (in `AnalyticsModule`) reads the P2.5 daily-by-region MV → a **daily incident trend**; **tenant-scoped** (CH has no RLS → `WHERE tenant_id`, UUID-asserted), pure `buildDailyTrend` gap-fills to a continuous window (clamped 1–90), **graceful** (`source: unavailable`) when CH is off. `GET /v1/analytics/dashboard` (`incident:read`) — under `/v1/analytics`, not `/v1/metrics` (the latter is the Prometheus scrape, P0.7).
+- **Web**: dashboard server component fetches it; new `TrendChart` bar widget; degrades to "analytics unavailable".
+- **Validated**: suite **244/244** (31 suites; +7), API+web `tsc`/lint/build clean, no migration. **Live smoke** (real CH): `source=clickhouse`, 14 gap-filled points; create incident → today's bucket `2 → 3`. ADR-0036.
+**Deferred:** more CH widgets (by-region trend, audit activity, MTTR); realtime dashboard refresh via P2.3.
+**Depends on:** P2.5 ✅.
 
 ### P2.7 — GIS substrate (schemas + RLS + endpoints)
 **Why:** the platform's spatial commitment. Phase-2 entry into the GIS plane.

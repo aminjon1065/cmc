@@ -86,6 +86,10 @@ const RESPONSE_SCHEMA: Record<string, string> = {
   // events relay
   "get /v1/events/relay/status": "EventRelayStatusResponse",
   "post /v1/events/relay/flush": "EventRelayFlushResponse",
+  // realtime
+  "get /v1/realtime/status": "RealtimeStatusResponse",
+  // analytics
+  "get /v1/analytics/dashboard": "DashboardAnalyticsResponse",
 };
 
 /**
@@ -117,6 +121,8 @@ const TAG_BY_PREFIX: Array<[string, string]> = [
   ["/v1/branding", "branding"],
   ["/v1/audit", "audit"],
   ["/v1/events", "events"],
+  ["/v1/realtime", "realtime"],
+  ["/v1/analytics", "analytics"],
 ];
 
 /**

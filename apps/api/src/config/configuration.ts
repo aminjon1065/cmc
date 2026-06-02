@@ -56,6 +56,18 @@ const EnvSchema = z.object({
   EVENTS_RELAY_INTERVAL_SEC: z.coerce.number().int().min(0).default(5),
   EVENTS_RELAY_BATCH_SIZE: z.coerce.number().int().positive().default(200),
 
+  // --- Realtime / WebSocket gateway (P2.3 / ADR-0035) ---
+  // The realtime plane pushes events to browsers over a WebSocket at
+  // `/v1/realtime`. ENABLED gates the gateway hooking the HTTP upgrade event —
+  // off means the endpoint simply isn't there (no socket accepts). On by
+  // default (single-process; splits to apps/realtime at scale). MAX_SUBSCRIPTIONS
+  // caps per-connection subscriptions to bound memory against a hostile client.
+  REALTIME_ENABLED: z
+    .string()
+    .default("true")
+    .transform((v) => v.toLowerCase() !== "false"),
+  REALTIME_MAX_SUBSCRIPTIONS: z.coerce.number().int().positive().default(100),
+
   // --- ClickHouse — analytical store (P2.5 / ADR-0033) ---
   // The incident projection consumer (P2.5b) writes events to ClickHouse for
   // analytics. Gated by CLICKHOUSE_ENABLED so dev/test/CI don't require it.
