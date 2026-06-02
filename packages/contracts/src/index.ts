@@ -23,3 +23,4 @@ export * from "./realtime";
 export * from "./analytics";
 export * from "./gis";
 export * from "./search";
+export * from "./folder";

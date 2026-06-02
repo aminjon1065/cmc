@@ -2,6 +2,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUUID,
   Matches,
   MaxLength,
   Min,
@@ -32,4 +33,9 @@ export class UploadInitDto {
   @IsString()
   @MaxLength(2000)
   description?: string;
+
+  /** File the document into this folder on creation (P3.3). */
+  @IsOptional()
+  @IsUUID()
+  folderId?: string;
 }

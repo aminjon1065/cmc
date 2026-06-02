@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import {
   BadRequestException,
   ForbiddenException,
@@ -14,12 +15,21 @@ import { TenantContextService } from "../../common/tenant-context/tenant-context
 import { AuditService } from "../audit/audit.service";
 import { StorageService } from "../storage/storage.service";
 import { PreviewService } from "../previews/preview.service";
+import { FoldersService } from "../folders/folders.service";
+import { FolderAccessService } from "../folders/folder-access.service";
 
 export type ListDocumentsParams = {
   q?: string;
   limit?: number;
   offset?: number;
+  folderId?: string;
 };
+
+type DocRow = typeof schema.documents.$inferSelect;
+
+function msg(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
 
 @Injectable()
 export class DocumentsService {
@@ -31,8 +41,26 @@ export class DocumentsService {
     private readonly storage: StorageService,
     private readonly audit: AuditService,
     private readonly previews: PreviewService,
+    private readonly folders: FoldersService,
+    private readonly folderAccess: FolderAccessService,
     private readonly config: ConfigService<AppConfig, true>,
   ) {}
+
+  /**
+   * Filing into a folder requires write access to it (P3.3b): 400 if the folder
+   * is gone, 403 if it's a restricted folder the caller can't write.
+   */
+  private async assertFolder(folderId: string | null | undefined): Promise<void> {
+    if (!folderId) return;
+    await this.folderAccess.assertCanFileInto(folderId);
+  }
+
+  /** 404 a document whose folder is in a restricted subtree the caller can't read. */
+  private async assertDocReadable(folderId: string | null): Promise<void> {
+    if (!(await this.folderAccess.canReadDocumentFolder(folderId))) {
+      throw new NotFoundException();
+    }
+  }
 
   // ---------- upload init ----------
 
@@ -41,6 +69,7 @@ export class DocumentsService {
     mimeType: string;
     sizeBytes: number;
     description?: string | null;
+    folderId?: string | null;
   }) {
     const ctx = this.tenantContext.requireCurrent();
 
@@ -50,6 +79,7 @@ export class DocumentsService {
         `File exceeds the ${max} byte limit (declared ${input.sizeBytes}).`,
       );
     }
+    await this.assertFolder(input.folderId);
 
     const bucket = this.config.get("S3_BUCKET_FILES", { infer: true });
 
@@ -69,6 +99,7 @@ export class DocumentsService {
           storageKey: "pending",
           status: "uploading",
           uploadedBy: ctx.userId,
+          folderId: input.folderId ?? null,
         })
         .returning(),
     );
@@ -176,7 +207,8 @@ export class DocumentsService {
       metadata: { sizeBytes: head.contentLength, etag: head.etag },
     });
 
-    // Best-effort: queue a preview (thumbnail/poster). Never blocks finalize.
+    // Record v1 (P3.4) + queue a preview — both best-effort, never block finalize.
+    await this.recordInitialVersion(updated!);
     await this.previews.enqueue(ctx.tenantId, documentId);
     return updated!;
   }
@@ -188,6 +220,7 @@ export class DocumentsService {
     mimeType: string;
     sizeBytes: number;
     description?: string | null;
+    folderId?: string | null;
   }) {
     const ctx = this.tenantContext.requireCurrent();
     const max = this.config.get("DOCUMENTS_MAX_UPLOAD_BYTES", { infer: true });
@@ -196,6 +229,7 @@ export class DocumentsService {
         `File exceeds the ${max} byte limit (declared ${input.sizeBytes}).`,
       );
     }
+    await this.assertFolder(input.folderId);
 
     const bucket = this.config.get("S3_BUCKET_FILES", { infer: true });
     const partSize = this.config.get("DOCUMENTS_MULTIPART_PART_SIZE", {
@@ -216,6 +250,7 @@ export class DocumentsService {
           storageKey: "pending",
           status: "uploading",
           uploadedBy: ctx.userId,
+          folderId: input.folderId ?? null,
         })
         .returning(),
     );
@@ -343,6 +378,7 @@ export class DocumentsService {
       outcome: "success",
       metadata: { sizeBytes: head.contentLength, parts: parts.length },
     });
+    await this.recordInitialVersion(updated!); // v1 (P3.4)
     await this.previews.enqueue(ctx.tenantId, documentId);
     return updated!;
   }
@@ -401,6 +437,14 @@ export class DocumentsService {
       isNull(schema.documents.deletedAt),
       eq(schema.documents.status, "ready"),
     ];
+    if (params.folderId) {
+      filters.push(eq(schema.documents.folderId, params.folderId));
+    }
+    // Hide documents in restricted subtrees the caller can't read (P3.3b).
+    const accessCond = this.folderAccess.documentListCondition(
+      await this.folderAccess.resolveContext(),
+    );
+    if (accessCond) filters.push(accessCond);
     if (params.q) {
       // Escape LIKE wildcards from user input so the search is a literal
       // substring match, not a pattern. `\` itself must be escaped first.
@@ -460,11 +504,335 @@ export class DocumentsService {
     return doc;
   }
 
+  /** Like getByIdOrFail, but also 404s docs in a restricted folder (P3.3b). */
+  async getReadableOrFail(id: string) {
+    const doc = await this.getByIdOrFail(id);
+    await this.assertDocReadable(doc.folderId);
+    return doc;
+  }
+
+  /** Re-file a document into `folderId` (null = unfile) (P3.3 / ADR-0047). */
+  async moveToFolder(documentId: string, folderId: string | null) {
+    const ctx = this.tenantContext.requireCurrent();
+    // Must be able to see the document (its current folder) AND write the target.
+    await this.getReadableOrFail(documentId);
+    await this.assertFolder(folderId);
+    const updated = await this.tenantDb.run((tx) =>
+      tx
+        .update(schema.documents)
+        .set({ folderId, updatedAt: sql`now()` })
+        .where(eq(schema.documents.id, documentId))
+        .returning(),
+    );
+    await this.audit.record({
+      tenantId: ctx.tenantId,
+      actorId: ctx.userId,
+      actorType: "user",
+      action: "document.moved",
+      resourceType: "document",
+      resourceId: documentId,
+      outcome: "success",
+      metadata: { folderId },
+    });
+    return updated[0]!;
+  }
+
+  // ---------- versioning (P3.4 / ADR-0049) ----------
+
+  /** Best-effort SHA-256 hex of an object, or null (over the cap or on error). */
+  private async contentHash(
+    bucket: string,
+    key: string,
+    sizeBytes: number | null | undefined,
+  ): Promise<string | null> {
+    const cap = this.config.get("DOCUMENTS_HASH_MAX_BYTES", { infer: true });
+    if (sizeBytes != null && sizeBytes > cap) return null;
+    try {
+      const bytes = await this.storage.getObjectBytes({ bucket, key });
+      if (bytes.length > cap) return null;
+      return createHash("sha256").update(bytes).digest("hex");
+    } catch (err) {
+      this.logger.warn(`content hash failed for ${bucket}/${key}: ${msg(err)}`);
+      return null;
+    }
+  }
+
+  /** Insert v1 for a freshly-ready document (idempotent on the unique index). */
+  private async recordInitialVersion(doc: DocRow): Promise<void> {
+    try {
+      const hash = await this.contentHash(
+        doc.storageBucket,
+        doc.storageKey,
+        doc.sizeBytes,
+      );
+      await this.tenantDb.run((tx) =>
+        tx
+          .insert(schema.documentVersions)
+          .values({
+            tenantId: doc.tenantId,
+            documentId: doc.id,
+            versionNo: 1,
+            storageKey: doc.storageKey,
+            sizeBytes: doc.sizeBytes,
+            etag: doc.etag,
+            contentHash: hash,
+            mimeType: doc.mimeType,
+            uploadedBy: doc.uploadedBy,
+          })
+          .onConflictDoNothing(),
+      );
+    } catch (err) {
+      this.logger.warn(`v1 record failed for ${doc.id}: ${msg(err)}`);
+    }
+  }
+
+  /** Write access to a document's folder, if it's filed (P3.3b). */
+  private async assertDocWritable(folderId: string | null): Promise<void> {
+    if (folderId) await this.folderAccess.assertCanFileInto(folderId);
+  }
+
+  /** Start a new-version upload — returns a presigned PUT to a fresh key. */
+  async initVersion(
+    documentId: string,
+    input: { sizeBytes: number; mimeType?: string },
+  ) {
+    const ctx = this.tenantContext.requireCurrent();
+    const doc = await this.getReadableOrFail(documentId);
+    await this.assertDocWritable(doc.folderId);
+    if (doc.status !== "ready") {
+      throw new BadRequestException("Document is not ready.");
+    }
+    const max = this.config.get("DOCUMENTS_MAX_UPLOAD_BYTES", { infer: true });
+    if (input.sizeBytes > max) {
+      throw new BadRequestException(`File exceeds the ${max} byte limit.`);
+    }
+
+    const nextNo = (await this.maxVersionNo(documentId)) + 1;
+    const mimeType = input.mimeType ?? doc.mimeType;
+    const key = `${this.buildStorageKey(ctx.tenantId, documentId)}/v${nextNo}`;
+
+    const ttl = this.config.get("DOCUMENTS_UPLOAD_URL_TTL_SEC", { infer: true });
+    const upload = await this.storage.presignPut({
+      bucket: doc.storageBucket,
+      key,
+      contentType: mimeType,
+      contentLength: input.sizeBytes,
+      ttlSec: ttl,
+    });
+
+    // Stash the pending version in metadata (server-trusted, like multipart).
+    await this.tenantDb.run((tx) =>
+      tx
+        .update(schema.documents)
+        .set({
+          metadata: sql`coalesce(metadata, '{}'::jsonb) || ${JSON.stringify({
+            pendingVersion: {
+              versionNo: nextNo,
+              storageKey: key,
+              mimeType,
+              sizeBytes: input.sizeBytes,
+            },
+          })}::jsonb`,
+          updatedAt: sql`now()`,
+        })
+        .where(eq(schema.documents.id, documentId)),
+    );
+
+    const document = await this.getByIdOrFail(documentId);
+    return { document, versionNo: nextNo, upload };
+  }
+
+  /** Finalize the pending version → record it + make it current. */
+  async finalizeVersion(documentId: string) {
+    const ctx = this.tenantContext.requireCurrent();
+    const doc = await this.getReadableOrFail(documentId);
+    await this.assertDocWritable(doc.folderId);
+
+    const pending = (
+      doc.metadata as {
+        pendingVersion?: {
+          versionNo: number;
+          storageKey: string;
+          mimeType: string;
+          sizeBytes: number;
+        };
+      } | null
+    )?.pendingVersion;
+    if (!pending) {
+      throw new BadRequestException("No pending version to finalize.");
+    }
+
+    const head = await this.storage.head({
+      bucket: doc.storageBucket,
+      key: pending.storageKey,
+    });
+    if (!head.exists) {
+      throw new BadRequestException("Version upload not completed.");
+    }
+
+    const hash = await this.contentHash(
+      doc.storageBucket,
+      pending.storageKey,
+      head.contentLength,
+    );
+
+    await this.tenantDb.run(async (tx) => {
+      await tx.insert(schema.documentVersions).values({
+        tenantId: ctx.tenantId,
+        documentId,
+        versionNo: pending.versionNo,
+        storageKey: pending.storageKey,
+        sizeBytes: head.contentLength ?? pending.sizeBytes,
+        etag: head.etag ?? null,
+        contentHash: hash,
+        mimeType: pending.mimeType,
+        uploadedBy: ctx.userId,
+      });
+      // Repoint the document at the new version (denormalised) + drop pending.
+      await tx
+        .update(schema.documents)
+        .set({
+          currentVersionNo: pending.versionNo,
+          storageKey: pending.storageKey,
+          etag: head.etag ?? null,
+          sizeBytes: head.contentLength ?? pending.sizeBytes,
+          mimeType: pending.mimeType,
+          metadata: sql`(coalesce(metadata, '{}'::jsonb) - 'pendingVersion')`,
+          updatedAt: sql`now()`,
+        })
+        .where(eq(schema.documents.id, documentId));
+    });
+
+    await this.audit.record({
+      tenantId: ctx.tenantId,
+      actorId: ctx.userId,
+      actorType: "user",
+      action: "document.version_added",
+      resourceType: "document",
+      resourceId: documentId,
+      outcome: "success",
+      metadata: { versionNo: pending.versionNo },
+    });
+    await this.previews.enqueue(ctx.tenantId, documentId);
+    return this.getByIdOrFail(documentId);
+  }
+
+  async listVersions(documentId: string) {
+    await this.getReadableOrFail(documentId);
+    const doc = await this.getByIdOrFail(documentId);
+    const rows = await this.tenantDb.run((tx) =>
+      tx
+        .select()
+        .from(schema.documentVersions)
+        .where(eq(schema.documentVersions.documentId, documentId))
+        .orderBy(desc(schema.documentVersions.versionNo)),
+    );
+    return rows.map((r) => ({
+      versionNo: r.versionNo,
+      sizeBytes: r.sizeBytes,
+      etag: r.etag,
+      contentHash: r.contentHash,
+      mimeType: r.mimeType,
+      uploadedBy: r.uploadedBy,
+      isCurrent: r.versionNo === doc.currentVersionNo,
+      createdAt: r.createdAt.toISOString(),
+    }));
+  }
+
+  async signVersionDownload(documentId: string, versionNo: number) {
+    const doc = await this.getReadableOrFail(documentId);
+    const version = (
+      await this.tenantDb.run((tx) =>
+        tx
+          .select()
+          .from(schema.documentVersions)
+          .where(
+            and(
+              eq(schema.documentVersions.documentId, documentId),
+              eq(schema.documentVersions.versionNo, versionNo),
+            ),
+          )
+          .limit(1),
+      )
+    )[0];
+    if (!version) throw new NotFoundException("Version not found.");
+
+    const ttl = this.config.get("DOCUMENTS_DOWNLOAD_URL_TTL_SEC", {
+      infer: true,
+    });
+    return this.storage.presignGet({
+      bucket: doc.storageBucket,
+      key: version.storageKey,
+      downloadFilename: `${doc.name}.v${versionNo}`,
+      contentType: version.mimeType,
+      ttlSec: ttl,
+    });
+  }
+
+  /** Make an existing version current again (rollback) — repoints, no new bytes. */
+  async restoreVersion(documentId: string, versionNo: number) {
+    const ctx = this.tenantContext.requireCurrent();
+    const doc = await this.getReadableOrFail(documentId);
+    await this.assertDocWritable(doc.folderId);
+    const version = (
+      await this.tenantDb.run((tx) =>
+        tx
+          .select()
+          .from(schema.documentVersions)
+          .where(
+            and(
+              eq(schema.documentVersions.documentId, documentId),
+              eq(schema.documentVersions.versionNo, versionNo),
+            ),
+          )
+          .limit(1),
+      )
+    )[0];
+    if (!version) throw new NotFoundException("Version not found.");
+
+    await this.tenantDb.run((tx) =>
+      tx
+        .update(schema.documents)
+        .set({
+          currentVersionNo: version.versionNo,
+          storageKey: version.storageKey,
+          etag: version.etag,
+          sizeBytes: version.sizeBytes,
+          mimeType: version.mimeType,
+          updatedAt: sql`now()`,
+        })
+        .where(eq(schema.documents.id, documentId)),
+    );
+    await this.audit.record({
+      tenantId: ctx.tenantId,
+      actorId: ctx.userId,
+      actorType: "user",
+      action: "document.version_restored",
+      resourceType: "document",
+      resourceId: documentId,
+      outcome: "success",
+      metadata: { versionNo },
+    });
+    return this.getByIdOrFail(documentId);
+  }
+
+  private async maxVersionNo(documentId: string): Promise<number> {
+    const row = (
+      await this.tenantDb.run((tx) =>
+        tx
+          .select({ max: sql<number>`coalesce(max(version_no), 0)::int` })
+          .from(schema.documentVersions)
+          .where(eq(schema.documentVersions.documentId, documentId)),
+      )
+    )[0];
+    return row?.max ?? 0;
+  }
+
   // ---------- download ----------
 
   async signDownload(documentId: string) {
     const ctx = this.tenantContext.requireCurrent();
-    const doc = await this.getByIdOrFail(documentId);
+    const doc = await this.getReadableOrFail(documentId);
     if (doc.status !== "ready") {
       throw new BadRequestException("Document is not ready for download.");
     }
@@ -495,7 +863,7 @@ export class DocumentsService {
 
   /** Pre-signed GET for a document's image preview (P2.13). 404 if none. */
   async signPreviewUrl(documentId: string) {
-    const doc = await this.getByIdOrFail(documentId);
+    const doc = await this.getReadableOrFail(documentId);
     const previews =
       (doc.metadata as { previews?: Record<string, string> } | null)
         ?.previews ?? {};
@@ -518,7 +886,12 @@ export class DocumentsService {
 
   async softDelete(documentId: string) {
     const ctx = this.tenantContext.requireCurrent();
-    const existing = await this.getByIdOrFail(documentId);
+    const existing = await this.getReadableOrFail(documentId);
+    if (existing.legalHold) {
+      throw new ForbiddenException(
+        "Document is under legal hold and cannot be deleted.",
+      );
+    }
 
     await this.tenantDb.run((tx) =>
       tx
@@ -553,6 +926,57 @@ export class DocumentsService {
       outcome: "success",
       metadata: { name: existing.name },
     });
+  }
+
+  // ---------- retention + legal hold (P3.5 / ADR-0050) ----------
+
+  /** Set/clear a document's retention override (null = inherit folder policy). */
+  async setRetention(documentId: string, retentionDays: number | null) {
+    const ctx = this.tenantContext.requireCurrent();
+    const doc = await this.getReadableOrFail(documentId);
+    await this.assertDocWritable(doc.folderId);
+    const [updated] = await this.tenantDb.run((tx) =>
+      tx
+        .update(schema.documents)
+        .set({ retentionDays, updatedAt: sql`now()` })
+        .where(eq(schema.documents.id, documentId))
+        .returning(),
+    );
+    await this.audit.record({
+      tenantId: ctx.tenantId,
+      actorId: ctx.userId,
+      actorType: "user",
+      action: "document.retention_set",
+      resourceType: "document",
+      resourceId: documentId,
+      outcome: "success",
+      metadata: { retentionDays },
+    });
+    return updated!;
+  }
+
+  /** Place / lift a legal hold (suspends retention + manual deletion). */
+  async setLegalHold(documentId: string, hold: boolean) {
+    const ctx = this.tenantContext.requireCurrent();
+    const doc = await this.getReadableOrFail(documentId);
+    await this.assertDocWritable(doc.folderId);
+    const [updated] = await this.tenantDb.run((tx) =>
+      tx
+        .update(schema.documents)
+        .set({ legalHold: hold, updatedAt: sql`now()` })
+        .where(eq(schema.documents.id, documentId))
+        .returning(),
+    );
+    await this.audit.record({
+      tenantId: ctx.tenantId,
+      actorId: ctx.userId,
+      actorType: "user",
+      action: hold ? "document.legal_hold_set" : "document.legal_hold_cleared",
+      resourceType: "document",
+      resourceId: documentId,
+      outcome: "success",
+    });
+    return updated!;
   }
 
   // ---------- internal ----------

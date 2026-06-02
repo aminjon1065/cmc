@@ -624,16 +624,40 @@ Workflow: severity-declared → assemble responders (by region + role) → page 
 **Deferred (the plan's fuller vision):** responder model by region+role / on-call rotations; external paging (PagerDuty/Opsgenie); war-room thread (needs a chat module); post-mortem template generation on resolve; multi-tier escalation policies; explicit ack action.
 **Depends on:** P3.1, P1.6.
 
-### P3.3 — Folder model + permission inheritance for files
+### P3.3 — Folder model + permission inheritance for files ✅ **DONE (2026-06-02)**
 ToR §9.1, §9.2. `ltree` paths. Inheritance algorithm in service + decision cache.
+**Decisions (confirmed):** folder tree first (defer ACL inheritance to P3.3b); store the tree as an **ltree materialised path**.
+**Delivered (P3.3a — folder tree + document filing):**
+- `folders` table: **ltree path** of id-labels (root→self), GiST-indexed, `parent_id` alongside, RLS (two-GUC), soft-delete. `documents.folder_id` (nullable, `ON DELETE SET NULL`). Migration 0021 (`CREATE EXTENSION ltree` + GiST + RLS). ltree custom drizzle type; self-FK via `AnyPgColumn`.
+- **FoldersService/Controller** (`folder:read/write/delete`): create (path computed app-side), rename (name only — id-labels mean no repath), **move** (validate parent, reject cycle `newParent <@ self`, **repath subtree in one statement**, reparent), tree (path-ordered), soft-delete subtree + **unfile** its documents. **Document↔folder linking**: `folderId` on upload-init/multipart-init (validated), `GET /documents?folderId=`, `POST /documents/:id/move`, `folderId` on the `Document` contract. `folder:*` perms in the catalog + seeded (operator/auditor; tenant_admin via `*`).
+- **Validated**: suite **304/304** (39 suites; +9), `tsc`/`eslint`/`nest build` clean. e2e `folders` (real Postgres+RLS+ltree): create/depth, tree order, rename-no-repath, move+subtree-repath, cycle→400, delete-subtree+unfile, upload-init filing + unknown-folder 400, `?folderId=` filter + doc move/unfile, RBAC 403. **Gotcha:** `subpath(path, nlevel(oldPath))` errors on the moved folder's own row (offset==nlevel) → repath uses a `CASE` for the self row.
+**Delivered (P3.3b — permission inheritance):**
+- **Restricted subtrees** (`folders.restricted`): a folder + descendants visible only to grant-holders + `folder:manage` admins + the creator; unrestricted folders keep tenant-wide RBAC. **`folder_grants`** (polymorphic user/role subject, read/write access, RLS) inherit **down** the subtree → access(F) ⇔ a grant/creation on any ancestor-or-self (`F.path <@ grantPath`). **`FolderAccessService`** resolves a per-user context (admin + RBAC fallbacks + read/write grant paths + restricted paths) with a **Redis decision cache** (`cmc:folderacc:*`, 60 s, invalidated tenant-wide on restrict/grant/structure changes).
+- **Enforcement**: folders tree filters / getOne 404 / write-gated create-move-rename-delete; documents list correlated-ltree filter + getOne/download/preview 404 + filing requires write on target. `PATCH /folders/:id/restrict` + `POST|GET|DELETE /folders/:id/grants` gated on new **`folder:manage`** perm; audited.
+- **Validated**: suite **310/310** (40 suites; +6), `tsc`/`eslint`/`nest build` clean, migration 0022. e2e `folder-access`: restricted hidden + admin bypass; user grant; role grant (all members); read≠write; documents filtered + 404; creator bypass. ADR-0048.
+**Deferred:** allow/deny ACL (only widening grants); access-filtering of `/v1/search` results; per-subject (vs tenant-wide) cache invalidation; grant web UI.
 **Depends on:** P1.1.
 
-### P3.4 — Document versioning
+### P3.4 — Document versioning ✅ **DONE (2026-06-02)**
 `document_versions` child table. Storage-side copy-on-write (object dedup by content hash where MinIO supports it).
+**Decisions (confirmed):** explicit new-version upload; capture content_hash, separate objects (defer byte-dedup).
+**Delivered:**
+- **`document_versions`** (immutable per-version row: version_no, storage_key, size, etag, `content_hash`, mime, uploaded_by; RLS) + **`documents.current_version_no`** with the row **denormalising** the current version's bytes (download/list/preview unchanged). v1 created at finalize/complete; **existing docs backfilled** to v1 (migration 0023).
+- **New-version upload**: `POST /documents/:id/versions` (presigned PUT to `…/vN`, pending stashed server-side in metadata) → `…/versions/finalize` (HEAD → record → repoint current). **`GET /documents/:id/versions`**, **`…/versions/:n/download-url`** (any version's bytes), **`…/versions/:n/restore`** (rollback — repoint, no new bytes). Best-effort **SHA-256** at finalize (size-capped `DOCUMENTS_HASH_MAX_BYTES`, default 50 MiB). Version reads inherit folder access (P3.3b); writes require folder write; audited.
+- **Validated**: suite **314/314** (41 suites; +4), `tsc`/`eslint`/`nest build` clean, migration 0023. e2e `documents-versions` (real MinIO): v1+hash; new version bumps current + old versions downloadable + distinct hashes; restore rolls back (no new row); unknown version 404.
+- **ADR-0049**.
+**Deferred:** byte-level dedup (shared objects + refcount GC); hash for over-cap files; orphaned-version-object janitor; diff/compare + web UI.
 **Depends on:** P3.3.
 
-### P3.5 — Retention policies + legal hold
+### P3.5 — Retention policies + legal hold ✅ **DONE (2026-06-02)**
 Per-folder + per-document rules. Nightly retention sweeper. Legal-hold flag suspends deletion.
+**Decisions (confirmed):** per-folder rule inherited (ltree) + per-doc override; soft-delete on expiry; @nestjs/schedule daily cron (gated + manual flush).
+**Delivered:**
+- **`folders.retention_days`** (inherited down) + **`documents.retention_days`** (override) + **`documents.legal_hold`**; migration 0024. Effective retention = COALESCE(doc override, nearest ancestor folder policy via ltree `<@`); expiry = `updated_at + days`; null/legal-hold = kept.
+- **`RetentionService`**: `@Cron(EVERY_DAY_AT_2AM)` gated by `RETENTION_ENABLED` (off by default — no surprise auto-delete) + `sweep(tenantId?)` (privileged CTE soft-delete, per-tenant audit summary, sealer-chained). **`POST /documents/retention/sweep`** (`document:delete`, tenant-scoped, always runs). Endpoints: `PATCH /folders/:id/retention` (`folder:write`), `POST /documents/:id/retention` + `…/legal-hold` (`document:write`). `softDelete` blocked under legal hold (403). Contracts gain `retentionDays` (folder+doc) + `legalHold` (doc).
+- **Validated**: suite **320/320** (42 suites; +6), `tsc`/`eslint`/`nest build` clean, migration 0024. e2e `documents-retention`: inherited policy soft-deletes expired; no-policy kept; per-doc override wins; legal hold suspends sweep + blocks delete (then lift→204); fields surfaced via API.
+- **ADR-0050**.
+**Deferred:** hard-purge job (reclaim object bytes); folder-level legal hold + dedicated compliance perm; explicit per-doc expiry date (vs `updated_at` anchor); retention for non-document domains.
 **Depends on:** P3.4.
 
 ### P3.6 — OpenSearch + permission-aware indexing

@@ -233,13 +233,13 @@ The static `/dashboard` page is a fixed-layout demo, not a builder. ToR §3.7 re
 - Soft-delete with best-effort object delete
 
 **Gaps vs ToR §9 (Enterprise File Management)**
-- No hierarchical folder model (no `folders` table, no `ltree` path)
-- No permission inheritance
-- No versioning (`document_versions` child table)
+- ~~No hierarchical folder model~~ ✅ **Folder tree (P3.3a / ADR-0047):** `folders` (ltree materialised path of id-labels, GiST, RLS, soft-delete) + `/v1/folders` CRUD + subtree move (repath) + cycle guard; documents file/unfile/move via `documents.folder_id`; `folder:*` RBAC
+- ~~Permission inheritance~~ ✅ **Restricted subtrees + grants (P3.3b / ADR-0048):** `folders.restricted` + `folder_grants` (user/role, read/write) inherit down the ltree subtree; `FolderAccessService` + Redis decision cache (`cmc:folderacc:*`); enforced on folders (tree/get/write) + documents (list/get/download/filing); `folder:manage` admin + creator bypass. Deferred: allow/deny ACL, `/v1/search` access-filtering
+- ~~No versioning~~ ✅ **Document versioning (P3.4 / ADR-0049):** `document_versions` (immutable per-version + SHA-256 `content_hash`) + `documents.current_version_no` (denormalised current bytes); v1 at finalize + backfill; new-version upload, list, download any version, restore/rollback. Deferred: byte-dedup + refcount GC, diff/UI
 - ~~No previews / thumbnail pipeline~~ 🟡 **Image previews (P2.13 / ADR-0043):** gated BullMQ worker + `sharp` — finalize/complete enqueues → worker renders WebP → `documents.metadata.previews` → `GET /v1/documents/:id/preview-url` (signed) + `previewKinds` on the contract. Remaining: PDF/video/audio (poppler/ffmpeg), backfill janitor, web UI
 - No EXIF / PDF metadata extraction
 - No external sharing links
-- No retention policies / legal hold
+- ~~No retention policies / legal hold~~ ✅ **Retention + legal hold (P3.5 / ADR-0050):** folder `retention_days` (inherited down ltree) + per-doc override + `legal_hold`; gated daily `RetentionService` sweep (soft-delete expired, skip holds) + manual `/documents/retention/sweep`; legal hold blocks deletion. Deferred: hard-purge, folder-level hold
 - No object-level encryption per tenant (DEK/KEK)
 - No tus.io resumable upload (today is single PUT)
 - ~~No multipart upload~~ ✅ **S3 multipart (P2.12 / ADR-0042):** `/v1/documents/multipart/{init, :id/complete, :id/abort}` — presigned part URLs, resumable, real-MinIO tested. Remaining: `ListParts`-based resume, abandoned-upload GC, range reads
@@ -268,10 +268,10 @@ The static `/dashboard` page is a fixed-layout demo, not a builder. ToR §3.7 re
 - No lifecycle states (draft → review → approved → published → archived)
 - No diff (textual / structural)
 - No classification / tagging (manual + AI)
-- No legal hold
+- ~~No legal hold~~ ✅ per-document legal hold (P3.5 / ADR-0050) — folder-level hold still pending
 - No DoD 5015.2-style records management
 - No digital signatures (eIDAS / PKCS#7)
-- No retention policies
+- ~~No retention policies~~ ✅ folder-inherited + per-doc retention with a soft-delete sweeper (P3.5 / ADR-0050) — hard-purge still pending
 
 **Complexity:** **XL**.
 

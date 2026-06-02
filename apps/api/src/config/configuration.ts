@@ -167,6 +167,23 @@ const EnvSchema = z.object({
     .int()
     .positive()
     .default(300),
+  // Versioning (P3.4 / ADR-0049): a version's SHA-256 content_hash is computed
+  // server-side by reading the object at finalize — only when its size is at/under
+  // this cap, to bound API memory (the read buffers the whole object). Larger
+  // objects get a null hash. Default 50 MiB.
+  DOCUMENTS_HASH_MAX_BYTES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(50 * 1024 * 1024),
+  // Retention sweeper (P3.5 / ADR-0050): a daily cron soft-deletes documents past
+  // their (inherited) retention, skipping legal-held ones. ENABLED gates the cron
+  // only — the manual /documents/retention/sweep endpoint always runs. Off by
+  // default so an automated delete never surprises a deploy.
+  RETENTION_ENABLED: z
+    .string()
+    .default("false")
+    .transform((v) => v.toLowerCase() === "true"),
 
   // --- Preview generation (P2.13 / ADR-0043) ---
   // BullMQ worker generates thumbnails/posters on finalize. ENABLED gates the

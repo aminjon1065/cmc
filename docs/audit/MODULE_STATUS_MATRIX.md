@@ -20,7 +20,7 @@ Compact one-row-per-module view. Detail per module is in
 | 3.5 | Analytics & Reporting | 🟡 | 24 | 7 | 7 | 7 | 7 | **ClickHouse single-shard** + **two projections** (incident events → daily-by-region MV, P2.5/ADR-0033; audit log → `audit_events` + daily-stats MV cursor ETL, P2.2/ADR-0034) + **query API**: `GET /v1/analytics/dashboard` (tenant-scoped CH incident trend, gap-filled, `incident:read`) feeding the dashboard (P2.6 / ADR-0036). Next: more MVs/widgets (by-region trend, audit activity, MTTR), saved reports |
 | 3.6 | Realtime Event System | 🟡 | 48 | 7 | 7 | 7 | 7 | **Event plane (P2.1 / ADR-0031):** NATS JetStream + transactional `outbox` + relay + incidents producer; **two durable consumers** — notifications-from-events (DeliverPolicy.New — P2.4 / ADR-0032) + ClickHouse projection (DeliverPolicy.All — P2.5 / ADR-0033), shared dedup ledger. Live-validated end-to-end + trace-correlated. **WebSocket gateway done (P2.3 / ADR-0035)** — NATS→WS fan-out to tenant-isolated, RBAC-checked subscriptions (full-chain live-smoked). Audit projection done (P2.2 / ADR-0034) |
 | 3.7 | Dashboard Builder | 🔴 | 0 | — | — | — | — | `/dashboard` now renders **real** data (snapshot from OLTP P1.5c + CH-backed incident trend P2.6/ADR-0036); still a fixed layout, no user-built/configurable dashboards |
-| 3.8 | File Management System | 🟡 | 32 | 8 | 8 | 7 | 7 | `apps/api/src/modules/storage/` — presigned single-PUT + **S3 multipart** (resumable large files: init → presigned part URLs → complete/abort, P2.12 / ADR-0042) + **image previews** (gated BullMQ worker → WebP, `preview-url`, P2.13 / ADR-0043). Next: PDF/video previews, ListParts-resume, range reads |
+| 3.8 | File Management System | 🟡 | 32 | 8 | 8 | 7 | 8 | `apps/api/src/modules/storage/` — presigned single-PUT + **S3 multipart** (P2.12 / ADR-0042) + **image previews** (gated BullMQ worker → WebP, P2.13 / ADR-0043) + **folder tree** (ltree hierarchy + per-folder permission inheritance, P3.3 / ADR-0047,0048) + **versioning** (`document_versions`, new-version upload, restore, content_hash, P3.4 / ADR-0049). Next: PDF/video previews, retention/legal-hold, range reads |
 | 3.9 | Enterprise Document Mgmt | 🟡 | 10 | 7 | 7 | 5 | 7 | `apps/api/src/modules/documents/` |
 | 3.10 | Workflow / BPM Engine | 🟡 | 16 | 6 | 7 | 6 | 6 | **Temporal (P3.1 / ADR-0045):** self-hosted Temporal (dev compose) + gated in-process worker/client seam (off by default). **Two workflows, both wired into their domain lifecycle + live-smoked through the API:** `caseSlaWorkflow` (case SLA timer, ADR-0045) and `incidentResponseWorkflow` (P3.2 / ADR-0046: page→ack-SLA→remind→escalate for severe incidents; `IncidentResponseScheduler` + RBAC reverse-lookup + notify seam). Next: approvals/automations, visual builder (P3.8) |
 | 3.11 | Chat & Messaging | 🔴 | 0 | — | — | — | — | (none) |
@@ -152,9 +152,9 @@ Compact one-row-per-module view. Detail per module is in
 
 | §9.x | Capability | Status |
 |---|---|---|
-| 9.1 | Folder model (ltree) | 🔴 |
-| 9.2 | Permissions inheritance | 🔴 |
-| 9.3 | Versioning | 🔴 |
+| 9.1 | Folder model (ltree) | 🟢 `folders` tree — ltree materialised path (id-labels → renames don't repath), GiST, RLS, soft-delete; CRUD + subtree move (repath) + cycle guard; documents file/unfile/move via `folder_id` (P3.3a / ADR-0047) |
+| 9.2 | Permissions inheritance | 🟢 **restricted subtrees + grants (P3.3b / ADR-0048):** `folders.restricted` + `folder_grants` (user/role, read/write) inherit down the ltree subtree; `FolderAccessService` + Redis decision cache; enforced on folders + documents; `folder:manage` admin/creator bypass. Deferred: allow/deny ACL, search filtering |
+| 9.3 | Versioning | 🟢 `document_versions` (immutable per-version + `content_hash`) + `documents.current_version_no` (denormalised); v1 at finalize + backfill; new-version upload, list, download-any-version, restore/rollback (P3.4 / ADR-0049). Deferred: byte-dedup, diff/UI |
 | 9.4 | Metadata extraction | 🔴 |
 | 9.5 | Previews / thumbnails | 🟡 image→WebP via gated BullMQ worker + `sharp` (P2.13 / ADR-0043): finalize enqueues → worker renders → `documents.metadata.previews` → `GET /v1/documents/:id/preview-url` (signed) + `previewKinds` on the contract. PDF/video/audio deferred (need poppler/ffmpeg) |
 | 9.6 | Internal sharing | 🟡 (within a tenant, every authed user sees everything) |
@@ -162,7 +162,7 @@ Compact one-row-per-module view. Detail per module is in
 | 9.7 | Temporary links | 🟢 (pre-signed S3 URLs) |
 | 9.8 | Encrypted storage | 🟡 (SSE depends on deploy) |
 | 9.9 | Object storage integration | 🟢 |
-| 9.10 | Retention policies | 🔴 |
+| 9.10 | Retention policies | 🟢 per-folder `retention_days` (inherited down ltree) + per-doc override + `legal_hold`; gated daily sweeper soft-deletes expired (skips holds) + manual flush; legal hold blocks deletion (P3.5 / ADR-0050). Deferred: hard-purge, folder-level hold |
 | 9.11 | Search indexing (Tika / OCR) | 🔴 |
 
 ---

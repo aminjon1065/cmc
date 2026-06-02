@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  ParseIntPipe,
   ParseUUIDPipe,
   Post,
   Query,
@@ -14,18 +15,28 @@ import {
 import type {
   Document,
   DocumentResponse,
+  DocumentVersionsListResponse,
   DownloadUrlResponse,
   FinalizeUploadResponse,
+  InitVersionResponse,
   ListDocumentsResponse,
   MultipartInitResponse,
+  RetentionSweepResponse,
   UploadInitResponse,
 } from "@cmc/contracts";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { AuthorizeGuard } from "../../common/authz/authorize.guard";
 import { Authorize } from "../../common/authz/authorize.decorator";
+import { CurrentUser } from "../../common/decorators/current-user.decorator";
+import type { TenantContext } from "../../common/tenant-context/tenant-context.service";
 import { DocumentsService } from "./documents.service";
+import { RetentionService } from "./retention.service";
 import { UploadInitDto } from "./dto/upload-init.dto";
 import { MultipartCompleteDto } from "./dto/multipart-complete.dto";
+import { MoveDocumentDto } from "./dto/move-document.dto";
+import { InitVersionDto } from "./dto/init-version.dto";
+import { SetRetentionDto } from "./dto/set-retention.dto";
+import { SetLegalHoldDto } from "./dto/set-legal-hold.dto";
 
 type DocumentRow = {
   id: string;
@@ -36,6 +47,10 @@ type DocumentRow = {
   status: string;
   uploadedBy: string;
   metadata: unknown;
+  folderId: string | null;
+  currentVersionNo: number;
+  retentionDays: number | null;
+  legalHold: boolean;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -57,6 +72,14 @@ function parsePositiveInt(raw: string | undefined): number | undefined {
   return n;
 }
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Accept only a well-formed UUID for the folder filter; a malformed value is
+// ignored (rather than reaching the SQL and erroring on the uuid cast).
+function parseUuid(raw: string | undefined): string | undefined {
+  return raw && UUID_RE.test(raw) ? raw : undefined;
+}
+
 function toContract(row: DocumentRow): Document {
   return {
     id: row.id,
@@ -69,6 +92,10 @@ function toContract(row: DocumentRow): Document {
     status: row.status as Document["status"],
     uploadedBy: row.uploadedBy,
     previewKinds: previewKindsOf(row.metadata),
+    folderId: row.folderId,
+    currentVersionNo: row.currentVersionNo,
+    retentionDays: row.retentionDays,
+    legalHold: row.legalHold,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -77,7 +104,10 @@ function toContract(row: DocumentRow): Document {
 @Controller("documents")
 @UseGuards(JwtAuthGuard, AuthorizeGuard)
 export class DocumentsController {
-  constructor(private readonly documents: DocumentsService) {}
+  constructor(
+    private readonly documents: DocumentsService,
+    private readonly retention: RetentionService,
+  ) {}
 
   @Get()
   @Authorize("document:read")
@@ -85,11 +115,13 @@ export class DocumentsController {
     @Query("q") q?: string,
     @Query("limit") limit?: string,
     @Query("offset") offset?: string,
+    @Query("folderId") folderId?: string,
   ): Promise<ListDocumentsResponse> {
     const result = await this.documents.list({
       q: q?.trim() || undefined,
       limit: parsePositiveInt(limit),
       offset: parsePositiveInt(offset),
+      folderId: parseUuid(folderId),
     });
     return {
       documents: result.items.map(toContract),
@@ -102,7 +134,7 @@ export class DocumentsController {
   async getOne(
     @Param("id", new ParseUUIDPipe()) id: string,
   ): Promise<DocumentResponse> {
-    const doc = await this.documents.getByIdOrFail(id);
+    const doc = await this.documents.getReadableOrFail(id);
     return { document: toContract(doc) };
   }
 
@@ -115,6 +147,7 @@ export class DocumentsController {
       mimeType: body.mimeType,
       sizeBytes: body.sizeBytes,
       description: body.description ?? null,
+      folderId: body.folderId ?? null,
     });
     return {
       document: toContract(document),
@@ -140,6 +173,7 @@ export class DocumentsController {
       mimeType: body.mimeType,
       sizeBytes: body.sizeBytes,
       description: body.description ?? null,
+      folderId: body.folderId ?? null,
     });
     return {
       document: toContract(r.document),
@@ -204,6 +238,119 @@ export class DocumentsController {
       url: presigned.url,
       expiresAt: presigned.expiresAt,
     };
+  }
+
+  @Post(":id/move")
+  @Authorize("document:write")
+  @HttpCode(HttpStatus.OK)
+  async move(
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Body() body: MoveDocumentDto,
+  ): Promise<DocumentResponse> {
+    const doc = await this.documents.moveToFolder(id, body.folderId);
+    return { document: toContract(doc) };
+  }
+
+  // ---------- versions (P3.4 / ADR-0049) ----------
+
+  @Get(":id/versions")
+  @Authorize("document:read")
+  async listVersions(
+    @Param("id", new ParseUUIDPipe()) id: string,
+  ): Promise<DocumentVersionsListResponse> {
+    return { versions: await this.documents.listVersions(id) };
+  }
+
+  @Post(":id/versions")
+  @Authorize("document:write")
+  @HttpCode(HttpStatus.CREATED)
+  async initVersion(
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Body() body: InitVersionDto,
+  ): Promise<InitVersionResponse> {
+    const r = await this.documents.initVersion(id, {
+      sizeBytes: body.sizeBytes,
+      mimeType: body.mimeType,
+    });
+    return {
+      document: toContract(r.document),
+      versionNo: r.versionNo,
+      upload: {
+        method: "PUT",
+        url: r.upload.url,
+        headers: r.upload.headers,
+        expiresAt: r.upload.expiresAt,
+      },
+    };
+  }
+
+  @Post(":id/versions/finalize")
+  @Authorize("document:write")
+  @HttpCode(HttpStatus.OK)
+  async finalizeVersion(
+    @Param("id", new ParseUUIDPipe()) id: string,
+  ): Promise<DocumentResponse> {
+    const doc = await this.documents.finalizeVersion(id);
+    return { document: toContract(doc) };
+  }
+
+  @Get(":id/versions/:versionNo/download-url")
+  @Authorize("document:read")
+  async versionDownloadUrl(
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Param("versionNo", ParseIntPipe) versionNo: number,
+  ): Promise<DownloadUrlResponse> {
+    const presigned = await this.documents.signVersionDownload(id, versionNo);
+    return {
+      method: "GET",
+      url: presigned.url,
+      expiresAt: presigned.expiresAt,
+    };
+  }
+
+  @Post(":id/versions/:versionNo/restore")
+  @Authorize("document:write")
+  @HttpCode(HttpStatus.OK)
+  async restoreVersion(
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Param("versionNo", ParseIntPipe) versionNo: number,
+  ): Promise<DocumentResponse> {
+    const doc = await this.documents.restoreVersion(id, versionNo);
+    return { document: toContract(doc) };
+  }
+
+  // ---------- retention + legal hold (P3.5 / ADR-0050) ----------
+
+  /** Manual sweep, scoped to the caller's tenant (the cron sweeps all tenants). */
+  @Post("retention/sweep")
+  @Authorize("document:delete")
+  @HttpCode(HttpStatus.OK)
+  async sweepRetention(
+    @CurrentUser() user: TenantContext,
+  ): Promise<RetentionSweepResponse> {
+    return { swept: await this.retention.sweep(user.tenantId) };
+  }
+
+  @Post(":id/retention")
+  @Authorize("document:write")
+  @HttpCode(HttpStatus.OK)
+  async setRetention(
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Body() body: SetRetentionDto,
+  ): Promise<DocumentResponse> {
+    const doc = await this.documents.setRetention(id, body.retentionDays);
+    return { document: toContract(doc) };
+  }
+
+  @Post(":id/legal-hold")
+  @Authorize("document:write")
+  @HttpCode(HttpStatus.OK)
+  async setLegalHold(
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Body() body: SetLegalHoldDto,
+  ): Promise<DocumentResponse> {
+    const doc = await this.documents.setLegalHold(id, body.hold);
+    return { document: toContract(doc) };
   }
 
   @Delete(":id")

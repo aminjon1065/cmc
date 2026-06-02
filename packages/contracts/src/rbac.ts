@@ -116,6 +116,20 @@ export const PERMISSION_CATALOG = [
     action: "write",
     description: "Create, edit, and delete GIS features",
   },
+  // Document folders (P3.3).
+  { domain: "folder", action: "read", description: "View folders + their tree" },
+  {
+    domain: "folder",
+    action: "write",
+    description: "Create, rename, and move folders; file documents",
+  },
+  { domain: "folder", action: "delete", description: "Delete folders" },
+  {
+    domain: "folder",
+    action: "manage",
+    description:
+      "Manage folder restrictions + grants; bypass restricted-folder access (P3.3b)",
+  },
 ] as const satisfies readonly PermissionDef[];
 
 /** Helper: the `${domain}:${action}` string for a catalog entry. */
@@ -165,6 +179,9 @@ export const SYSTEM_ROLES: readonly SystemRoleDef[] = [
       "case:resolve",
       "gis_layer:read",
       "gis_feature:write",
+      "folder:read",
+      "folder:write",
+      "folder:delete",
     ],
   },
   {
@@ -179,6 +196,7 @@ export const SYSTEM_ROLES: readonly SystemRoleDef[] = [
       "incident:read",
       "case:read",
       "gis_layer:read",
+      "folder:read",
     ],
   },
 ] as const;

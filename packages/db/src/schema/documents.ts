@@ -1,6 +1,8 @@
 import {
   bigint,
+  boolean,
   index,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -11,6 +13,7 @@ import {
 import { sql } from "drizzle-orm";
 import { tenants } from "./tenants";
 import { users } from "./users";
+import { folders } from "./folders";
 
 /**
  * A `documents` row is the metadata record for one uploaded artifact.
@@ -54,9 +57,22 @@ export const documents = pgTable(
     /** 'uploading' | 'ready' | 'failed' */
     status: varchar("status", { length: 16 }).notNull().default("uploading"),
 
+    /** Live version number; the row denormalises that version's bytes (P3.4). */
+    currentVersionNo: integer("current_version_no").notNull().default(1),
+
     uploadedBy: uuid("uploaded_by")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
+
+    /** Folder this document is filed in; null = unfiled (P3.3 / ADR-0047). */
+    folderId: uuid("folder_id").references(() => folders.id, {
+      onDelete: "set null",
+    }),
+
+    /** Retention override in days; null = inherit the folder policy (P3.5). */
+    retentionDays: integer("retention_days"),
+    /** When true, retention + manual deletion are suspended (P3.5 / ADR-0050). */
+    legalHold: boolean("legal_hold").notNull().default(false),
 
     /** Free-form structured metadata; future modules add typed schemas. */
     metadata: jsonb("metadata"),

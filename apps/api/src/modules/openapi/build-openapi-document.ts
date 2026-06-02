@@ -88,6 +88,27 @@ const RESPONSE_SCHEMA: Record<string, string> = {
   "post /v1/documents/{id}/finalize": "FinalizeUploadResponse",
   "get /v1/documents/{id}/download-url": "DownloadUrlResponse",
   "get /v1/documents/{id}/preview-url": "DownloadUrlResponse",
+  "post /v1/documents/{id}/move": "DocumentResponse",
+  // document versions (P3.4)
+  "get /v1/documents/{id}/versions": "DocumentVersionsListResponse",
+  "post /v1/documents/{id}/versions": "InitVersionResponse",
+  "post /v1/documents/{id}/versions/finalize": "DocumentResponse",
+  "get /v1/documents/{id}/versions/{versionNo}/download-url": "DownloadUrlResponse",
+  "post /v1/documents/{id}/versions/{versionNo}/restore": "DocumentResponse",
+  // retention + legal hold (P3.5)
+  "post /v1/documents/retention/sweep": "RetentionSweepResponse",
+  "post /v1/documents/{id}/retention": "DocumentResponse",
+  "post /v1/documents/{id}/legal-hold": "DocumentResponse",
+  // folders (P3.3)
+  "get /v1/folders": "FoldersListResponse",
+  "post /v1/folders": "FolderResponse",
+  "get /v1/folders/{id}": "FolderResponse",
+  "patch /v1/folders/{id}": "FolderResponse",
+  "post /v1/folders/{id}/move": "FolderResponse",
+  "patch /v1/folders/{id}/retention": "FolderResponse",
+  "patch /v1/folders/{id}/restrict": "FolderResponse",
+  "get /v1/folders/{id}/grants": "FolderGrantsListResponse",
+  "post /v1/folders/{id}/grants": "FolderGrantResponse",
   // audit chain
   "get /v1/audit/chain/verify": "AuditChainVerifyResponse",
   "post /v1/audit/chain/seal": "AuditSealResponse",

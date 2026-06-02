@@ -16,6 +16,7 @@ import { AuthModule } from "./modules/auth/auth.module";
 import { StorageModule } from "./modules/storage/storage.module";
 import { PreviewsModule } from "./modules/previews/previews.module";
 import { DocumentsModule } from "./modules/documents/documents.module";
+import { FoldersModule } from "./modules/folders/folders.module";
 import { BrandingModule } from "./modules/branding/branding.module";
 import { RbacModule } from "./modules/rbac/rbac.module";
 import { MfaModule } from "./modules/mfa/mfa.module";
@@ -105,6 +106,7 @@ import { loadConfig } from "./config/configuration";
     AuthModule,
     PasswordResetModule,
     DocumentsModule,
+    FoldersModule,
     BrandingModule,
     IncidentsModule,
     CasesModule,
