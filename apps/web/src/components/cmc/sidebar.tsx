@@ -45,7 +45,7 @@ const NAV: NavGroup[] = [
         icon: Activity,
         disabled: true,
       },
-      { id: "gis", label: "GIS Map", icon: Globe2, disabled: true },
+      { id: "gis", label: "GIS Map", icon: Globe2, href: "/map" },
       { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
     ],
   },
