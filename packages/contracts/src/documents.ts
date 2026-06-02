@@ -12,6 +12,8 @@ export const DocumentSchema = z.object({
   sizeBytes: z.number().int().nonnegative().nullable(),
   status: z.enum(["uploading", "ready", "failed"]),
   uploadedBy: z.string().uuid(),
+  /** Preview kinds available for this document (e.g. ["image"]); P2.13. */
+  previewKinds: z.array(z.string()),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });

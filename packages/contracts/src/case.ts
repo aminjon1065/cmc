@@ -58,6 +58,8 @@ export const CASE_ACTIVITY_KINDS = [
   "assigned",
   "comment",
   "note",
+  // Emitted by the Temporal SLA-escalation workflow (P3.1 / ADR-0045).
+  "sla_breached",
 ] as const;
 export type CaseActivityKind = (typeof CASE_ACTIVITY_KINDS)[number];
 

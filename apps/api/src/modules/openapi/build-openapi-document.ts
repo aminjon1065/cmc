@@ -87,6 +87,7 @@ const RESPONSE_SCHEMA: Record<string, string> = {
   "post /v1/documents/{id}/multipart/complete": "DocumentResponse",
   "post /v1/documents/{id}/finalize": "FinalizeUploadResponse",
   "get /v1/documents/{id}/download-url": "DownloadUrlResponse",
+  "get /v1/documents/{id}/preview-url": "DownloadUrlResponse",
   // audit chain
   "get /v1/audit/chain/verify": "AuditChainVerifyResponse",
   "post /v1/audit/chain/seal": "AuditSealResponse",

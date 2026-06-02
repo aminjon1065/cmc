@@ -14,14 +14,33 @@ import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { Logger, RequestMethod, ValidationPipe } from "@nestjs/common";
 import { Logger as PinoLogger } from "nestjs-pino";
-import { AppModule } from "./app.module";
 import { loadConfig } from "./config/configuration";
+import { loadVaultSecrets } from "./config/vault-secrets";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
-import { OpenApiService } from "./modules/openapi/openapi.service";
-import { buildOpenApiDocument } from "./modules/openapi/build-openapi-document";
+
+// NOTE: AppModule (and the openapi helpers it transitively reaches) are imported
+// DYNAMICALLY inside bootstrap(), AFTER loadVaultSecrets(). `ConfigModule.forRoot`
+// validates process.env at module-IMPORT time, so importing AppModule statically
+// here would validate before the Vault overlay runs (P2.14 / ADR-0044).
 
 async function bootstrap() {
+  // P2.14 / ADR-0044: when VAULT_ENABLED, pull secrets from Vault and overlay
+  // them into process.env BEFORE anything validates — so MFA_ENC_KEY (and future
+  // secrets) come from Vault while the rest of the app reads config unchanged.
+  // No-op (pure-env fallback) when disabled. Runs after dotenv (Vault wins over
+  // .env) and before the AppModule import below (whose ConfigModule.forRoot
+  // validates process.env at import time).
+  await loadVaultSecrets();
+
   const config = loadConfig();
+
+  // Dynamic import: must follow loadVaultSecrets() (see the import-time note up
+  // top). Importing here is safe — the Vault overlay has already run.
+  const { AppModule } = await import("./app.module");
+  const { OpenApiService } = await import("./modules/openapi/openapi.service");
+  const { buildOpenApiDocument } = await import(
+    "./modules/openapi/build-openapi-document"
+  );
 
   // `bufferLogs: true` — Nest queues pre-`useLogger` log lines (its own
   // bootstrap chatter) until pino is wired below, then replays them

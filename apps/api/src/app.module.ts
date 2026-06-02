@@ -14,6 +14,7 @@ import { TenantsModule } from "./modules/tenants/tenants.module";
 import { UsersModule } from "./modules/users/users.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { StorageModule } from "./modules/storage/storage.module";
+import { PreviewsModule } from "./modules/previews/previews.module";
 import { DocumentsModule } from "./modules/documents/documents.module";
 import { BrandingModule } from "./modules/branding/branding.module";
 import { RbacModule } from "./modules/rbac/rbac.module";
@@ -30,6 +31,7 @@ import { MailModule } from "./common/mail/mail.module";
 import { EventsModule } from "./modules/events/events.module";
 import { AnalyticsModule } from "./modules/analytics/analytics.module";
 import { RealtimeModule } from "./modules/realtime/realtime.module";
+import { TemporalModule } from "./modules/temporal/temporal.module";
 import { TenantContextModule } from "./common/tenant-context/tenant-context.module";
 import { TenantContextMiddleware } from "./common/tenant-context/tenant-context.middleware";
 import { TenantContextService } from "./common/tenant-context/tenant-context.service";
@@ -87,11 +89,13 @@ import { loadConfig } from "./config/configuration";
     SessionCacheModule,
     AuditModule,
     StorageModule,
+    PreviewsModule,
     RbacModule,
     MailModule,
     EventsModule,
     AnalyticsModule,
     RealtimeModule,
+    TemporalModule,
 
     // --- Domain modules ---
     HealthModule,

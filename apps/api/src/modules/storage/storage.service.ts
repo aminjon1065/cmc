@@ -216,6 +216,36 @@ export class StorageService {
     );
   }
 
+  /** Read an object's bytes (server-side) — used by the preview worker (P2.13). */
+  async getObjectBytes(input: {
+    bucket: string;
+    key: string;
+  }): Promise<Buffer> {
+    const out = await this.internal.send(
+      new GetObjectCommand({ Bucket: input.bucket, Key: input.key }),
+    );
+    if (!out.Body) throw new Error("GetObject returned no body");
+    const bytes = await out.Body.transformToByteArray();
+    return Buffer.from(bytes);
+  }
+
+  /** Write an object's bytes (server-side) — used by the preview worker (P2.13). */
+  async putObject(input: {
+    bucket: string;
+    key: string;
+    body: Buffer;
+    contentType: string;
+  }): Promise<void> {
+    await this.internal.send(
+      new PutObjectCommand({
+        Bucket: input.bucket,
+        Key: input.key,
+        Body: input.body,
+        ContentType: input.contentType,
+      }),
+    );
+  }
+
   /**
    * Write an object under S3/MinIO Object Lock (WORM) — used for the audit
    * Merkle anchors (P1.11b / ADR-0029). The bucket MUST already exist with

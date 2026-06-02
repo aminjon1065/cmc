@@ -561,30 +561,52 @@ These close gaps from current `main` that **cannot wait** for any new module.
 - **Validated**: suite **267/267** (34 suites; +6 search), `tsc`/`eslint`/`nest build` clean. **Live smoke**: `flood` → 4 ranked cross-domain results; `zarafshan` → 1 incident. ADR-0041.
 **Deferred:** stemming / per-language configs / fuzzy (→ OpenSearch P3), `ts_headline` highlight snippets, global (vs per-domain-top-N) ranking, more domains, a web search UI.
 
-### P2.12 — Multipart upload + tus.io
+### P2.12 — Multipart upload ✅ **COMPLETED 2026-06-02**
 **Why:** large-file handling. ToR §15.8.
 **Cost:** M (1 wk).
-**How:** tus.io server fronted by the API for the protocol semantics; bytes flow to MinIO via initiate-multipart + upload-part + complete-multipart.
+**Decision:** **API-orchestrated S3 multipart** (user-confirmed) instead of a tus.io protocol server — fits the existing presigned-URL/MinIO/documents stack + is testable; full tus.io left as a future alternative.
+**Delivered:**
+- `StorageService`: create/presign-part/complete/abort multipart. `DocumentsService` + `/v1/documents/multipart/init` → presigned `UploadPart` URLs per part (count from `sizeBytes/partSize`), client PUTs parts directly to MinIO (retry = resumable), `/:id/multipart/complete` (assemble → ready + size via HEAD) + `/:id/multipart/abort` (status failed). `uploadId` persisted server-side (`documents.metadata`), never trusted from the client; `document:write`, RLS, ownership-checked. `DOCUMENTS_MULTIPART_PART_SIZE` config.
+- **Validated**: suite **271/271** (35 suites; +4), `tsc`/`eslint`/`nest build` clean, no migration. **Live smoke + e2e** (real MinIO): >5 MiB two-part upload assembles + downloads byte-for-byte; abort works. ADR-0042.
+**Deferred:** tus.io protocol; server `ListParts` (resume re-derivation); per-part checksum; abandoned-upload GC; web UI.
 **Depends on:** —.
 
-### P2.13 — Preview generation worker
+### P2.13 — Preview generation worker ✅ **DONE (2026-06-02)**
 **Why:** every file UI gets ten times better with thumbnails.
 **Cost:** L (1–2 wk).
-**How:** BullMQ + Redis. Workers per file kind: image (sharp → WebP), PDF (pdftoppm → first-page PNG), video (ffmpeg → poster), audio (waveform PNG). On finalize → enqueue preview job → write preview key into `documents.metadata.previews`. Front-end shows previews when available.
+**Delivered (P2.13a — queue seam + image previews + enqueue):**
+- `bullmq` + `sharp`. **Gated-lazy queue seam** `PREVIEW_QUEUE` (Noop / BullMQ, dynamic-imported → never in jest unless `PREVIEWS_ENABLED`). `PreviewService.enqueue()` wired into finalize + multipart-complete (best-effort, never blocks the upload). `generatePreview()`: **image → WebP via sharp** (`StorageService.getObjectBytes`/`putObject`, `previews/<key>.webp`), writes `documents.metadata.previews`; PDF/video/audio → skipped with a log (need poppler/ffmpeg). `PREVIEWS_ENABLED` + `PREVIEW_MAX_DIM` config.
+**Delivered (P2.13b — worker + read path):**
+- **`PreviewWorker`** (gated `OnModuleInit`, dynamic-imports `bullmq` Worker + `ioredis`) consumes `cmc-previews` → `generatePreview(tenantId, documentId)`. Job payload `PreviewJob { tenantId, documentId }` (worker has no request context). `GET /v1/documents/:id/preview-url` (`document:read`) → signed `image/webp` GET, **404** when none. Document contract gains **`previewKinds: string[]`** (from `metadata.previews`). OpenAPI entry added.
+- **Validated**: suite **274/274** (36 suites; +1), `tsc`/`eslint`/`nest build` clean. e2e (real MinIO): finalize enqueues (faked queue) + a PNG renders a real WebP (RIFF) recorded in metadata, surfaced via `previewKinds` + `preview-url` (signed URL fetches WEBP); `preview-url` 404 when none; non-image skipped. **Live smoke** (`PREVIEWS_ENABLED` + Redis): real BullMQ worker renders the preview → `previewKinds:["image"]` → `preview-url` serves valid WEBP. No migration (uses `documents.metadata`). ADR-0043.
+**Gotcha:** BullMQ forbids `:` in queue names (Redis key separator) and only throws when the real queue is built — invisible to the queue-faked suite, caught by the live smoke; queue name is `cmc-previews`.
+**Deferred:** PDF/video/audio previews (poppler/ffmpeg in the runtime image); preview backfill janitor; web UI wired to `preview-url`.
 **Depends on:** P0.2 (Redis for BullMQ).
 
-### P2.14 — Vault dev mode + first secret migration
+### P2.14 — Vault dev mode + first secret migration ✅ **DONE (2026-06-02)**
 **Why:** stop bringing secrets in `.env` files into prod.
 **Cost:** M (1 wk to integrate; ongoing for additional secrets).
-**How:** Vault dev mode in compose. Cmc_app DB credentials sourced via Vault Agent sidecar template. Document the per-pod credential lease.
+**Delivered:**
+- **Vault dev mode** + a `vault-init` one-shot in `infra/docker-compose.yml` (`hashicorp/vault:1.15.6`, in-memory/auto-unsealed/root-token — dev only; seeds `secret/cmc/api` with `MFA_ENC_KEY`).
+- **In-process gated loader** `src/config/vault-secrets.ts`: when `VAULT_ENABLED`, KV v2 read (`/v1/{mount}/data/{path}`, `X-Vault-Token`) → overlays keys into `process.env` **before** validation; Vault wins over `.env`; logs key names only. Off by default → pure-env no-op (dev/test/CI need no Vault). `env`+`fetch` are params → hermetically testable. `VAULT_*` config added; **MFA_ENC_KEY is the first migrated secret** (`SecretBoxService` reads it via `config.get` unchanged).
+- **Gotcha → structural fix:** `ConfigModule.forRoot({ validate })` validates `process.env` at module-IMPORT time, so `main.ts` now imports `AppModule` (+ openapi helpers) **dynamically** inside `bootstrap()`, after `loadVaultSecrets()` — else the overlay lands too late. Caught by the live smoke (the hermetic test can't see it).
+- **Validated**: suite **279/279** (37 suites; +5), `tsc`/`eslint`/`nest build` clean, no migration. e2e `vault-secrets` (5, hermetic faked fetch+env): disabled no-op; KV v2 overlay (URL+token, Vault-over-env); no-token throw; non-OK throw; empty-secret tolerated. **Live smoke** (real Vault dev container): with an invalid `MFA_ENC_KEY` in env — Vault off → boot fails (`32 bytes`); Vault on → `loaded 1 secret(s) … MFA_ENC_KEY`, app boots, `/health` 200. ADR-0044.
+**Deferred (the prod vision):** dynamic **database-secrets engine** (short-lived `cmc_app` creds + lease renewal + per-pod lease), **AppRole/k8s auth** (not a static token), **Vault Agent sidecar** (templated files), runtime secret refresh, multi-path secrets.
+**Depends on:** —.
 
 ---
 
 ## P3 — Production (Horizon 3, ~9–12 months solo / 6 months team)
 
-### P3.1 — Temporal self-hosted + first workflow
+### P3.1 — Temporal self-hosted + first workflow 🔄 **IN PROGRESS (P3.1a done 2026-06-02)**
 **Cost:** L (2 wk).
 **Why:** durable, code-defined workflows. Replaces the cron-based SLA timers from P2.10.
+**Decisions (confirmed):** worker runs **gated in-process in apps/api** (not a separate process); first workflow is the **case SLA-escalation timer**.
+**Delivered (P3.1a — substrate + workflow):**
+- `@temporalio/{client,worker,workflow,activity}`. Dev compose: **Temporal** (`auto-setup`, schema in the existing Postgres) on :7233 + **Web UI** on :8233. `TEMPORAL_*` config.
+- **Gated client seam** `TEMPORAL_CLIENT` (Noop / Real, dynamic-imports `@temporalio/client` → never in jest unless `TEMPORAL_ENABLED`). **Gated in-process worker** (`OnModuleInit`, dynamic-imports `@temporalio/worker`, bundles `./workflows`, runs activities built from injected services). **`caseSlaWorkflow`** (determinism-safe: sleep-until-`due_at` → escalate-if-still-open; cancellable) + activities (`loadCaseStatus`, idempotent `escalateCase` → `sla_breached` case_activity row + `case.sla_breached` outbox event). **`CaseSlaScheduler`** surface (`schedule`/`cancel`, one-per-case workflow id). Added `sla_breached` to `CASE_ACTIVITY_KINDS` (no migration — `kind` is unconstrained varchar).
+- **Validated**: suite **284/284** (38 suites; +5), `tsc`/`eslint`/`nest build` clean. e2e `temporal` (5, faked client): noop/gating + scheduler→client (workflowType/id/args) + cancel. **Live smoke** (real Temporal): worker bundles workflow (1.4 MB) + polls `cmc-main`; start with a 4 s SLA → workflow returns `escalated`, case gets `sla_breached` activity + `case.sla_breached` outbox event; cancel path → `cancelled`, no escalation.
+**Remaining (P3.1b):** wire `CaseSlaScheduler` into the CasesService lifecycle (start on create/update with `due_at` + open status; cancel on resolve/close/cleared SLA); e2e for that wiring (faked client asserts start/cancel); live smoke through the real case lifecycle; ADR-0045 + close.
 **Depends on:** P2.1 (events to trigger workflows).
 
 ### P3.2 — Incident-response workflow

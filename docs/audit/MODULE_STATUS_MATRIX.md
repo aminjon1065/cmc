@@ -20,9 +20,9 @@ Compact one-row-per-module view. Detail per module is in
 | 3.5 | Analytics & Reporting | 🟡 | 24 | 7 | 7 | 7 | 7 | **ClickHouse single-shard** + **two projections** (incident events → daily-by-region MV, P2.5/ADR-0033; audit log → `audit_events` + daily-stats MV cursor ETL, P2.2/ADR-0034) + **query API**: `GET /v1/analytics/dashboard` (tenant-scoped CH incident trend, gap-filled, `incident:read`) feeding the dashboard (P2.6 / ADR-0036). Next: more MVs/widgets (by-region trend, audit activity, MTTR), saved reports |
 | 3.6 | Realtime Event System | 🟡 | 48 | 7 | 7 | 7 | 7 | **Event plane (P2.1 / ADR-0031):** NATS JetStream + transactional `outbox` + relay + incidents producer; **two durable consumers** — notifications-from-events (DeliverPolicy.New — P2.4 / ADR-0032) + ClickHouse projection (DeliverPolicy.All — P2.5 / ADR-0033), shared dedup ledger. Live-validated end-to-end + trace-correlated. **WebSocket gateway done (P2.3 / ADR-0035)** — NATS→WS fan-out to tenant-isolated, RBAC-checked subscriptions (full-chain live-smoked). Audit projection done (P2.2 / ADR-0034) |
 | 3.7 | Dashboard Builder | 🔴 | 0 | — | — | — | — | `/dashboard` now renders **real** data (snapshot from OLTP P1.5c + CH-backed incident trend P2.6/ADR-0036); still a fixed layout, no user-built/configurable dashboards |
-| 3.8 | File Management System | 🟡 | 20 | 8 | 8 | 6 | 7 | `apps/api/src/modules/storage/` |
+| 3.8 | File Management System | 🟡 | 32 | 8 | 8 | 7 | 7 | `apps/api/src/modules/storage/` — presigned single-PUT + **S3 multipart** (resumable large files: init → presigned part URLs → complete/abort, P2.12 / ADR-0042) + **image previews** (gated BullMQ worker → WebP, `preview-url`, P2.13 / ADR-0043). Next: PDF/video previews, ListParts-resume, range reads |
 | 3.9 | Enterprise Document Mgmt | 🟡 | 10 | 7 | 7 | 5 | 7 | `apps/api/src/modules/documents/` |
-| 3.10 | Workflow / BPM Engine | 🔴 | 0 | — | — | — | — | (none — Temporal not present) |
+| 3.10 | Workflow / BPM Engine | 🟡 | 5 | 6 | 6 | 6 | 6 | **Temporal substrate (P3.1a / ADR-0045):** self-hosted Temporal (dev compose) + gated in-process worker/client seam (dynamic-imported, off by default). First workflow: **`caseSlaWorkflow`** (durable SLA timer → escalate-if-open, cancellable) + activities + `CaseSlaScheduler`. Live-smoked end-to-end. Next (P3.1b): wire into the case lifecycle. Then incident-response workflow (P3.2), visual builder (P3.8) |
 | 3.11 | Chat & Messaging | 🔴 | 0 | — | — | — | — | (none) |
 | 3.12 | Video Conferencing | 🔴 | 0 | — | — | — | — | (none — LiveKit not present) |
 | 3.13 | Notification System | 🟢 | 68 | 8 | 8 | 7 | 8 | **P1.6 (a–c / ADR-0024):** in-app + web center (bell/page) + email (Nodemailer/Mailpit) + per-user prefs; **now event-driven** — dispatched by a durable JetStream consumer of incident events (idempotent, decoupled — P2.4 / ADR-0032), inline fallback when NATS off. Future: Web Push, MJML, dead-letter |
@@ -73,7 +73,7 @@ Compact one-row-per-module view. Detail per module is in
 |---|---|---|
 | 5.1 | OLTP (Postgres + PostGIS) | 🟢 |
 | 5.1 | OLAP (ClickHouse) | 🟡 single-shard CH + incident projection + daily-by-region MV (P2.5 / ADR-0033); sharding/replication + CH migration tooling → H-tier |
-| 5.1 | Cache (Redis) | 🟢 wired via `RedisModule` (P0.2 / ADR-0008); no consumers yet — P0.1 / P0.4 / P1.6 / P2.3 / P2.13 are the upcoming consumers |
+| 5.1 | Cache (Redis) | 🟢 wired via `RedisModule` (P0.2 / ADR-0008); consumers: **P2.13 BullMQ preview queue/worker** (ADR-0043). Upcoming: P0.1 rate-limit, P0.4 session cache, P1.6 notifications, P2.3 WS pub/sub |
 | 5.1 | Search (OpenSearch) | 🟡 interim Postgres FTS live (P2.11 / ADR-0041); OpenSearch cluster = Phase-3 |
 | 5.1 | Object storage (MinIO/S3) | 🟢 |
 | 5.1 | Vector DB (pgvector/Qdrant) | 🟡 ext. only |
@@ -105,7 +105,7 @@ Compact one-row-per-module view. Detail per module is in
 | 6.6 | Immutable WORM logging | 🟡 (policy-level only; no S3 Object Lock) |
 | 6.7 | Encryption at rest | 🟡 (host-level depends on deploy; no app-level field encryption) |
 | 6.8 | Encryption in transit (TLS / mTLS) | 🟡 edge TLS via Caddy + automatic Let's Encrypt (P0.9 / ADR-0016); mTLS service-to-service still 🔴 (P4) |
-| 6.9 | Secrets management (Vault) | 🔴 |
+| 6.9 | Secrets management (Vault) | 🟡 Vault dev mode + `vault-init` in compose; gated **in-process loader** (`config/vault-secrets.ts`) overlays a KV v2 secret into env before validation when `VAULT_ENABLED` (P2.14 / ADR-0044). **MFA_ENC_KEY** migrated as the first secret; off by default → pure-env. Deferred: dynamic DB-creds engine + lease, AppRole/k8s auth, Agent sidecar, runtime refresh |
 | 6.10 | Session management | 🟢 |
 | 6.11 | MFA (TOTP / WebAuthn / backup codes) | 🟡 TOTP + one-time backup codes (secret AES-GCM at rest, two-step login) (P1.2 / ADR-0020); WebAuthn + per-tenant enforcement pending |
 | 6.12 | SSO (OIDC / SAML / SCIM) | 🔴 |
@@ -156,7 +156,7 @@ Compact one-row-per-module view. Detail per module is in
 | 9.2 | Permissions inheritance | 🔴 |
 | 9.3 | Versioning | 🔴 |
 | 9.4 | Metadata extraction | 🔴 |
-| 9.5 | Previews / thumbnails | 🔴 |
+| 9.5 | Previews / thumbnails | 🟡 image→WebP via gated BullMQ worker + `sharp` (P2.13 / ADR-0043): finalize enqueues → worker renders → `documents.metadata.previews` → `GET /v1/documents/:id/preview-url` (signed) + `previewKinds` on the contract. PDF/video/audio deferred (need poppler/ffmpeg) |
 | 9.6 | Internal sharing | 🟡 (within a tenant, every authed user sees everything) |
 | 9.6 | External sharing (public link) | 🔴 |
 | 9.7 | Temporary links | 🟢 (pre-signed S3 URLs) |
@@ -171,14 +171,14 @@ Compact one-row-per-module view. Detail per module is in
 
 | §10.x | Capability | Status |
 |---|---|---|
-| 10.1 | Engine choice (Temporal) | 🔴 |
+| 10.1 | Engine choice (Temporal) | 🟢 Temporal self-hosted (dev compose) + gated in-process worker/client (P3.1a / ADR-0045) |
 | 10.2 | Approvals | 🔴 |
 | 10.3 | Automations | 🔴 |
-| 10.4 | Orchestration | 🔴 |
-| 10.5 | State machines | 🔴 |
-| 10.6 | Event-driven workflows | 🔴 |
-| 10.7 | SLA tracking | 🔴 |
-| 10.8 | Escalation | 🔴 |
+| 10.4 | Orchestration | 🟡 first durable workflow (`caseSlaWorkflow`) + activities + scheduler seam (P3.1a); broader orchestration → P3.2/P3.8 |
+| 10.5 | State machines | 🟡 case/incident lifecycle FSMs in-app (P1.5/P2.10); Temporal-driven state → P3.2 |
+| 10.6 | Event-driven workflows | 🟡 outbox/NATS events land (P2.1); Temporal trigger-from-event → P3.1b/P3.2 |
+| 10.7 | SLA tracking | 🟡 `cases.due_at` + durable SLA-timer workflow (P3.1a); auto-start on case lifecycle → P3.1b |
+| 10.8 | Escalation | 🟡 SLA-breach escalation (activity → `sla_breached` + `case.sla_breached` event) via Temporal (P3.1a); policies/paging → P3.2 |
 | 10.9 | Visual builder | 🔴 |
 
 ---
@@ -271,7 +271,7 @@ Compact one-row-per-module view. Detail per module is in
 | 15.5 | Analytics scaling | 🔴 |
 | 15.6 | WebSocket scaling | 🔴 |
 | 15.7 | Search scaling | 🔴 |
-| 15.8 | Large-file handling (direct PUT, multipart, range) | 🟡 direct PUT; no multipart, no range |
+| 15.8 | Large-file handling (direct PUT, multipart, range) | 🟡 direct PUT + **S3 multipart** (resumable, P2.12 / ADR-0042); range reads still pending |
 | 15.9 | Multi-region | 🔴 |
 | 15.10 | Capacity planning (load testing, chaos) | 🔴 |
 

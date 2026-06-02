@@ -236,13 +236,13 @@ The static `/dashboard` page is a fixed-layout demo, not a builder. ToR §3.7 re
 - No hierarchical folder model (no `folders` table, no `ltree` path)
 - No permission inheritance
 - No versioning (`document_versions` child table)
-- No previews / thumbnail pipeline
+- ~~No previews / thumbnail pipeline~~ 🟡 **Image previews (P2.13 / ADR-0043):** gated BullMQ worker + `sharp` — finalize/complete enqueues → worker renders WebP → `documents.metadata.previews` → `GET /v1/documents/:id/preview-url` (signed) + `previewKinds` on the contract. Remaining: PDF/video/audio (poppler/ffmpeg), backfill janitor, web UI
 - No EXIF / PDF metadata extraction
 - No external sharing links
 - No retention policies / legal hold
 - No object-level encryption per tenant (DEK/KEK)
 - No tus.io resumable upload (today is single PUT)
-- No multipart upload for >100 MB files (today config max is 100 MB; ToR pattern is multipart)
+- ~~No multipart upload~~ ✅ **S3 multipart (P2.12 / ADR-0042):** `/v1/documents/multipart/{init, :id/complete, :id/abort}` — presigned part URLs, resumable, real-MinIO tested. Remaining: `ListParts`-based resume, abandoned-upload GC, range reads
 - No content-type sniffing / magic-byte verification
 - No virus scanning
 - No CDN / edge cache
@@ -578,7 +578,7 @@ This is the **product surface the UI implies**. No live event ticker, no multi-m
 | Status | DONE (client wired) — 2026-05-25, P0.2, ADR-0008 |
 | Files | `apps/api/src/modules/redis/{redis.tokens.ts, redis.module.ts, redis-keys.ts}` |
 | Library | `ioredis@^5.4.1` |
-| Consumers | none yet — P0.1 rate-limit, P0.4 session cache, P1.6 notifications, P2.1 NATS-adjacent, P2.13 BullMQ, P2.3 WS pub/sub are the queued consumers |
+| Consumers | **P2.13 BullMQ preview queue + worker** (`cmc-previews`, gated on `PREVIEWS_ENABLED`, ADR-0043). Queued: P0.1 rate-limit, P0.4 session cache, P1.6 notifications, P2.1 NATS-adjacent, P2.3 WS pub/sub |
 | Test | `apps/api/test/e2e/redis.e2e-spec.ts` — 4 tests; ping, set/get TTL, GETNAME, status |
 | Observability today | NestJS Logger on connect/ready/reconnecting/end/error |
 | Deferred to | P0.7 metrics · P0.8 deep health probe |
@@ -587,9 +587,15 @@ This is the **product surface the UI implies**. No live event ticker, no multi-m
 
 | | |
 |---|---|
-| Status | NOT STARTED |
+| Status | SUBSTRATE DONE (P3.1a / ADR-0045) — 2026-06-02; lifecycle wiring → P3.1b |
+| Files | `apps/api/src/modules/temporal/` (`temporal-client{,.impl}.ts`, `case-sla.scheduler.ts`, `temporal.worker.ts`, `temporal.module.ts`, `workflows/case-sla.workflow.ts`, `activities/case-sla.{types,activities}.ts`); `infra/docker-compose.yml` (`temporal` auto-setup + `temporal-ui`); `TEMPORAL_*` config |
+| How | Gated in-process worker (decision: not a separate process). `TEMPORAL_CLIENT` seam (Noop/Real, dynamic-imports `@temporalio/client`); worker dynamic-imports `@temporalio/worker`, bundles `./workflows` (determinism-safe), runs activities built from DI. Off by default → noop client + no worker (jest never loads Temporal) |
+| First workflow | **`caseSlaWorkflow`** — sleep until `cases.due_at`, escalate if still open (idempotent activity → `sla_breached` case_activity + `case.sla_breached` outbox event), cancellable. `CaseSlaScheduler.schedule/cancel` (one-per-case workflow id) |
+| Tests | `apps/api/test/e2e/temporal.e2e-spec.ts` — 5 (faked client: gating + scheduler→client + cancel). Live smoke (real Temporal): escalate path → `escalated` + activity + outbox; cancel path → `cancelled`, no escalation |
+| Gotcha | auto-setup binds the frontend to the container IP, not loopback → healthcheck addresses the service name. Reuses the existing Postgres (DBs `temporal` + `temporal_visibility`) |
+| Remaining | P3.1b: auto start/cancel from the CasesService lifecycle + ADR close. Then incident-response workflow (P3.2), approvals/automations, visual builder (P3.8) |
 | Blocks | §3.10, §3.23, §3.27 |
-| Complexity | M to integrate; XL for the visual builder + library |
+| Complexity | substrate M (done); lifecycle wiring S (P3.1b); XL for the visual builder + library |
 
 ### Observability plane (OTEL/Prom/Loki/Tempo/Grafana)
 
@@ -616,9 +622,15 @@ This is the **product surface the UI implies**. No live event ticker, no multi-m
 
 | | |
 |---|---|
-| Status | NOT STARTED |
-| Blocks | any non-dev deployment |
-| Complexity | M to deploy + adopt for first workload |
+| Status | DEV MODE + first secret migrated (P2.14 / ADR-0044) — 2026-06-02 |
+| Files | `apps/api/src/config/vault-secrets.ts` (loader), `src/main.ts` (dynamic AppModule import after overlay), `src/config/configuration.ts` (`VAULT_*`), `infra/docker-compose.yml` (`vault` dev + `vault-init`) |
+| How | Gated in-process loader: `VAULT_ENABLED` → KV v2 read (`/v1/{mount}/data/{path}`, `X-Vault-Token`) → overlay keys into `process.env` before validation (Vault > `.env`). Off by default → pure-env no-op. Dev compose runs Vault dev mode (in-memory, root token) + seeds `secret/cmc/api` |
+| First secret | **MFA_ENC_KEY** — `SecretBoxService` reads it via `config.get` unchanged |
+| Tests | `apps/api/test/e2e/vault-secrets.e2e-spec.ts` — 5 hermetic (faked fetch+env). Live smoke: invalid env key + Vault on → boots; Vault off → fails |
+| Gotcha | `ConfigModule.forRoot({ validate })` validates at module-import → `main.ts` imports `AppModule` dynamically after the overlay |
+| Deferred | dynamic DB-creds engine + per-pod lease + renewal; AppRole/k8s auth (not static token); Vault Agent sidecar; runtime refresh; multi-path secrets |
+| Blocks | hardened non-dev deployment (dynamic creds) |
+| Complexity | M done; L remaining for dynamic engine + auth methods |
 
 ### Backups plane (Postgres)
 
@@ -632,7 +644,7 @@ This is the **product surface the UI implies**. No live event ticker, no multi-m
 | Manual | `pnpm db:backup` / `pnpm db:restore <key\|latest>` (TTY confirmation + `CONFIRM_RESTORE=yes` for scripted callers) |
 | Drill | rehearsed end-to-end: seed → backup → wipe → restore → e2e auth suite green |
 | Observability today | `docker compose logs postgres-backup` |
-| Deferred to | P0.7 (Prometheus metric) · P1.8 (Alertmanager "no fresh backup in 36 h") · P2.14 (Vault-encrypted dump bytes) · P3 (WAL streaming / PITR) |
+| Deferred to | P0.7 (Prometheus metric) · P1.8 (Alertmanager "no fresh backup in 36 h") · Vault-encrypted dump bytes (Vault adoption began P2.14 / ADR-0044; backup-encryption not yet wired) · P3 (WAL streaming / PITR) |
 
 ### Edge / TLS plane (Caddy)
 

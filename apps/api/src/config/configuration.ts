@@ -40,6 +40,38 @@ const EnvSchema = z.object({
   DATABASE_OWNER_URL: z.string().url().optional(),
   REDIS_URL: z.string().url(),
 
+  // --- Secrets / Vault (P2.14 / ADR-0044) ---
+  // When enabled, an in-process loader (`src/config/vault-secrets.ts`) fetches a
+  // KV v2 secret from Vault at boot and overlays its keys into process.env
+  // BEFORE this schema validates — so secrets (today MFA_ENC_KEY) come from Vault
+  // while every ConfigService.get(...) stays unchanged. Off by default → pure
+  // env fallback (dev/test/CI need no Vault). VAULT_TOKEN is the dev-mode root
+  // token locally; a scoped AppRole/k8s-auth token in prod. The dynamic
+  // database-secrets engine + Agent sidecar are the documented follow-on.
+  VAULT_ENABLED: z
+    .string()
+    .default("false")
+    .transform((v) => v.toLowerCase() === "true"),
+  VAULT_ADDR: z.string().url().default("http://localhost:8200"),
+  VAULT_TOKEN: emptyAsUndefined(z.string().optional()),
+  VAULT_KV_MOUNT: z.string().default("secret"),
+  VAULT_SECRET_PATH: z.string().default("cmc/api"),
+
+  // --- Durable workflows / Temporal (P3.1 / ADR-0045) ---
+  // Code-defined durable workflows (first: per-case SLA-escalation timers,
+  // replacing cron). ENABLED gates BOTH the in-process worker (polls the task
+  // queue, runs workflow + activity code) AND the real client (the gated seam
+  // that starts/cancels workflows). Off by default → a Noop client + no worker,
+  // so dev/test/CI need no Temporal (the gated-seam convention used for NATS/
+  // ClickHouse/BullMQ/Vault). `@temporalio/*` is dynamic-imported, never in jest.
+  TEMPORAL_ENABLED: z
+    .string()
+    .default("false")
+    .transform((v) => v.toLowerCase() === "true"),
+  TEMPORAL_ADDRESS: z.string().default("localhost:7233"),
+  TEMPORAL_NAMESPACE: z.string().default("default"),
+  TEMPORAL_TASK_QUEUE: z.string().default("cmc-main"),
+
   // --- Event plane / NATS JetStream (P2.1 / ADR-0031) ---
   // The outbox relay publishes to NATS; consumers subscribe. Used by the relay
   // (P2.1b) — the outbox write side (P2.1a) is pure Postgres and needs no
@@ -115,6 +147,17 @@ const EnvSchema = z.object({
     .int()
     .positive()
     .default(300),
+
+  // --- Preview generation (P2.13 / ADR-0043) ---
+  // BullMQ worker generates thumbnails/posters on finalize. ENABLED gates the
+  // queue connection + worker (off → no preview jobs; finalize unaffected).
+  // Image previews use sharp (bundled); PDF/video/audio need poppler/ffmpeg in
+  // the runtime image (skipped with a log until present).
+  PREVIEWS_ENABLED: z
+    .string()
+    .default("false")
+    .transform((v) => v.toLowerCase() === "true"),
+  PREVIEW_MAX_DIM: z.coerce.number().int().positive().default(512),
 
   // --- Auth / JWT ---
   JWT_SECRET: z.string().min(32, "JWT_SECRET must be at least 32 characters"),
@@ -283,8 +326,10 @@ const EnvSchema = z.object({
   // --- MFA / TOTP (P1.2 / ADR-0020) ---
   // 32-byte (base64) key that encrypts TOTP secrets at rest (AES-256-GCM).
   // The dev default is a FIXED, PUBLIC key — fine for local/test, MUST be
-  // overridden in any real deployment (and moves to Vault at P2.14). Validated
-  // to decode to exactly 32 bytes so a short/garbage key fails fast at boot.
+  // overridden in any real deployment. Sourced from Vault when VAULT_ENABLED
+  // (P2.14 / ADR-0044): the in-process loader overlays it into process.env
+  // before this validates. Validated to decode to exactly 32 bytes so a
+  // short/garbage key fails fast at boot.
   MFA_ENC_KEY: z
     .string()
     .default("ZGV2LW1mYS1lbmNyeXB0aW9uLWtleS0zMmJ5dGVzISE=")

@@ -13,6 +13,7 @@ import { TenantDatabaseService } from "../database/tenant-database.service";
 import { TenantContextService } from "../../common/tenant-context/tenant-context.service";
 import { AuditService } from "../audit/audit.service";
 import { StorageService } from "../storage/storage.service";
+import { PreviewService } from "../previews/preview.service";
 
 export type ListDocumentsParams = {
   q?: string;
@@ -29,6 +30,7 @@ export class DocumentsService {
     private readonly tenantContext: TenantContextService,
     private readonly storage: StorageService,
     private readonly audit: AuditService,
+    private readonly previews: PreviewService,
     private readonly config: ConfigService<AppConfig, true>,
   ) {}
 
@@ -174,6 +176,8 @@ export class DocumentsService {
       metadata: { sizeBytes: head.contentLength, etag: head.etag },
     });
 
+    // Best-effort: queue a preview (thumbnail/poster). Never blocks finalize.
+    await this.previews.enqueue(ctx.tenantId, documentId);
     return updated!;
   }
 
@@ -339,6 +343,7 @@ export class DocumentsService {
       outcome: "success",
       metadata: { sizeBytes: head.contentLength, parts: parts.length },
     });
+    await this.previews.enqueue(ctx.tenantId, documentId);
     return updated!;
   }
 
@@ -486,6 +491,27 @@ export class DocumentsService {
     });
 
     return presigned;
+  }
+
+  /** Pre-signed GET for a document's image preview (P2.13). 404 if none. */
+  async signPreviewUrl(documentId: string) {
+    const doc = await this.getByIdOrFail(documentId);
+    const previews =
+      (doc.metadata as { previews?: Record<string, string> } | null)
+        ?.previews ?? {};
+    const key = previews.image;
+    if (!key) {
+      throw new NotFoundException("No preview available for this document.");
+    }
+    const ttl = this.config.get("DOCUMENTS_DOWNLOAD_URL_TTL_SEC", {
+      infer: true,
+    });
+    return this.storage.presignGet({
+      bucket: doc.storageBucket,
+      key,
+      contentType: "image/webp",
+      ttlSec: ttl,
+    });
   }
 
   // ---------- delete ----------

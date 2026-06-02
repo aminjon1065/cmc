@@ -35,9 +35,17 @@ type DocumentRow = {
   sizeBytes: number | null;
   status: string;
   uploadedBy: string;
+  metadata: unknown;
   createdAt: Date;
   updatedAt: Date;
 };
+
+/** The preview kinds present in `documents.metadata.previews` (P2.13). */
+function previewKindsOf(metadata: unknown): string[] {
+  const previews = (metadata as { previews?: Record<string, string> } | null)
+    ?.previews;
+  return previews ? Object.keys(previews) : [];
+}
 
 // Reject non-numeric / negative / non-integer values from the query string
 // rather than letting them flow through `Number()` → `NaN` → `LIMIT NaN`
@@ -60,6 +68,7 @@ function toContract(row: DocumentRow): Document {
     // ever writes the three values the schema enumerates.
     status: row.status as Document["status"],
     uploadedBy: row.uploadedBy,
+    previewKinds: previewKindsOf(row.metadata),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -177,6 +186,19 @@ export class DocumentsController {
     @Param("id", new ParseUUIDPipe()) id: string,
   ): Promise<DownloadUrlResponse> {
     const presigned = await this.documents.signDownload(id);
+    return {
+      method: "GET",
+      url: presigned.url,
+      expiresAt: presigned.expiresAt,
+    };
+  }
+
+  @Get(":id/preview-url")
+  @Authorize("document:read")
+  async previewUrl(
+    @Param("id", new ParseUUIDPipe()) id: string,
+  ): Promise<DownloadUrlResponse> {
+    const presigned = await this.documents.signPreviewUrl(id);
     return {
       method: "GET",
       url: presigned.url,
