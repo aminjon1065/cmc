@@ -109,6 +109,35 @@ export class RbacService {
     return perms.has(perm);
   }
 
+  /**
+   * Distinct user ids in the CURRENT tenant who hold `${domain}:${action}`
+   * (reverse permission lookup). Runs in the ambient tenant tx — call inside a
+   * `runForTenant`/request scope. Used to fan escalations out to e.g. the
+   * `incident:resolve` holders (P3.2 / ADR-0046).
+   */
+  async usersWithPermission(domain: string, action: string): Promise<string[]> {
+    const rows = await this.tenantDb.run((tx) =>
+      tx
+        .selectDistinct({ userId: schema.userRoles.userId })
+        .from(schema.userRoles)
+        .innerJoin(
+          schema.rolePermissions,
+          eq(schema.rolePermissions.roleId, schema.userRoles.roleId),
+        )
+        .innerJoin(
+          schema.permissions,
+          eq(schema.permissions.id, schema.rolePermissions.permissionId),
+        )
+        .where(
+          and(
+            eq(schema.permissions.domain, domain),
+            eq(schema.permissions.action, action),
+          ),
+        ),
+    );
+    return rows.map((r) => r.userId);
+  }
+
   // ---------- queries ----------
 
   /** All roles in the current tenant, each with its permission strings. */

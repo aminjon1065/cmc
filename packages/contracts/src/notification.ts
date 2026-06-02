@@ -10,6 +10,10 @@ import { z } from "zod";
 export const NOTIFICATION_KINDS = [
   "incident.assigned",
   "incident.transitioned",
+  // Incident-response workflow (P3.2 / ADR-0046): the responder page + reminders,
+  // and the unacknowledged-escalation fan-out.
+  "incident.response",
+  "incident.escalated",
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 

@@ -22,7 +22,7 @@ Compact one-row-per-module view. Detail per module is in
 | 3.7 | Dashboard Builder | 🔴 | 0 | — | — | — | — | `/dashboard` now renders **real** data (snapshot from OLTP P1.5c + CH-backed incident trend P2.6/ADR-0036); still a fixed layout, no user-built/configurable dashboards |
 | 3.8 | File Management System | 🟡 | 32 | 8 | 8 | 7 | 7 | `apps/api/src/modules/storage/` — presigned single-PUT + **S3 multipart** (resumable large files: init → presigned part URLs → complete/abort, P2.12 / ADR-0042) + **image previews** (gated BullMQ worker → WebP, `preview-url`, P2.13 / ADR-0043). Next: PDF/video previews, ListParts-resume, range reads |
 | 3.9 | Enterprise Document Mgmt | 🟡 | 10 | 7 | 7 | 5 | 7 | `apps/api/src/modules/documents/` |
-| 3.10 | Workflow / BPM Engine | 🟡 | 5 | 6 | 6 | 6 | 6 | **Temporal substrate (P3.1a / ADR-0045):** self-hosted Temporal (dev compose) + gated in-process worker/client seam (dynamic-imported, off by default). First workflow: **`caseSlaWorkflow`** (durable SLA timer → escalate-if-open, cancellable) + activities + `CaseSlaScheduler`. Live-smoked end-to-end. Next (P3.1b): wire into the case lifecycle. Then incident-response workflow (P3.2), visual builder (P3.8) |
+| 3.10 | Workflow / BPM Engine | 🟡 | 16 | 6 | 7 | 6 | 6 | **Temporal (P3.1 / ADR-0045):** self-hosted Temporal (dev compose) + gated in-process worker/client seam (off by default). **Two workflows, both wired into their domain lifecycle + live-smoked through the API:** `caseSlaWorkflow` (case SLA timer, ADR-0045) and `incidentResponseWorkflow` (P3.2 / ADR-0046: page→ack-SLA→remind→escalate for severe incidents; `IncidentResponseScheduler` + RBAC reverse-lookup + notify seam). Next: approvals/automations, visual builder (P3.8) |
 | 3.11 | Chat & Messaging | 🔴 | 0 | — | — | — | — | (none) |
 | 3.12 | Video Conferencing | 🔴 | 0 | — | — | — | — | (none — LiveKit not present) |
 | 3.13 | Notification System | 🟢 | 68 | 8 | 8 | 7 | 8 | **P1.6 (a–c / ADR-0024):** in-app + web center (bell/page) + email (Nodemailer/Mailpit) + per-user prefs; **now event-driven** — dispatched by a durable JetStream consumer of incident events (idempotent, decoupled — P2.4 / ADR-0032), inline fallback when NATS off. Future: Web Push, MJML, dead-letter |
@@ -35,7 +35,7 @@ Compact one-row-per-module view. Detail per module is in
 | 3.20 | Monitoring & Observability | 🟢 | 55 | 8 | 8 | 7 | 7 | **Logs+metrics+traces triangle closed:** pino JSON+request_id (P0.3), OTEL traces (P0.6), Prometheus/RED+Grafana (P0.7), Loki (P1.7), **Tempo + Loki↔Tempo link + Alertmanager 5xx rule** (P1.8 / ADR-0026). Remaining: alert delivery/paging, exemplars, prod object-store |
 | 3.21 | Data Import/Export | 🔴 | 0 | — | — | — | — | (none) |
 | 3.22 | Realtime Collaboration | 🔴 | 0 | — | — | — | — | (none — Yjs not present) |
-| 3.23 | Task & Case Management | 🟡 | 45 | 8 | 7 | 7 | 8 | **Cases backend (P2.10 / ADR-0040):** `cases` + `case_activity`, state machine, assign, **activity timeline** + comments, stats, RLS, audited, outbox events, `case:*` RBAC. Future: web UI (dashboard "Cases Open" still hardcoded), config-driven types, SLA cron (Temporal), linked artifacts |
+| 3.23 | Task & Case Management | 🟡 | 45 | 8 | 7 | 7 | 8 | **Cases backend (P2.10 / ADR-0040):** `cases` + `case_activity`, state machine, assign, **activity timeline** + comments, stats, RLS, audited, outbox events, `case:*` RBAC. **SLA escalation now durable** — `due_at` drives a Temporal timer auto-started/cancelled by the lifecycle (P3.1 / ADR-0045). Future: web UI (dashboard "Cases Open" still hardcoded), config-driven types, linked artifacts |
 | 3.24 | Media Management | 🔴 | 0 | — | — | — | — | (none — FFmpeg pipeline absent) |
 | 3.25 | Geospatial Analytics | 🔴 | 0 | — | — | — | — | sub-scope of §3.4 |
 | 3.26 | Operational Monitoring Center | 🔴 | 0 | — | — | — | — | Hero ribbon copy hardcoded |
@@ -173,12 +173,12 @@ Compact one-row-per-module view. Detail per module is in
 |---|---|---|
 | 10.1 | Engine choice (Temporal) | 🟢 Temporal self-hosted (dev compose) + gated in-process worker/client (P3.1a / ADR-0045) |
 | 10.2 | Approvals | 🔴 |
-| 10.3 | Automations | 🔴 |
-| 10.4 | Orchestration | 🟡 first durable workflow (`caseSlaWorkflow`) + activities + scheduler seam (P3.1a); broader orchestration → P3.2/P3.8 |
-| 10.5 | State machines | 🟡 case/incident lifecycle FSMs in-app (P1.5/P2.10); Temporal-driven state → P3.2 |
-| 10.6 | Event-driven workflows | 🟡 outbox/NATS events land (P2.1); Temporal trigger-from-event → P3.1b/P3.2 |
-| 10.7 | SLA tracking | 🟡 `cases.due_at` + durable SLA-timer workflow (P3.1a); auto-start on case lifecycle → P3.1b |
-| 10.8 | Escalation | 🟡 SLA-breach escalation (activity → `sla_breached` + `case.sla_breached` event) via Temporal (P3.1a); policies/paging → P3.2 |
+| 10.3 | Automations | 🟡 lifecycle-triggered durable workflows (case-SLA + incident-response auto-start/cancel from create/update/transition, P3.1/P3.2); rules-engine automations → later |
+| 10.4 | Orchestration | 🟡 two durable workflows + schedulers (case-SLA P3.1, incident-response page→remind→escalate P3.2); multi-step cross-domain orchestration + visual builder → P3.8 |
+| 10.5 | State machines | 🟡 case/incident lifecycle FSMs in-app (P1.5/P2.10), now driving Temporal workflows (P3.1/P3.2); Temporal-authored state machines → later |
+| 10.6 | Event-driven workflows | 🟡 outbox/NATS events land (P2.1); workflows auto-start from domain lifecycle (P3.1/P3.2). Native event/signal-triggered workflows → later |
+| 10.7 | SLA tracking | 🟢 `cases.due_at` + durable SLA-timer workflow auto-started/cancelled by the case lifecycle (P3.1 / ADR-0045); multi-stage SLAs → P3.2 |
+| 10.8 | Escalation | 🟡 Temporal-fired escalation for cases (SLA breach → `case.sla_breached`, P3.1) **and incidents** (unacknowledged-past-ack-SLA → notify `incident:resolve` holders + `incident.escalated`, P3.2). Multi-tier policies + external paging → later |
 | 10.9 | Visual builder | 🔴 |
 
 ---

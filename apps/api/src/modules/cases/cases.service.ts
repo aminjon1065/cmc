@@ -23,6 +23,7 @@ import {
 import { TenantDatabaseService } from "../database/tenant-database.service";
 import { AuditService } from "../audit/audit.service";
 import { OutboxService } from "../events/outbox.service";
+import { CaseSlaScheduler } from "../temporal/case-sla.scheduler";
 
 type Actor = {
   userId: string;
@@ -59,7 +60,13 @@ export class CasesService {
     private readonly tenantDb: TenantDatabaseService,
     private readonly audit: AuditService,
     private readonly outbox: OutboxService,
+    private readonly sla: CaseSlaScheduler,
   ) {}
+
+  /** Open statuses still owe SLA work → eligible for an active timer. */
+  private isOpen(status: string): boolean {
+    return (CASE_OPEN_STATUSES as readonly string[]).includes(status);
+  }
 
   // ---------- create ----------
 
@@ -105,6 +112,15 @@ export class CasesService {
         openedBy: actor.userId,
       },
     });
+    // A new case is always "open", so an SLA target starts a durable timer
+    // (P3.1 / ADR-0045). Best-effort — never blocks creation.
+    if (input.dueAt) {
+      await this.sla.schedule(
+        actor.tenantId,
+        id,
+        new Date(input.dueAt).toISOString(),
+      );
+    }
     return (await this.getDetail(id))!;
   }
 
@@ -233,8 +249,8 @@ export class CasesService {
     changes: UpdateCaseRequest,
     actor: Actor,
   ): Promise<CaseDetail> {
-    if (!(await this.getDetail(id)))
-      throw new NotFoundException("Case not found");
+    const existing = await this.getDetail(id);
+    if (!existing) throw new NotFoundException("Case not found");
     await this.tenantDb.run((tx) =>
       tx
         .update(schema.cases)
@@ -257,6 +273,20 @@ export class CasesService {
     await this.record(actor, "case.updated", id, {
       fields: Object.keys(changes),
     });
+    // Sync the SLA timer if the target changed (P3.1 / ADR-0045): a new target
+    // on an open case (re)starts the timer; clearing it (or a non-open case)
+    // cancels. Status is unchanged by update, so `existing.status` is current.
+    if (changes.dueAt !== undefined) {
+      if (changes.dueAt && this.isOpen(existing.status)) {
+        await this.sla.schedule(
+          actor.tenantId,
+          id,
+          new Date(changes.dueAt).toISOString(),
+        );
+      } else {
+        await this.sla.cancel(id);
+      }
+    }
     return (await this.getDetail(id))!;
   }
 
@@ -305,6 +335,20 @@ export class CasesService {
       eventType: "transitioned",
       payload: { from, to, by: actor.userId, note: opts.note ?? null },
     });
+    // SLA timer follows the lifecycle (P3.1 / ADR-0045): leaving the open set
+    // (resolved/closed/cancelled) cancels it; reopening an SLA-bearing case
+    // restarts it.
+    if (this.isOpen(to)) {
+      if (existing.dueAt) {
+        await this.sla.schedule(
+          actor.tenantId,
+          id,
+          new Date(existing.dueAt).toISOString(),
+        );
+      }
+    } else {
+      await this.sla.cancel(id);
+    }
     return (await this.getDetail(id))!;
   }
 

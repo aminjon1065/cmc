@@ -5,3 +5,5 @@
  */
 export { caseSlaWorkflow } from "./case-sla.workflow";
 export type { CaseSlaArgs } from "./case-sla.workflow";
+export { incidentResponseWorkflow } from "./incident-response.workflow";
+export type { IncidentResponseArgs } from "./incident-response.workflow";

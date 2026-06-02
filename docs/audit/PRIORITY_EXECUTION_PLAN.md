@@ -598,19 +598,30 @@ These close gaps from current `main` that **cannot wait** for any new module.
 
 ## P3 — Production (Horizon 3, ~9–12 months solo / 6 months team)
 
-### P3.1 — Temporal self-hosted + first workflow 🔄 **IN PROGRESS (P3.1a done 2026-06-02)**
+### P3.1 — Temporal self-hosted + first workflow ✅ **DONE (2026-06-02)**
 **Cost:** L (2 wk).
 **Why:** durable, code-defined workflows. Replaces the cron-based SLA timers from P2.10.
 **Decisions (confirmed):** worker runs **gated in-process in apps/api** (not a separate process); first workflow is the **case SLA-escalation timer**.
 **Delivered (P3.1a — substrate + workflow):**
 - `@temporalio/{client,worker,workflow,activity}`. Dev compose: **Temporal** (`auto-setup`, schema in the existing Postgres) on :7233 + **Web UI** on :8233. `TEMPORAL_*` config.
 - **Gated client seam** `TEMPORAL_CLIENT` (Noop / Real, dynamic-imports `@temporalio/client` → never in jest unless `TEMPORAL_ENABLED`). **Gated in-process worker** (`OnModuleInit`, dynamic-imports `@temporalio/worker`, bundles `./workflows`, runs activities built from injected services). **`caseSlaWorkflow`** (determinism-safe: sleep-until-`due_at` → escalate-if-still-open; cancellable) + activities (`loadCaseStatus`, idempotent `escalateCase` → `sla_breached` case_activity row + `case.sla_breached` outbox event). **`CaseSlaScheduler`** surface (`schedule`/`cancel`, one-per-case workflow id). Added `sla_breached` to `CASE_ACTIVITY_KINDS` (no migration — `kind` is unconstrained varchar).
-- **Validated**: suite **284/284** (38 suites; +5), `tsc`/`eslint`/`nest build` clean. e2e `temporal` (5, faked client): noop/gating + scheduler→client (workflowType/id/args) + cancel. **Live smoke** (real Temporal): worker bundles workflow (1.4 MB) + polls `cmc-main`; start with a 4 s SLA → workflow returns `escalated`, case gets `sla_breached` activity + `case.sla_breached` outbox event; cancel path → `cancelled`, no escalation.
-**Remaining (P3.1b):** wire `CaseSlaScheduler` into the CasesService lifecycle (start on create/update with `due_at` + open status; cancel on resolve/close/cleared SLA); e2e for that wiring (faked client asserts start/cancel); live smoke through the real case lifecycle; ADR-0045 + close.
+**Delivered (P3.1b — lifecycle wiring):**
+- `CaseSlaScheduler` wired into **CasesService**: **create** with `due_at` → schedule; **update** when `due_at` changes → schedule (open) / cancel (cleared or not open); **transition** → cancel on leaving the open set, reschedule on reopen. Best-effort (a Temporal failure never breaks case CRUD). Reschedule uses `workflowIdConflictPolicy: TERMINATE_EXISTING` (atomic replace, no race).
+- **Validated**: suite **288/288** (38 suites; +9 total for P3.1), `tsc`/`eslint`/`nest build` clean. e2e `temporal` (9, faked client): gating/noop + scheduler→client + **lifecycle** (create-with-`due_at` schedules, create-without doesn't, terminal transition cancels, update sets/clears). **Live smoke through the API** (real Temporal): a case created with a 4 s `due_at` auto-escalates (`sla_breached` activity + `case.sla_breached` outbox); a case resolved before its 5 s `due_at` is not escalated. ADR-0045.
+**Deferred:** separate `apps/worker` process + worker scaling; production Temporal (HA/mTLS/archival); multi-stage SLAs (warn→breach→tiers); web surface for workflow state. → incident-response workflow (P3.2), visual builder (P3.8).
 **Depends on:** P2.1 (events to trigger workflows).
 
-### P3.2 — Incident-response workflow
+### P3.2 — Incident-response workflow ✅ **DONE (2026-06-02)**
 Workflow: severity-declared → assemble responders (by region + role) → page on-call → create war-room thread → SLA timers → reminders → post-mortem template generation.
+**Decisions (confirmed):** scope = **notify → ack-SLA → remind → escalate** (war-room/external-paging/post-mortem deferred — no chat/paging modules yet); **auto-start for severity ≤ threshold** (default SEV-1/2); responders = **assignee + reporter**, escalate to **`incident:resolve` holders** (no region/role responder model exists, so "page on-call" = notify via P1.6).
+**Delivered (P3.2a — workflow + scheduler + helpers):**
+- **`incidentResponseWorkflow`** (reuses the P3.1 Temporal substrate): page responders → loop sleeping a reminder interval at a time up to the ack SLA, reminding while the incident stays `reported`; escalate if still unacknowledged at the deadline. Cancellable; per-step status re-check. Activities: `loadIncidentStatus`, `notifyResponders` (assignee+reporter, page/reminder), idempotent `escalateIncident` (→ `incident:resolve` holders + `incident.escalated` outbox event).
+- **`IncidentResponseScheduler`** (`onCreated` severity-gated, `onSeverityChanged`, `cancel`; one-per-incident workflow id; best-effort). Worker now hosts **both** activity sets. New helpers: **`RbacService.usersWithPermission(domain,action)`** (reverse lookup), **`NotificationsService.notifyUsers(...)`** (public fan-out seam), notification kinds `incident.response`/`incident.escalated`, `INCIDENT_OPEN_STATUSES`. Config: `INCIDENT_RESPONSE_SEVERITY_THRESHOLD`, `INCIDENT_ACK_SLA_SEC`, `INCIDENT_REMINDER_INTERVAL_SEC`. `NotificationsModule` made `@Global`.
+- **Validated**: suite **292/292** (38 suites; +4), `tsc`/`eslint`/`nest build` clean. e2e `temporal` (13, faked client): incident scheduler (severe→start / low-sev→noop / cancel) + `usersWithPermission` finds `incident:resolve` holders. Worker boots + bundles **both** workflows (1.41 MB). No migration (`incident.escalated` is a new outbox event verb; notification kinds are additive).
+**Delivered (P3.2b — IncidentsService wiring):**
+- `IncidentResponseScheduler` wired into **IncidentsService**: **create** → `onCreated` (start iff severity ≤ threshold); **update** on severity change → `onSeverityChanged` (open-aware (re)start/cancel); **transition** → cancel on leaving the open set. Best-effort.
+- **Validated**: suite **295/295** (38 suites; +7 total for P3.2), `tsc`/`eslint`/`nest build` clean. e2e `temporal` (16): + IncidentsService lifecycle (severe create starts, low-sev doesn't, terminal transition cancels). **Live smoke through the API** (real Temporal, 6 s ack-SLA / 3 s reminder): a SEV-1 left unacknowledged → 2× `incident.response` (page+reminder) + 1× `incident.escalated`; a SEV-1 acknowledged (triaged) before the deadline → 0 escalations (workflow self-stops). ADR-0046.
+**Deferred (the plan's fuller vision):** responder model by region+role / on-call rotations; external paging (PagerDuty/Opsgenie); war-room thread (needs a chat module); post-mortem template generation on resolve; multi-tier escalation policies; explicit ack action.
 **Depends on:** P3.1, P1.6.
 
 ### P3.3 — Folder model + permission inheritance for files

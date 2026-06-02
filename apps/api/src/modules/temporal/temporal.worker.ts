@@ -9,7 +9,10 @@ import type { NativeConnection, Worker } from "@temporalio/worker";
 import type { AppConfig } from "../../config/configuration";
 import { TenantDatabaseService } from "../database/tenant-database.service";
 import { OutboxService } from "../events/outbox.service";
+import { NotificationsService } from "../notifications/notifications.service";
+import { RbacService } from "../rbac/rbac.service";
 import { buildCaseSlaActivities } from "./activities/case-sla.activities";
+import { buildIncidentResponseActivities } from "./activities/incident-response.activities";
 
 /**
  * In-process Temporal worker (P3.1 / ADR-0045). Polls the task queue and runs
@@ -33,6 +36,8 @@ export class TemporalWorker implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly db: TenantDatabaseService,
     private readonly outbox: OutboxService,
+    private readonly notifications: NotificationsService,
+    private readonly rbac: RbacService,
     config: ConfigService<AppConfig, true>,
   ) {
     this.enabled = config.get("TEMPORAL_ENABLED", { infer: true });
@@ -51,7 +56,15 @@ export class TemporalWorker implements OnModuleInit, OnModuleDestroy {
       namespace: this.namespace,
       taskQueue: this.taskQueue,
       workflowsPath: require.resolve("./workflows"),
-      activities: buildCaseSlaActivities({ db: this.db, outbox: this.outbox }),
+      activities: {
+        ...buildCaseSlaActivities({ db: this.db, outbox: this.outbox }),
+        ...buildIncidentResponseActivities({
+          db: this.db,
+          outbox: this.outbox,
+          notifications: this.notifications,
+          rbac: this.rbac,
+        }),
+      },
     });
     // run() resolves only on shutdown — keep the promise, don't await it here.
     this.runPromise = this.worker.run();

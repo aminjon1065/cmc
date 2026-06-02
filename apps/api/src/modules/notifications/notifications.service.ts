@@ -213,6 +213,19 @@ export class NotificationsService {
     });
   }
 
+  /**
+   * Fan a notification out to an explicit recipient list (P3.2 / ADR-0046).
+   * Public seam for workflow activities (incident-response page / reminder /
+   * escalation) — dedups recipients, per-user failures are logged not thrown.
+   */
+  async notifyUsers(
+    tenantId: string,
+    recipients: string[],
+    n: { kind: NotificationKind; title: string; body?: string; link?: string },
+  ): Promise<void> {
+    await this.fanOut(tenantId, recipients, n);
+  }
+
   // ---------- read (self-scoped) ----------
 
   async listForUser(

@@ -466,7 +466,7 @@ No Yjs, no WebSocket-backed CRDT provider, no presence cursors, no anchored comm
 |---|---|
 | **Status** | NOT STARTED |
 
-**Backend done (P2.10 / ADR-0040):** `cases` + `case_activity` (state machine, priority+CHECK, assignee, `due_at`, soft-delete, RLS); `/v1/cases` CRUD + transition (resolve-gate) + assign + **comment/activity timeline** + stats; tenant-scoped, audited, outbox events; `case:*` RBAC. **Remaining:** web UI (dashboard "Cases Open 142" still hardcoded), config-driven case types, SLA escalation cron (→ Temporal P3.1; `due_at` stored), assignment policies, linked artifacts (incident/document/gis_feature), `case_number`, case events consumer. **Complexity (done): L; remaining: L.**
+**Backend done (P2.10 / ADR-0040):** `cases` + `case_activity` (state machine, priority+CHECK, assignee, `due_at`, soft-delete, RLS); `/v1/cases` CRUD + transition (resolve-gate) + assign + **comment/activity timeline** + stats; tenant-scoped, audited, outbox events; `case:*` RBAC. **SLA escalation now durable** — `due_at` drives a Temporal timer auto-started/cancelled by the case lifecycle (P3.1 / ADR-0045), escalating to a `sla_breached` activity + `case.sla_breached` event on breach. **Remaining:** web UI (dashboard "Cases Open 142" still hardcoded), config-driven case types, assignment policies, linked artifacts (incident/document/gis_feature), `case_number`, case events consumer. **Complexity (done): L; remaining: L.**
 
 ---
 
@@ -587,15 +587,17 @@ This is the **product surface the UI implies**. No live event ticker, no multi-m
 
 | | |
 |---|---|
-| Status | SUBSTRATE DONE (P3.1a / ADR-0045) — 2026-06-02; lifecycle wiring → P3.1b |
+| Status | DONE (P3.1 / ADR-0045 — case SLA; P3.2 / ADR-0046 — incident response) — 2026-06-02 |
 | Files | `apps/api/src/modules/temporal/` (`temporal-client{,.impl}.ts`, `case-sla.scheduler.ts`, `temporal.worker.ts`, `temporal.module.ts`, `workflows/case-sla.workflow.ts`, `activities/case-sla.{types,activities}.ts`); `infra/docker-compose.yml` (`temporal` auto-setup + `temporal-ui`); `TEMPORAL_*` config |
 | How | Gated in-process worker (decision: not a separate process). `TEMPORAL_CLIENT` seam (Noop/Real, dynamic-imports `@temporalio/client`); worker dynamic-imports `@temporalio/worker`, bundles `./workflows` (determinism-safe), runs activities built from DI. Off by default → noop client + no worker (jest never loads Temporal) |
 | First workflow | **`caseSlaWorkflow`** — sleep until `cases.due_at`, escalate if still open (idempotent activity → `sla_breached` case_activity + `case.sla_breached` outbox event), cancellable. `CaseSlaScheduler.schedule/cancel` (one-per-case workflow id) |
 | Tests | `apps/api/test/e2e/temporal.e2e-spec.ts` — 5 (faked client: gating + scheduler→client + cancel). Live smoke (real Temporal): escalate path → `escalated` + activity + outbox; cancel path → `cancelled`, no escalation |
 | Gotcha | auto-setup binds the frontend to the container IP, not loopback → healthcheck addresses the service name. Reuses the existing Postgres (DBs `temporal` + `temporal_visibility`) |
-| Remaining | P3.1b: auto start/cancel from the CasesService lifecycle + ADR close. Then incident-response workflow (P3.2), approvals/automations, visual builder (P3.8) |
+| Lifecycle wiring (P3.1b) | `CaseSlaScheduler` driven by CasesService: create-with-`due_at` → schedule; update → schedule/cancel on `due_at` change; transition → cancel on leaving open / reschedule on reopen. Best-effort; reschedule via `TERMINATE_EXISTING`. Live-smoked through the API (auto-escalate + resolve-cancels) |
+| Incident response (P3.2 / ADR-0046) | `incidentResponseWorkflow` (page→ack-SLA→remind→escalate) auto-started by IncidentsService for severity ≤ threshold; responders = assignee+reporter, escalate to `incident:resolve` holders (`RbacService.usersWithPermission` reverse-lookup) + `incident.escalated` event. `NotificationsService.notifyUsers` seam, kinds `incident.response`/`incident.escalated`. Live-smoked (page+reminder+escalate; ack self-stops) |
+| Remaining | approvals/automations, separate `apps/worker` + scaling, prod Temporal (HA/mTLS), post-mortem generation, war-room/external paging, visual builder (P3.8) |
 | Blocks | §3.10, §3.23, §3.27 |
-| Complexity | substrate M (done); lifecycle wiring S (P3.1b); XL for the visual builder + library |
+| Complexity | substrate M + lifecycle wiring S (done); XL for the visual builder + library |
 
 ### Observability plane (OTEL/Prom/Loki/Tempo/Grafana)
 

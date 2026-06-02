@@ -2,6 +2,7 @@ import { Global, Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { TEMPORAL_CLIENT, createTemporalClient } from "./temporal-client";
 import { CaseSlaScheduler } from "./case-sla.scheduler";
+import { IncidentResponseScheduler } from "./incident-response.scheduler";
 import { TemporalWorker } from "./temporal.worker";
 
 /**
@@ -19,8 +20,9 @@ import { TemporalWorker } from "./temporal.worker";
       useFactory: createTemporalClient,
     },
     CaseSlaScheduler,
+    IncidentResponseScheduler,
     TemporalWorker,
   ],
-  exports: [CaseSlaScheduler, TEMPORAL_CLIENT],
+  exports: [CaseSlaScheduler, IncidentResponseScheduler, TEMPORAL_CLIENT],
 })
 export class TemporalModule {}

@@ -39,6 +39,13 @@ export const RESOLVING_STATUSES: readonly IncidentStatus[] = [
   "closed",
 ];
 
+/** Non-terminal statuses — an incident here still needs work (response active). */
+export const INCIDENT_OPEN_STATUSES: readonly IncidentStatus[] = [
+  "reported",
+  "triaged",
+  "in_progress",
+];
+
 export function canTransition(
   from: IncidentStatus,
   to: IncidentStatus,

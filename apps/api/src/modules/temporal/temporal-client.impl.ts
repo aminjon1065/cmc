@@ -1,14 +1,5 @@
-import { Logger } from "@nestjs/common";
-import {
-  Client,
-  Connection,
-  WorkflowExecutionAlreadyStartedError,
-  WorkflowNotFoundError,
-} from "@temporalio/client";
-import type {
-  StartWorkflowInput,
-  TemporalClient,
-} from "./temporal-client";
+import { Client, Connection, WorkflowNotFoundError } from "@temporalio/client";
+import type { StartWorkflowInput, TemporalClient } from "./temporal-client";
 
 type Opts = { address: string; namespace: string; taskQueue: string };
 
@@ -18,7 +9,6 @@ type Opts = { address: string; namespace: string; taskQueue: string };
  */
 export class RealTemporalClient implements TemporalClient {
   readonly active = true;
-  private readonly logger = new Logger(RealTemporalClient.name);
 
   private constructor(
     private readonly connection: Connection,
@@ -33,21 +23,15 @@ export class RealTemporalClient implements TemporalClient {
   }
 
   async start(input: StartWorkflowInput): Promise<void> {
-    try {
-      await this.client.workflow.start(input.workflowType, {
-        taskQueue: this.taskQueue,
-        workflowId: input.workflowId,
-        args: input.args,
-      });
-    } catch (err) {
-      // Re-starting a workflow id that's still running is a no-op (the existing
-      // timer stands) — exactly the idempotency the scheduler wants.
-      if (err instanceof WorkflowExecutionAlreadyStartedError) {
-        this.logger.debug(`workflow ${input.workflowId} already running — kept`);
-        return;
-      }
-      throw err;
-    }
+    // TERMINATE_EXISTING makes start idempotent-by-replace: a fresh schedule for
+    // a case whose timer is already running atomically terminates the old one and
+    // starts a new one — exactly the "reschedule on due_at change" semantics.
+    await this.client.workflow.start(input.workflowType, {
+      taskQueue: this.taskQueue,
+      workflowId: input.workflowId,
+      args: input.args,
+      workflowIdConflictPolicy: "TERMINATE_EXISTING",
+    });
   }
 
   async cancel(workflowId: string): Promise<void> {

@@ -72,6 +72,26 @@ const EnvSchema = z.object({
   TEMPORAL_NAMESPACE: z.string().default("default"),
   TEMPORAL_TASK_QUEUE: z.string().default("cmc-main"),
 
+  // --- Incident-response workflow (P3.2 / ADR-0046) ---
+  // The Temporal incident-response workflow auto-starts for incidents at/above
+  // this severity (1 = SEV-1; default 2 → SEV-1 + SEV-2). It pages the
+  // assignee + reporter, reminds every REMINDER_INTERVAL while the incident is
+  // unacknowledged (still "reported"), and escalates to incident:resolve holders
+  // if still unacknowledged after ACK_SLA. All gated by TEMPORAL_ENABLED (off →
+  // the scheduler is a noop). Durations are seconds.
+  INCIDENT_RESPONSE_SEVERITY_THRESHOLD: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(5)
+    .default(2),
+  INCIDENT_ACK_SLA_SEC: z.coerce.number().int().positive().default(900),
+  INCIDENT_REMINDER_INTERVAL_SEC: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(300),
+
   // --- Event plane / NATS JetStream (P2.1 / ADR-0031) ---
   // The outbox relay publishes to NATS; consumers subscribe. Used by the relay
   // (P2.1b) — the outbox write side (P2.1a) is pure Postgres and needs no
