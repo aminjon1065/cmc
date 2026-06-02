@@ -531,14 +531,16 @@ These close gaps from current `main` that **cannot wait** for any new module.
 **Depends on:** P2.7 ✅.
 **Unblocks:** P2.9 (MapLibre).
 
-### P2.9 — MapLibre frontend 🔄 **IN PROGRESS (P2.9a done 2026-06-02)**
+### P2.9 — MapLibre frontend ✅ **COMPLETED 2026-06-02**
 **Why:** users see the map.
 **Cost:** L (1–2 wk).
 **Decision (tile auth):** tiles go through a **BFF proxy route** (`app/api/gis/tiles/[layerId]/[z]/[x]/[y]/route.ts`) — MapLibre fetches same-origin (session cookie rides along), the handler attaches the API bearer server-side. The access token never reaches the browser (same posture as `authedApiFetch`).
 **Delivered (P2.9a — map + tiles):**
 - `maplibre-gl@5`; `/map` server page (`authedApiFetch /gis/layers` → `<MapView>`); client `MapView` dynamic-imports MapLibre in an effect (never SSR-loaded), renders a vector source per layer → the tile proxy, as fill+line+circle (any geometry). Basemap configurable via `NEXT_PUBLIC_MAP_STYLE_URL` (default: minimal self-contained style; set to demotiles/self-hosted for imagery). Centered on Tajikistan. Sidebar "GIS Map" nav enabled → `/map`.
 - **Validated**: web `tsc` + production build clean (`/map` route compiles); BFF proxy live-smoked — unauth tile → **401** (server-side gate), `/map` reachable. *(Visual map rendering needs a browser — not machine-verifiable here.)*
-**Remaining (P2.9b):** layer-toggle UI (visibility), click → feature-inspector panel (`queryRenderedFeatures` → properties), ADR-0039 + close P2.9.
+**Delivered (P2.9b — toggle + inspector):** per-layer visibility toggle panel (`setLayoutProperty`), click → `queryRenderedFeatures` → right-hand **feature inspector** (layer / geometry type / properties), cursor feedback. Web `tsc` + build clean. ADR-0039.
+**Caveat:** visual map rendering is **not machine-verified** (no browser here) — verified: build/types + BFF proxy auth gate (unauth → 401). A human should confirm the map draws after login.
+**Deferred:** on-map editing (draw/move), clustering/heatmap, a shipped basemap, realtime layer updates (P2.3 hook).
 **Depends on:** P2.8 ✅.
 
 ### P2.10 — Cases module
