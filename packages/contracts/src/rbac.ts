@@ -88,16 +88,21 @@ export const PERMISSION_CATALOG = [
     description: "Resolve / close incidents",
   },
   { domain: "incident", action: "delete", description: "Delete incidents" },
-  // GIS / spatial (P2.7).
-  { domain: "gis", action: "layer:read", description: "View GIS layers + features" },
+  // GIS / spatial (P2.7). NB: permission keys are `${domain}:${action}` split on
+  // a single colon, so the sub-resource lives in the domain (gis_layer/gis_feature).
   {
-    domain: "gis",
-    action: "layer:edit",
+    domain: "gis_layer",
+    action: "read",
+    description: "View GIS layers + features",
+  },
+  {
+    domain: "gis_layer",
+    action: "edit",
     description: "Create, edit, and delete GIS layers",
   },
   {
-    domain: "gis",
-    action: "feature:write",
+    domain: "gis_feature",
+    action: "write",
     description: "Create, edit, and delete GIS features",
   },
 ] as const satisfies readonly PermissionDef[];
@@ -142,8 +147,8 @@ export const SYSTEM_ROLES: readonly SystemRoleDef[] = [
       "incident:write",
       "incident:assign",
       "incident:resolve",
-      "gis:layer:read",
-      "gis:feature:write",
+      "gis_layer:read",
+      "gis_feature:write",
     ],
   },
   {
@@ -156,7 +161,7 @@ export const SYSTEM_ROLES: readonly SystemRoleDef[] = [
       "audit:read",
       "role:read",
       "incident:read",
-      "gis:layer:read",
+      "gis_layer:read",
     ],
   },
 ] as const;

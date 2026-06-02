@@ -11,14 +11,15 @@ import { users } from "./users";
 import { gisLayers } from "./gis-layers";
 
 /**
- * A PostGIS geometry column, `geometry(GeometryZ, 4326)` — any geometry type,
- * 3D-aware (Z), in WGS84. We read/write it through PostGIS functions
+ * A PostGIS geometry column, `geometry(Geometry, 4326)` — ANY geometry type and
+ * dimension (2D or 3D), in WGS84. (A `GeometryZ` typmod would reject ordinary 2D
+ * GeoJSON, which is the common case.) We read/write it through PostGIS functions
  * (`ST_GeomFromGeoJSON` / `ST_AsGeoJSON`) in the service, so the Drizzle type is
  * only used for DDL generation; selecting it directly would yield EWKB hex.
  */
-const geometryZ = customType<{ data: string; driverData: string }>({
+const geometryCol = customType<{ data: string; driverData: string }>({
   dataType() {
-    return "geometry(GeometryZ, 4326)";
+    return "geometry(Geometry, 4326)";
   },
 });
 
@@ -38,7 +39,7 @@ export const gisFeatures = pgTable(
       .notNull()
       .references(() => gisLayers.id, { onDelete: "cascade" }),
 
-    geom: geometryZ("geometry").notNull(),
+    geom: geometryCol("geometry").notNull(),
     properties: jsonb("properties").notNull().default({}),
 
     createdBy: uuid("created_by").references(() => users.id, {

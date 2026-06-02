@@ -21,7 +21,7 @@ CREATE TABLE "gis_features" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"layer_id" uuid NOT NULL,
-	"geometry" geometry(GeometryZ, 4326) NOT NULL,
+	"geometry" geometry(Geometry, 4326) NOT NULL,
 	"properties" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"created_by" uuid,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,

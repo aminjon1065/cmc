@@ -90,6 +90,15 @@ const RESPONSE_SCHEMA: Record<string, string> = {
   "get /v1/realtime/status": "RealtimeStatusResponse",
   // analytics
   "get /v1/analytics/dashboard": "DashboardAnalyticsResponse",
+  // gis
+  "get /v1/gis/layers": "GisLayersListResponse",
+  "post /v1/gis/layers": "GisLayerResponse",
+  "get /v1/gis/layers/{id}": "GisLayerResponse",
+  "patch /v1/gis/layers/{id}": "GisLayerResponse",
+  "get /v1/gis/layers/{layerId}/features": "GisFeaturesListResponse",
+  "post /v1/gis/layers/{layerId}/features": "GisFeatureResponse",
+  "get /v1/gis/features/{id}": "GisFeatureResponse",
+  "patch /v1/gis/features/{id}": "GisFeatureResponse",
 };
 
 /**
@@ -123,6 +132,7 @@ const TAG_BY_PREFIX: Array<[string, string]> = [
   ["/v1/events", "events"],
   ["/v1/realtime", "realtime"],
   ["/v1/analytics", "analytics"],
+  ["/v1/gis", "gis"],
 ];
 
 /**

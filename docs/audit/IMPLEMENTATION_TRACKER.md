@@ -145,21 +145,24 @@ A `—` means "not applicable to a NOT STARTED module."
 
 | field | value |
 |---|---|
-| **Status** | NOT STARTED |
-| **Compl. %** | 2 % (PostGIS extension installed) |
-| **Arch.** | — |
-| **Prod.** | — |
-| **Scale** | — |
-| **Sec.** | — |
-| **Code** | `infra/postgres/init/01-extensions.sql` |
+| **Status** | IN PROGRESS — substrate (P2.7 / ADR-0037) |
+| **Compl. %** | 15 % (substrate: schema + CRUD + bbox + RLS + RBAC) |
+| **Arch.** | 7/10 |
+| **Prod.** | 7/10 |
+| **Scale** | 6/10 |
+| **Sec.** | 8/10 |
+| **Code** | `apps/api/src/modules/gis/{gis.service,gis.controller,gis.module,dto/*}.ts`, `packages/db/src/schema/{gis-layers,gis-features}.ts`, `0018` migration, `packages/contracts/src/gis.ts` |
 
 **Implemented**
-- PostGIS + postgis_topology extensions enabled in the dev Postgres image
+- PostGIS + postgis_topology in the dev image (`cmc/postgres:16-postgis-pgvector`); extension ensured idempotently in migration 0018
+- **`gis_layers`** (name, kind, style/schema jsonb, source_uri, is_public, soft-delete) + **`gis_features`** (`geometry(Geometry, 4326)`, properties jsonb, soft-delete); **GIST** index on geometry + tenant/layer indexes; **RLS** (two-GUC) on both
+- `/v1/gis` API (P2.7b): layer CRUD (`gis_layer:read`/`:edit`) + feature CRUD (`gis_feature:write`); geometry as **GeoJSON** (`ST_GeomFromGeoJSON`/`ST_AsGeoJSON`), structurally Zod-validated → 400; **bbox-filtered list** (`&& ST_MakeEnvelope`, GIST); tenant-isolated, audited; `featureCount` per layer
+- Live-validated (booted API, real PostGIS): geometry round-trip + bbox near/far + featureCount
 
-**Gaps**
-- All of ToR §4: no spatial schema, no tile server, no MapLibre frontend, no geofencing, no live-tracking pipeline, no spatial analytics, no clustering/heatmap, no coordinate-system handling, no caching layers
+**Gaps vs ToR §4**
+- Tile server / MVT (P2.8), MapLibre frontend (P2.9); geofencing, live-tracking pipeline, spatial analytics/clustering/heatmap, multi-CRS handling, tile caching/CDN; richer spatial ops (distance/within), import/export (GeoPackage/Shp); properties-schema enforcement; GIS domain events
 
-**Complexity:** **XXL** (GIS is a whole product surface; ToR §19.4 calls for 3–5 dedicated GIS engineers).
+**Complexity:** **XXL** (GIS is a whole product surface; ToR §19.4 calls for 3–5 dedicated GIS engineers) — substrate done, the map product remains.
 
 ---
 
@@ -645,7 +648,7 @@ This is the **product surface the UI implies**. No live event ticker, no multi-m
 | 3.1 IAM | PARTIAL | 30 % | L |
 | 3.2 Multi-Tenancy | DONE (shared-schema mode) | 50 % | L (for cryptographic + migration tooling) |
 | 3.3 RBAC/ABAC | NOT STARTED | 0 % | L → XL |
-| 3.4 GIS | NOT STARTED | 2 % | XXL |
+| 3.4 GIS | IN PROGRESS (substrate, P2.7) | 15 % | XXL |
 | 3.5 Analytics | NOT STARTED | 0 % | XL |
 | 3.6 Realtime Events | NOT STARTED | 0 % | L → XL |
 | 3.7 Dashboard Builder | NOT STARTED | 0 % | L |

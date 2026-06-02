@@ -505,7 +505,7 @@ These close gaps from current `main` that **cannot wait** for any new module.
 **Deferred:** more CH widgets (by-region trend, audit activity, MTTR); realtime dashboard refresh via P2.3.
 **Depends on:** P2.5 ✅.
 
-### P2.7 — GIS substrate (schemas + RLS + endpoints) 🔄 **IN PROGRESS (P2.7a done 2026-06-02)**
+### P2.7 — GIS substrate (schemas + RLS + endpoints) ✅ **COMPLETED 2026-06-02**
 **Why:** the platform's spatial commitment. Phase-2 entry into the GIS plane.
 **Cost:** L (2 wk).
 **Note:** the dev Postgres image already ships **PostGIS** (`cmc/postgres:16-postgis-pgvector`) — no infra switch; the migration just `CREATE EXTENSION IF NOT EXISTS postgis` (idempotent, runs as the migration owner so the test DB is self-sufficient).
@@ -513,14 +513,23 @@ These close gaps from current `main` that **cannot wait** for any new module.
 - `gis_layers` (name, kind, style/schema jsonb, source_uri, is_public, created_by, soft-delete) + `gis_features` (`geometry geometry(GeometryZ, 4326)` via a Drizzle `customType`, properties jsonb, soft-delete). Migration **0018**: extension + tables + **GIST** index on geometry + tenant/layer btree indexes + **RLS** (two-GUC) on both. Applied to dev + `cmc_test`; geometry round-trip verified (`ST_GeomFromGeoJSON`/`ST_AsGeoJSON`).
 - Contracts `@cmc/contracts/gis` (GeoJSON geometry, layer/feature CRUD + bbox query + list responses). Permissions `gis:layer:read`/`gis:layer:edit`/`gis:feature:write` in the catalog + granted to operator (read + feature:write) / auditor (read) / tenant_admin (`*`).
 - **Validated**: suite **244/244** (31 suites), API `tsc` + db build clean, no new failures (exit-1 = pre-existing OTEL post-teardown log noise).
-**Remaining (P2.7b):** `GisService` + `GisController` — layer CRUD; feature CRUD (`ST_GeomFromGeoJSON` insert / `ST_AsGeoJSON` read); bbox-filtered list (`&&` / `ST_MakeEnvelope`); tenant-scoped via RLS; audited. e2e (CRUD + bbox + RBAC + isolation) + ADR-0037 + close P2.7.
+**Delivered (P2.7b — service + endpoints):**
+- `GisService` + `GisController` under `/v1/gis`: layer CRUD (`gis_layer:read`/`:edit`) + feature CRUD (`gis_feature:write`) — geometry written via `ST_SetSRID(ST_GeomFromGeoJSON,4326)`, read via `ST_AsGeoJSON`; **bbox list** filters with `&& ST_MakeEnvelope` (GIST-indexed); GeoJSON structurally Zod-validated → clean 400; tenant-scoped via RLS; audited; soft-delete.
+- **RBAC fix**: keys are `${domain}:${action}` split on ONE colon, so the sub-resource lives in the domain (`gis_layer`/`gis_feature`) — a `gis:layer:edit` form mis-parsed + dropped the grant.
+- **Validated**: suite **250/250** (32 suites; +6 GIS), API `tsc`/`eslint`/`nest build` clean. **Live smoke** (booted API, real PostGIS): layer → feature (`Point [68.78,38.56]` round-trips exactly) → bbox near=1/far=0 → featureCount=1. ADR-0037.
+**Deferred:** GIS domain events / realtime map updates; properties-schema enforcement; import/export (GeoPackage/Shp).
 **Depends on:** P1.1 ✅.
+**Unblocks:** P2.8 (tile server), P2.9 (MapLibre).
 
-### P2.8 — Custom NestJS tile server
+### P2.8 — Custom NestJS tile server ✅ **COMPLETED 2026-06-02**
 **Why:** vector tiles per-tenant.
 **Cost:** M (1 wk).
-**How:** endpoint `/v1/gis/tiles/:layer/:z/:x/:y.mvt` that runs `ST_AsMVT(...)` against the tenant's `gis_features` filtered by the tile envelope. Cache-Control headers. Optional CDN-friendly signed URL variant.
-**Depends on:** P2.7.
+**Delivered:**
+- `GET /v1/gis/tiles/:layerId/:z/:x/:y.mvt` (`gis_layer:read`) — `GisService.tile()` renders MVT in-DB with `ST_AsMVT`; the tile envelope (`ST_TileEnvelope`, 3857) filters via **GIST** (`geometry && ST_Transform(envelope,4326)`) then `ST_AsMVTGeom` to 3857. Binary `@Res` (`application/vnd.mapbox-vector-tile`), `Cache-Control: private, max-age=60`, **204** for empty tiles, **400** for out-of-range z/x/y. RLS-scoped (unknown/cross-tenant layer → empty tile).
+- **Validated**: suite **254/254** (32 suites; +4 tile tests), `tsc`/`eslint`/`nest build` clean, no migration. **Live smoke**: world `0/0/0.mvt` → 200 / 86-byte MVT (`features` layer); western `1/0/0` → 204; `2/9/0` → 400. ADR-0038.
+**Deferred:** tile cache/CDN + signed-URL variant; multi-layer combined tiles.
+**Depends on:** P2.7 ✅.
+**Unblocks:** P2.9 (MapLibre).
 
 ### P2.9 — MapLibre frontend
 **Why:** users see the map.
