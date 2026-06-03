@@ -16,6 +16,9 @@ export const SUBJECT_AGGREGATE_PERMISSION: Readonly<
   Record<string, Permission>
 > = {
   incident: "incident:read",
+  // Chat realtime (P3.12): subscribe to `tenant.<id>.chat.>` with chat:read to
+  // receive channel/message events fanned out from the outbox.
+  chat: "chat:read",
 };
 
 /** The permission required to subscribe to `subject`, or null if not allowed. */

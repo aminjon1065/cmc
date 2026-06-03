@@ -734,23 +734,104 @@ React Flow + node library + compile-to-Temporal. Split a/b/c/d. ADR-0053.
 **Depends on:** P3.8c.
 **Depends on:** P3.1.
 
-### P3.9 — External API + API keys + per-tenant quota
-**Depends on:** P1.1, Caddy / Kong decision.
+### P3.9 — External API + API keys + per-tenant quota ✅ **DONE (2026-06-02)**
+Split a/b. ADR-0054.
+**Decisions (confirmed):** **in-app NestJS guard** (no external gateway); **combined JWT-or-API-key on the existing `/v1`** (a key calls the same endpoints, scopes gate via `@Authorize`); **permission-subset scopes** (RBAC strings ≤ creator's); **per-key + per-tenant Redis quota**.
 
-### P3.10 — Wiki (without realtime collab yet)
-Spaces, pages, TipTap editor, version history, comments.
+#### P3.9a — API keys backend ✅ **DONE (2026-06-02)**
+- **`api_keys` table** (SHA-256 `key_hash` only — secret shown once; `key_prefix`, `scopes` jsonb, `created_by`, `last_used_at`, `expires_at`, `revoked_at`, RLS, unique hash index) + migration 0027. Contracts `api-key.ts` + `api_key:manage` perm (tenant_admin only).
+- **`ApiKeysService`**: mint `cmc_…` key, hash, create/list/revoke; **scopes ≤ creator's permissions** (no escalation, even for admin). Crypto helper `api-key.crypto.ts` (generate/hash/`isApiKey`).
+- **Combined auth**: `TenantContextMiddleware` detects a key (`X-API-Key` or `Authorization: Bearer cmc_…`), privileged hash lookup (+ tenant slug join, expiry/revoke/orphan checks), sets an `apikey` principal carrying scopes; best-effort `last_used_at`. `RbacService.resolvePermissions` returns the key's scopes for an api-key principal **before the cache** (no cache poisoning) → `enforce`/`hasPermission` gate the same `/v1` endpoints + downstream filters (search/folder-access) honour scopes.
+- **Quota**: global `ApiKeyQuotaGuard` (no-op for JWT/anon) → per-key + per-tenant Redis counters via the existing `RateLimitService` → 429 + `Retry-After`. Config `API_KEY_RATE_*`.
+- **`/v1/api-keys`** create/list/revoke (`api_key:manage`, **user-only** — a key can't mint/revoke keys). OpenAPI entries.
+- **Validated**: suite **359/359** (49 suites; +8). e2e `api-keys`: create (secret once, **hash at rest = sha256**), auth a `/v1` endpoint within scopes, 403 outside scopes, overreach → 400, revoke → 401, **quota → 429 (+Retry-After)**, management gated (operator 403, key 403), **JWT path unaffected**. `tsc`/`eslint`/`nest build` clean, migration 0027.
+- **Deferred → P3.9b**: web admin UI + ADR-0054.
+> Env note: a macOS TCC/Docker file-share glitch revoked repo file access mid-item; after restoring access + Docker, the eslint/build/full-suite gates were re-run clean (the e2e had already passed before the glitch).
 
-### P3.11 — Data import workers
-BullMQ jobs for CSV / Excel / GeoJSON / Shapefile with validation + quarantine.
+#### P3.9b — Web API-keys admin UI ✅ **DONE (2026-06-02)**
+- **`/admin/api-keys`** (under the admin-only layout): server page fetches `/v1/api-keys` + the caller's `/rbac/me` permissions (the scope-picker set, since key scopes ⊆ creator's). Client `ApiKeysManager`: create (name + scope toggles + optional expiry) with the **secret shown once** (copy/dismiss), list (name/prefix/scopes/last-used/status: active|expired|revoked), revoke (confirm). Server actions (`authedApiFetch`). Admin overview gains an "API Keys" card.
+- **Validated**: `next lint` + `next build` clean (`/admin/api-keys` 3.49 kB). Runtime smoke: `/admin/api-keys` unauth → 307 → `/login` (admin gate live). No API/contract changes → API suite unchanged (359/359).
+- **ADR-0054** (covers P3.9a+b).
+**Deferred:** key rotation / scope-edit (revoke + recreate), outbound webhooks, managed gateway (Kong/Envoy/WAF).
+**Depends on:** P3.9a.
+**Depends on:** P1.1.
 
-### P3.12 — Chat MVP (no E2EE, no video yet)
-Channels, threads, mentions, reactions; persisted to Postgres + projected to CH; realtime via P2.3.
+### P3.10 — Wiki (without realtime collab yet) ✅ **DONE (2026-06-03 / ADR-0055)**
+Spaces, pages, TipTap editor, version history, comments. Split a/b/c. ADR-0055.
+**Decisions (confirmed):** **TipTap/ProseMirror JSON** content (+ derived plaintext for search); **nested ltree page tree per space**; **snapshot-per-save versions**; **tenant-wide `wiki:*` RBAC** (per-space restriction deferred).
 
-### P3.13 — HA introduction
+#### P3.10a — Spaces + pages + versions backend ✅ **DONE (2026-06-02)**
+- **`wiki_spaces`** + **`wiki_pages`** (ltree `path` per space, parent self-FK, GiST, `content` jsonb (ProseMirror doc) + `content_text` derived plaintext, `current_version_no`, tsvector GIN on title+text) + **`wiki_page_versions`** (snapshot per save) + migration 0028 + RLS. Reuses the folders ltree type + move-repath CASE.
+- Contracts `wiki.ts` (lenient `ProseMirrorDocSchema` passthrough, WikiSpace/Page/Summary/Version + CRUD/tree). `wiki:read/write/manage` perms (operator read+write, auditor read).
+- **`WikiService`/Controller**: space CRUD (manage to create/delete); page CRUD + tree (path-ordered) + move (repath CASE + cycle guard, same-space) + soft-delete subtree; **version snapshot on create (v1) + every update**; list/restore (restore = append a new version + repoint). Plaintext derived server-side (`extractText` walks the doc). OpenAPI entries.
+- **Validated**: suite **366/366** (50 suites; +7). e2e `wiki`: space CRUD; nested tree + content round-trip + path order + derived plaintext; update→version bump + list; restore (append-only); move + cycle guard; delete subtree; `wiki:*` RBAC (manage vs write vs read); cross-tenant RLS → 404. `tsc`/`eslint`/`nest build` clean, migration 0028.
+- **Deferred → P3.10b/c**: comments; TipTap web editor.
+
+#### P3.10b — Page comments (threaded) backend ✅ **DONE (2026-06-02)**
+- **`wiki_comments`** (tenant FK, `page_id`→wiki_pages cascade, `parent_id` self-FK thread, `author_id`→users set-null, `body` text, timestamps, soft-delete) + migration 0029 + RLS (two-GUC) + `pageIdx`. Added to `truncateAll`.
+- Contracts: `WikiComment`/`CreateWikiComment` (body 1–10 000, optional nullable `parentId`) + comment/list responses.
+- **`WikiService`**: `listComments` (oldest-first), `createComment` (validates a reply's parent is on the **same page** → 400 otherwise), `deleteComment` (**author OR `wiki:manage`**, else 403; `RbacService` injected). `WikiController`: GET/POST `pages/:id/comments` (read / write), DELETE `comments/:id` (write + service-level author/manage check). OpenAPI entries.
+- **Validated**: suite **370/370** (51 suites; +1 suite/+4 tests, 0 regressions). e2e `wiki-comments`: create + threaded reply + oldest-first list; cross-page parent → 400; author-delete 204 / non-author-non-manager 403 / manager 204; viewer 403 (read & write) + cross-tenant 404. `tsc`/`eslint`/`nest build` clean, migration 0029.
+- ADR-0055 covers a–c (written at P3.10c close).
+**Depends on:** P3.10a.
+
+#### P3.10c — Web wiki (TipTap) + ADR-0055 + close P3.10 ✅ **DONE (2026-06-03)**
+- **TipTap** v2 (`@tiptap/react` + `@tiptap/starter-kit` + `@tiptap/pm`). `PageEditor` — `useEditor({ immediatelyRender:false })` (SSR-safe), remount-on-`key` for content swaps + `setEditable` for view↔edit, formatting toolbar (B/I, H1–3, lists, quote, code), JSON round-trips straight to the API; prose styles in `globals.css`.
+- **`/wiki`** — space cards + create (gated on `wiki:manage`). **`/wiki/[spaceId]`** — three-pane client `WikiWorkspace`: page **tree nav** (indented by ltree depth, inline create at root/child), **editor** (view/edit/save, version badge, delete), tabbed **History / Comments** panel (restore version; threaded comments — reply, delete gated author-or-manage via `userId` from `/rbac/me`).
+- `"use server"` actions (`ActionResult<T>`); sidebar "Knowledge Base" enabled; `/wiki` added to auth middleware prefixes.
+- **Validated**: web `tsc` + `next lint` + `next build` clean (TipTap bundles into the `/wiki/[spaceId]` chunk). Live smoke: `/wiki` + `/wiki/[id]` 307→`/login` (middleware), `/login` 200, server log clean. Backend suite **370/370** unchanged. ADR-0055 (a–c).
+**Depends on:** P3.10b.
+
+### P3.11 — Data import workers ✅ **DONE (2026-06-03 / ADR-0056)**
+BullMQ jobs for CSV / Excel / GeoJSON / Shapefile with validation + quarantine. Split a/b. ADR-0056.
+**Decisions (confirmed):** first iteration **CSV→incidents + GeoJSON→GIS** (Excel + Shapefile → P3.11b); **per-row validation with partial-commit + a quarantine table** (not all-or-nothing).
+
+#### P3.11a — Import backend (CSV→incidents + GeoJSON→GIS) ✅ **DONE (2026-06-03)**
+- **`import_jobs`** (kind, source_key, target_id, status, total/inserted/failed counts, error, created_by) + **`import_row_errors`** (quarantine: row_num, reason, raw jsonb) + migration 0030 + RLS (two-GUC) + `truncateAll`.
+- Contracts `import.ts` (`csv_incidents` | `geojson_gis`; `CreateImportRequest` superRefine — geojson requires `targetId`; job + row-error responses). `import:run` / `import:read` perms (operator gets both).
+- **Gated BullMQ seam** (`IMPORT_QUEUE` token + Noop/Real + `IMPORTS_ENABLED` factory — `bullmq` never loads in jest) + **`ImportWorker`** (isTest-skipped). Source file pulled from the files bucket via `StorageService.getObjectBytes` (uploaded via the standard flow); `csv-parse` for CSV, native JSON for GeoJSON.
+- **`ImportService`**: `create` (gated on the **target-domain write perm** too — no RBAC escalation — then enqueue) + `runJob` (compare-and-set claim queued→processing so a retry can't double-import; download → parse → **per-row validate (zod for incidents / structural for geometry) + SAVEPOINT insert** so one bad row can't abort the job → quarantine the rest; counts + status atomic). Endpoints: POST `/v1/imports`, GET `/v1/imports`, `/:id`, `/:id/errors`.
+- **Validated**: suite **375/375** (52 suites; +5). e2e `imports`: CSV partial-commit + quarantine (2 in / 2 quarantined, error rows + reasons); GeoJSON partial-commit (bad geometry quarantined); whole-file fail (missing source); contract 400 (geojson w/o target); RBAC (viewer 403) + **escalation guard** (import:run but no incident:create → 403) + cross-tenant 404. **Live smoke** (real BullMQ worker, `IMPORTS_ENABLED=true` + `NODE_ENV=development`): HTTP create → enqueue → worker → runJob → Postgres+MinIO, job completed (1 in / 1 quarantined). `tsc`/`eslint`/`nest build` clean, migration 0030.
+
+#### P3.11b — Excel + Shapefile + web import UI + ADR-0056 + close P3.11 ✅ **DONE (2026-06-03)**
+- **Two new kinds** reusing the P3.11a pipeline (parsers dynamic-imported): **`xlsx_incidents`** (`xlsx`/SheetJS, first sheet, `raw:false` → string cells like CSV → `processIncidentRows`) + **`shapefile_gis`** (`adm-zip` unzip → `shapefile.read` on `.shp`/`.dbf` → GeoJSON features → `processGisFeatures`; coords assumed WGS84, reprojection deferred). `ImportService` refactored: parsers (bytes→rows/features) split from processors (validate + SAVEPOINT partial-commit + quarantine).
+- **Source upload**: `POST /v1/imports/upload-init` presigns a PUT to `imports/<tenant>/…` (no document row); browser PUTs to MinIO; then `POST /v1/imports`. Contract `ImportUploadInit*`.
+- **Web `/imports`** (sidebar "Data Import" + middleware-protected): job table (status, inserted/total, quarantined, expandable quarantine viewer) + "New import" form (kind + target-layer-for-GIS + file → upload-init → presigned PUT → create) via `"use server"` actions; refresh button to watch progress.
+- **Validated**: API suite **378/378** (52 suites; +3). e2e `imports` 8/8: CSV + XLSX partial-commit/quarantine, GeoJSON + **Shapefile** (real hand-built `.shp` zip) feature import, upload-init→PUT→import round-trip, whole-file fail, gis-without-target 400, RBAC + escalation guard + cross-tenant 404. Web `tsc`/`lint`/`build` clean; `/imports` 307→`/login` live smoke. ADR-0056 (a+b).
+**Depends on:** P3.11a.
+
+### P3.12 — Chat MVP (no E2EE, no video yet) ✅ **DONE (2026-06-03 / ADR-0057)**
+Channels, threads, mentions, reactions; persisted to Postgres + projected to CH; realtime via P2.3. Split a/b. ADR-0057.
+**Decisions (confirmed):** first iteration **channels + messages + realtime** (threads/reactions/mentions → P3.12b); **tenant-open channels** (`chat:read`/`write`/`manage`, no per-channel membership in MVP); **CH projection deferred** (Postgres only).
+
+#### P3.12a — Channels + messages + realtime backend ✅ **DONE (2026-06-03)**
+- **`chat_channels`** + **`chat_messages`** (author set-null, `edited_at`, soft-delete, feed index `(tenant,channel,created_at)`) + migration 0031 + RLS (two-GUC) + `truncateAll`.
+- Contracts `chat.ts` (channel + message + `before`-cursor list w/ `nextBefore`). `chat:read`/`chat:write`/`chat:manage` perms (operator read+write, auditor read).
+- **`ChatService`/Controller**: channel create (`manage`)/list/get/delete (soft-delete + cascade messages); message post (`write`)/list (oldest→newest, `before` cursor)/edit/delete (**author OR `chat:manage`**). Every mutation **emits a `chat` event to the outbox in the same request tx** (atomic) → relay → NATS `tenant.<id>.chat.<eventType>.v1`.
+- **Realtime via P2.3**: added `chat → chat:read` to `SUBJECT_AGGREGATE_PERMISSION`, so a client subscribes to `tenant.<id>.chat.>` with `chat:read` and the fan-out delivers channel/message events live.
+- **Validated**: suite **383/383** (53 suites; +5). e2e `chat`: channel CRUD (+non-manager 403); message post/list/`before`-pagination + **outbox emit**; edit/delete author-vs-manager-vs-403; RBAC (viewer 403) + cross-tenant 404. **Live smoke** (real NATS→WS, `NATS_ENABLED`+`REALTIME_ENABLED`+`NODE_ENV=development`): HTTP post → outbox → relay flush → NATS → fan-out → WS `chat:read` subscriber receives `chat.message_created`. `tsc`/`eslint`/`nest build` clean, migration 0031. **NB for web (P3.12b):** the WS frame's `payload` is the **full event envelope**; chat fields are under `payload.payload`.
+
+#### P3.12b — Threads + reactions + mentions + web chat UI + ADR-0057 + close P3.12 ✅ **DONE (2026-06-03)**
+- Backend: **threads** (`parent_id` self-FK, one level — reply's parent must be top-level same-channel; feed lists top-level + `replyCount`; replies endpoint), **reactions** (`chat_reactions` unique(message,user,emoji) → idempotent; messages enriched with `{emoji,count,mine}[]`), **mentions** (explicit `mentions: userId[]` → validated tenant users → `chat.mention` notifications). Migration 0032. Each reaction/thread event also emits to the outbox.
+- Web **`/chat`** (sidebar "Chat" + middleware-protected): three-pane workspace — channel list (+create for managers), message stream + composer, per-message emoji reactions (toggle chips w/ count+mine), thread side-panel (reply + reply-count); `"use server"` actions. **Browser uses a 4 s poll** (not WS) to avoid exposing the JWT — the realtime backend is built/live-smoked; a short-lived WS-ticket endpoint is the documented follow-up.
+- **Validated**: API suite **386/386** (53 suites; +3). e2e `chat` 8/8 (incl threads/reactions/mentions). Web `tsc`/`lint`/`build` clean; `/chat` 307→`/login` smoke. ADR-0057 (a+b). Deferred: membership/private channels, presence/typing/read-receipts, mention-autocomplete UI, CH projection, WS-ticket browser realtime.
+**Depends on:** P3.12a.
+
+### P3.13 — HA introduction ✅ **DONE (2026-06-03 / ADR-0058)**
 2× API instances; Postgres primary + replica; PgBouncer; Redis Sentinel.
+**Decisions (confirmed):** **pragmatic HA + correctness** (not a full local cluster); **replica/Sentinel as compose profiles/configs** (documented target, not default-up).
+- **API horizontally scalable (real)**: dropped `container_name` from `api` in deploy-compose (`docker compose up --scale api=N`); Caddy API site → **dynamic DNS upstreams** (`dynamic a` + `lb_policy round_robin`, refresh 5s) → live load-balance across replicas.
+- **N-instance correctness**: relay/sealer/export/projection already `pg_advisory_xact_lock`-guarded; **closed the one gap** — the daily retention sweep now takes `pg_try_advisory_xact_lock(40_211_500)` (no double-sweep/dup-audit). Verified safe: Redis-held sessions/rate-limit/RBAC cache, per-instance NATS fan-out (realtime reaches all instances), shared BullMQ queue.
+- **PgBouncer (real)**: `pgbouncer` (transaction pooling) fronts Postgres; runtime `DATABASE_URL`→`pgbouncer:6432`. Safe: tx-scoped GUCs (`is_local`) + `prepare:false`; owner/migration path bypasses the pooler.
+- **Stateful HA sample (documented)**: `infra/ha/docker-compose.ha.yml` — Postgres primary+streaming-standby + PgBouncer + Redis master/replica + **3-node Sentinel** (quorum 2) + `redis-sentinel.conf` + README. `docs/runbooks/ha.md`.
+- **Validated**: `tsc` clean; retention e2e **6/6**; full suite **53/386** (0 regressions); `docker compose config` exit 0 on deploy-compose + ha-compose; `caddy validate` → valid. **Deferred (documented)**: app read-replica routing, Redis Sentinel client, failover automation, multi-region (P4.6).
 
-### P3.14 — SOC 2 control mapping
+### P3.14 — SOC 2 control mapping ✅ **DONE (2026-06-03)**
 Document control coverage and gaps. Begin evidence collection.
+- **`docs/compliance/soc2-control-mapping.md`**: maps implemented technical controls to the Trust Services Criteria — Common Criteria **CC1–CC9** + **Availability (A1)** + **Confidentiality (C1)** — each row criterion→status(✅/🟡/🔴/🏛)→evidence (ADR/code/runbook). Honest framing: engineering self-assessment, not a SOC 2 report; org/process controls flagged 🏛 (management).
+- **Prioritized gap analysis** (technical: at-rest enforcement, mTLS/Vault-prod, CI security scanning, staging+release gate, SIEM, DR test, access reviews; organizational: policy set, risk register, vendor inventory, HR security).
+- **`docs/compliance/evidence-register.md`**: starter register — system-produced evidence already available (audit log + chain-verify + anchors, alerts, metrics, backup/restore drill, CI runs, `/rbac/me` access reviews, …) with cadence/owner, plus the manual evidence still to create, and a Type I→II path.
+- No ADR (the compliance docs are the deliverable). No code change → suite unaffected.
 
 ### P3.15 — Daily Merkle root anchoring
 Extension of P1.11. Daily root committed to MinIO Object Lock bucket (compliance mode).

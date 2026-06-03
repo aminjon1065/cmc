@@ -215,6 +215,18 @@ const EnvSchema = z.object({
     .transform((v) => v.toLowerCase() === "true"),
   PREVIEW_MAX_DIM: z.coerce.number().int().positive().default(512),
 
+  // --- Bulk data import (P3.11 / ADR-0056) ---
+  // BullMQ worker parses an uploaded file and bulk-inserts into a target domain
+  // (CSV→incidents, GeoJSON→GIS), quarantining bad rows. ENABLED gates the queue
+  // connection + worker (off → import jobs are created but not processed). The
+  // service path is unaffected by the flag (tests drive it directly).
+  IMPORTS_ENABLED: z
+    .string()
+    .default("false")
+    .transform((v) => v.toLowerCase() === "true"),
+  // Hard cap on rows processed per job (protects the worker from huge files).
+  IMPORT_MAX_ROWS: z.coerce.number().int().positive().default(50000),
+
   // --- Auth / JWT ---
   JWT_SECRET: z.string().min(32, "JWT_SECRET must be at least 32 characters"),
   JWT_ACCESS_TTL: z.string().default("15m"),

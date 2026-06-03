@@ -26,3 +26,6 @@ export * from "./search";
 export * from "./folder";
 export * from "./workflow";
 export * from "./api-key";
+export * from "./wiki";
+export * from "./import";
+export * from "./chat";

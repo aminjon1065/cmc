@@ -27,6 +27,9 @@ import { GisModule } from "./modules/gis/gis.module";
 import { SearchModule } from "./modules/search/search.module";
 import { WorkflowsModule } from "./modules/workflows/workflows.module";
 import { ApiKeysModule } from "./modules/api-keys/api-keys.module";
+import { WikiModule } from "./modules/wiki/wiki.module";
+import { ImportsModule } from "./modules/imports/imports.module";
+import { ChatModule } from "./modules/chat/chat.module";
 import { NotificationsModule } from "./modules/notifications/notifications.module";
 import { IncidentNotificationsModule } from "./modules/incident-notifications/incident-notifications.module";
 import { OpenApiModule } from "./modules/openapi/openapi.module";
@@ -116,6 +119,9 @@ import { loadConfig } from "./config/configuration";
     SearchModule,
     WorkflowsModule,
     ApiKeysModule,
+    WikiModule,
+    ImportsModule,
+    ChatModule,
     NotificationsModule,
     IncidentNotificationsModule,
     OpenApiModule,

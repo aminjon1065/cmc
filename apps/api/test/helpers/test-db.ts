@@ -63,6 +63,15 @@ export async function truncateAll(
       workflow_runs,
       workflows,
       api_keys,
+      import_row_errors,
+      import_jobs,
+      chat_reactions,
+      chat_messages,
+      chat_channels,
+      wiki_comments,
+      wiki_page_versions,
+      wiki_pages,
+      wiki_spaces,
       users,
       tenants
     RESTART IDENTITY CASCADE

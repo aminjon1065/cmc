@@ -197,6 +197,41 @@
       "when": 1780411715342,
       "tag": "0027_wooden_warstar",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1780423391879,
+      "tag": "0028_nasty_wind_dancer",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1780424612399,
+      "tag": "0029_curly_blue_marvel",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1780453614257,
+      "tag": "0030_violet_nebula",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1780457021538,
+      "tag": "0031_wet_supernaut",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1780458357694,
+      "tag": "0032_mature_lorna_dane",
+      "breakpoints": true
     }
   ]
 }

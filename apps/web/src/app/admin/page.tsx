@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Building2, FileJson2, ShieldCheck, Users } from "lucide-react";
+import { Building2, FileJson2, KeyRound, ShieldCheck, Users } from "lucide-react";
 import { auth } from "@/auth";
 import { AppShell } from "@/components/cmc/app-shell";
 import { getBranding } from "@/lib/branding";
@@ -61,6 +61,16 @@ const SECTIONS: {
     icon: FileJson2,
     available: true,
     phase: "P1.10b",
+  },
+  {
+    id: "api-keys",
+    title: "API Keys",
+    description:
+      "Issue scoped API keys for programmatic access, set quotas, and revoke.",
+    href: "/admin/api-keys",
+    icon: KeyRound,
+    available: true,
+    phase: "P3.9",
   },
 ];
 

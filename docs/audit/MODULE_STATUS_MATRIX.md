@@ -23,17 +23,17 @@ Compact one-row-per-module view. Detail per module is in
 | 3.8 | File Management System | 🟡 | 32 | 8 | 8 | 7 | 8 | `apps/api/src/modules/storage/` — presigned single-PUT + **S3 multipart** (P2.12 / ADR-0042) + **image previews** (gated BullMQ worker → WebP, P2.13 / ADR-0043) + **folder tree** (ltree hierarchy + per-folder permission inheritance, P3.3 / ADR-0047,0048) + **versioning** (`document_versions`, new-version upload, restore, content_hash, P3.4 / ADR-0049) + **retention/legal-hold** (P3.5 / ADR-0050) + **OpenSearch indexing** (gated best-effort indexer on write + `reindex`, P3.6a). Next: OpenSearch-backed search query (P3.6b), PDF/video previews, range reads |
 | 3.9 | Enterprise Document Mgmt | 🟡 | 10 | 7 | 7 | 5 | 7 | `apps/api/src/modules/documents/` |
 | 3.10 | Workflow / BPM Engine | 🟡 | 16 | 6 | 7 | 6 | 6 | **Temporal (P3.1 / ADR-0045):** self-hosted Temporal (dev compose) + gated in-process worker/client seam (off by default). **Two workflows, both wired into their domain lifecycle + live-smoked through the API:** `caseSlaWorkflow` (case SLA timer, ADR-0045) and `incidentResponseWorkflow` (P3.2 / ADR-0046: page→ack-SLA→remind→escalate for severe incidents; `IncidentResponseScheduler` + RBAC reverse-lookup + notify seam). **Visual builder MVP done (P3.8 / ADR-0053):** DAG-validated definition store + CRUD/validate (P3.8a); **generic interpreter Temporal workflow** (graph-as-data: start/end/delay/condition + notify/create_incident activities) + `workflow_runs` + manual run/status (P3.8b); **event-triggered auto-start** (durable NATS consumer → bound workflows, deduped, P3.8c); **React Flow web editor** `/workflows` (palette, edges, node config, validate/save/run + runs panel, P3.8d). All live-smoked end-to-end. Deferred: loops/parallel/sub-workflows/human-approval/HTTP nodes |
-| 3.11 | Chat & Messaging | 🔴 | 0 | — | — | — | — | (none) |
+| 3.11 | Chat & Messaging | 🟡 | 45 | 7 | 7 | 6 | 7 | **MVP done end-to-end (P3.12a+b / ADR-0057).** `chat_channels` + `chat_messages` (threads via `parent_id`) + `chat_reactions`; tenant-open channels (`chat:read`/`write`/`manage`); message CRUD + `before`-cursor feed + author-or-manage moderation + threads (replyCount/replies) + idempotent emoji reactions + `@mention`→notifications. **Realtime via P2.3** (outbox→NATS→fan-out, real-NATS→WS live-smoked). Web `/chat` (channels + stream + composer + reactions + threads; 4 s poll). e2e 8/8. Next: membership/private channels, presence/typing/read-receipts, CH projection, WS-ticket browser realtime |
 | 3.12 | Video Conferencing | 🔴 | 0 | — | — | — | — | (none — LiveKit not present) |
 | 3.13 | Notification System | 🟢 | 68 | 8 | 8 | 7 | 8 | **P1.6 (a–c / ADR-0024):** in-app + web center (bell/page) + email (Nodemailer/Mailpit) + per-user prefs; **now event-driven** — dispatched by a durable JetStream consumer of incident events (idempotent, decoupled — P2.4 / ADR-0032), inline fallback when NATS off. Future: Web Push, MJML, dead-letter |
 | 3.14 | Search Engine | 🟡 | 30 | 7 | 7 | 6 | 7 | **Federated `/v1/search` (P3.7 / ADR-0052):** documents via OpenSearch (P3.6 / ADR-0051) when enabled (FTS fallback), incidents/cases via Postgres `tsvector` FTS (P2.11 / ADR-0041), fused by **Reciprocal Rank Fusion**; per-domain RBAC + RLS; documents folder-access filtered (closed a P2.11 leak). **Web `/search` UI (P3.7b):** grouped-by-type results with source badges. **OpenSearch document substrate:** gated `SEARCH_INDEX` seam (Noop unless `OPENSEARCH_ENABLED`) + best-effort indexer on write + `reindex` + `GET /v1/documents/search`. Remaining: stemming/fuzzy/per-language, highlight snippets, CH facets, hybrid BM25+vector |
 | 3.15 | Audit & Activity Logging | 🟢 | 85 | 8 | 8 | 7 | 8 | `apps/api/src/modules/audit/`; append-only RLS + **tamper-evident hash chain** + **Merkle anchor under Object Lock (WORM)** (P1.11 / ADR-0029) + **SIEM export** (RFC 5424/CEF, P1.12 / ADR-0030) + **ClickHouse archive/analytics projection** (cursor ETL → `audit_events` + daily-stats MV, P2.2 / ADR-0034). Remaining: `audit:read` perm/auditor role, retention/legal-hold, audit explorer UI |
-| 3.16 | Knowledge Base / Wiki | 🔴 | 0 | — | — | — | — | (none) |
+| 3.16 | Knowledge Base / Wiki | 🟡 | 40 | 7 | 7 | 6 | 7 | **MVP done end-to-end (P3.10a+b+c / ADR-0055).** Backend: `wiki_spaces` + `wiki_pages` (ltree tree per space, TipTap JSON content + derived plaintext + tsvector GIN) + `wiki_page_versions` (snapshot per save) + `wiki_comments` (threaded, soft-delete); page CRUD + tree + move (repath) + restore; comments (author or `wiki:manage`); `wiki:read/write/manage`, RLS. Web: TipTap `/wiki` (spaces) + `/wiki/[spaceId]` (tree nav + editor view/edit/save + version restore + threaded comments). `apps/api/src/modules/wiki/`, `apps/web/src/app/wiki/`. Next: per-page ACLs, templates, realtime collab (Yjs §3.22), wiki→federated-search |
 | 3.17 | API / Integration Gateway | 🔴 | 0 | — | — | — | — | Next.js BFF is implicit edge, no Kong/Envoy |
 | 3.18 | AI-Ready Architecture | 🔴 | 2 | — | — | — | — | pgvector ext. only |
 | 3.19 | Administration Panel | 🟢 | 60 | 8 | 8 | 7 | 8 | **P1.4 complete (a–d / ADR-0022):** gated `/admin` (`GET /rbac/me`) + Users CRUD + Roles (catalog + custom-role CRUD) + Tenant settings (name + branding). All endpoints `@Authorize`-gated + audited. Deferred: cross-tenant superadmin, step-up auth |
 | 3.20 | Monitoring & Observability | 🟢 | 55 | 8 | 8 | 7 | 7 | **Logs+metrics+traces triangle closed:** pino JSON+request_id (P0.3), OTEL traces (P0.6), Prometheus/RED+Grafana (P0.7), Loki (P1.7), **Tempo + Loki↔Tempo link + Alertmanager 5xx rule** (P1.8 / ADR-0026). Remaining: alert delivery/paging, exemplars, prod object-store |
-| 3.21 | Data Import/Export | 🔴 | 0 | — | — | — | — | (none) |
+| 3.21 | Data Import/Export | 🟡 | 30 | 7 | 7 | 6 | 7 | **Import side done (P3.11a+b / ADR-0056):** gated BullMQ worker (`IMPORTS_ENABLED`) — **CSV/Excel→incidents** + **GeoJSON/Shapefile→GIS**; `import_jobs` + `import_row_errors` (quarantine); per-row validate + SAVEPOINT partial-commit; upload-init presigned PUT; create gated on target-domain write perm (no escalation); `import:run`/`import:read`, RLS. **Web `/imports`** (form + status + quarantine viewer). e2e 8/8 + real-BullMQ live smoke. Next: **export side**, dedupe/upsert, field-mapping, proj4, CDC/scheduler |
 | 3.22 | Realtime Collaboration | 🔴 | 0 | — | — | — | — | (none — Yjs not present) |
 | 3.23 | Task & Case Management | 🟡 | 45 | 8 | 7 | 7 | 8 | **Cases backend (P2.10 / ADR-0040):** `cases` + `case_activity`, state machine, assign, **activity timeline** + comments, stats, RLS, audited, outbox events, `case:*` RBAC. **SLA escalation now durable** — `due_at` drives a Temporal timer auto-started/cancelled by the lifecycle (P3.1 / ADR-0045). Future: web UI (dashboard "Cases Open" still hardcoded), config-driven types, linked artifacts |
 | 3.24 | Media Management | 🔴 | 0 | — | — | — | — | (none — FFmpeg pipeline absent) |
@@ -62,7 +62,7 @@ Compact one-row-per-module view. Detail per module is in
 | 4.14 | Heatmaps | 🔴 |
 | 4.15 | Clustering | 🔴 |
 | 4.16 | Coordinate-system handling | 🔴 |
-| 4.17 | Performance optimisation (simplification, caching, replicas) | 🔴 |
+| 4.17 | Performance optimisation (simplification, caching, replicas) | 🟡 **HA introduced (P3.13 / ADR-0058):** horizontally-scalable API (`--scale api=N` behind Caddy dynamic DNS round-robin), **PgBouncer** transaction pooling in front of Postgres, all background singletons advisory-locked (incl. retention sweep). Postgres primary+replica + Redis Sentinel (quorum 2) as a documented compose sample (`infra/ha/`) + `docs/runbooks/ha.md`. Read-replica routing / Sentinel client deferred |
 | 4.18 | Map caching strategy (L1–L4) | 🔴 |
 
 ---
@@ -111,7 +111,7 @@ Compact one-row-per-module view. Detail per module is in
 | 6.12 | SSO (OIDC / SAML / SCIM) | 🔴 |
 | 6.13 | Device & session monitoring | 🟡 (IP + UA captured; no anomaly detection) |
 | 6.14 | DLP | 🔴 |
-| 6.15 | Compliance readiness (SOC 2 / ISO 27001 / GDPR / HIPAA) | 🔴 |
+| 6.15 | Compliance readiness (SOC 2 / ISO 27001 / GDPR / HIPAA) | 🟡 **SOC 2 control map + gap analysis + evidence register (P3.14)** — `docs/compliance/`: implemented technical controls mapped to TSC (CC1–CC9 + Availability + Confidentiality) with evidence (ADR/code/runbook); prioritized technical + organizational gaps; evidence register (system-produced artifacts + cadence + manual gaps) + Type I→II path. Strong base (anchored audit trail, RLS, RBAC, MFA, backups, observability); org policies/risk-register/vendor-mgmt + CI security scanning + at-rest enforcement + staging are the gaps. ISO/GDPR/HIPAA not started |
 | 6.16 | Zero trust | 🔴 |
 
 ---
@@ -127,7 +127,7 @@ Compact one-row-per-module view. Detail per module is in
 | 7.5 | Optimistic updates | 🔴 |
 | 7.6 | Distributed events | 🔴 |
 | 7.7 | Reliable notifications | 🔴 |
-| 7.8 | WebSocket scaling | 🔴 |
+| 7.8 | WebSocket scaling | 🟡 multi-instance-safe via per-instance NATS fan-out (every API replica subscribes → delivers to its own sockets), so no sticky sessions needed under `--scale api=N` (P3.13 / ADR-0058). Cross-node presence/horizontal socket-count limits + Redis-coalesced fan-out → later |
 | 7.9 | Realtime collab (Yjs) | 🔴 |
 
 ---
@@ -196,9 +196,9 @@ Compact one-row-per-module view. Detail per module is in
 | 11.3 | WebSocket APIs | 🟡 `/v1/realtime` gateway live (P2.3 / ADR-0035): typed JSON protocol in `@cmc/contracts/realtime`, auth + tenant + RBAC scoped subscriptions. Not in the OpenAPI doc (WS ≠ REST); browser client = follow-on |
 | 11.7 | Binary / tile endpoints | 🟡 MVT vector tiles `/v1/gis/tiles/*.mvt` (`ST_AsMVT`, binary, P2.8 / ADR-0038) |
 | 11.4 | Internal gRPC / mTLS | 🔴 |
-| 11.5 | External APIs (keys, webhooks) | 🔴 |
+| 11.5 | External APIs (keys, webhooks) | 🟡 **API keys done (P3.9 / ADR-0054):** in-app key auth on the existing `/v1` (`X-API-Key` / `Bearer cmc_…`), SHA-256-hashed at rest, permission-subset scopes gating via `@Authorize`, per-key + per-tenant Redis quota (429), `/v1/api-keys` mgmt (`api_key:manage`, user-only) + **web `/admin/api-keys`** (scope picker, secret-once, revoke). Outbound webhooks still 🔴 |
 | 11.6 | API versioning + sunset headers | 🟡 `/v1` versioning live (P1.9 / ADR-0027); sunset/deprecation headers deferred — nothing to deprecate yet |
-| 11.7 | API gateway | 🟡 Caddy edge (TLS, security headers, ops-endpoint block, host routing) (P0.9 / ADR-0016); full Kong/Envoy + WAF + quota still 🔴 |
+| 11.7 | API gateway | 🟡 Caddy edge (TLS, security headers, ops-endpoint block, host routing) (P0.9 / ADR-0016); **in-app API-key quota landed (P3.9 / ADR-0054)** — per-key + per-tenant Redis rate-limit on key requests; full Kong/Envoy + WAF still 🔴 |
 | 11.8 | Rate limiting | 🟡 auth endpoints only (P0.1 / ADR-0009); non-auth + global → P0.9 |
 | 11.9 | API security (input validation, CORS, CSRF) | 🟢 input validation + CORS; CSRF N/A (bearer) |
 | 11.10 | SDK strategy | 🔴 (contracts package is a start) |
@@ -232,7 +232,7 @@ Compact one-row-per-module view. Detail per module is in
 | 13.1 | Docker (multi-stage, distroless, non-root, scanned, SBOM) | 🟡 api + web multi-stage distroless non-root images (P0.10 / ADR-0017) + custom Postgres; scanning + SBOM still 🔴 (TD-029) |
 | 13.2 | Kubernetes | 🔴 |
 | 13.3 | CI/CD | 🟡 CI yes (GHA); no CD yet |
-| 13.4 | Environments (dev/staging/prod/dr) | 🟡 dev + a deploy overlay (Caddy edge, `infra/deploy-compose.yml`, `.env.production`) for external serving (P0.9 / ADR-0016); staging/DR envs still pending |
+| 13.4 | Environments (dev/staging/prod/dr) | 🟡 dev + a deploy overlay (Caddy edge, `infra/deploy-compose.yml`, `.env.production`) for external serving (P0.9 / ADR-0016); **deploy stack now HA-capable** — 2× API behind Caddy + PgBouncer (P3.13 / ADR-0058); staging/DR envs still pending |
 | 13.5 | IaC (Terraform / Helm) | 🔴 |
 | 13.6 | Backups | 🟢 nightly `pg_dump` → MinIO sidecar (P0.5 / ADR-0012); rotation 7d; `pnpm db:restore` rehearsed |
 | 13.7 | Disaster recovery | 🟡 same-cluster restore path covered; cross-cluster + off-site + PITR still 🔴 |

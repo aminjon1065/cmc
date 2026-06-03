@@ -63,5 +63,19 @@
 	# Caddy's reverse_proxy passes X-Forwarded-For / -Proto / -Host to the
 	# upstream by default, so the API's trust-proxy logic (P0.1) sees the real
 	# client IP and scheme without any explicit header_up directives.
-	reverse_proxy {$API_UPSTREAM}
+	#
+	# HA (P3.13 / ADR-0058): resolve the API service name to ALL replica IPs via
+	# Docker's embedded DNS and round-robin across them, re-resolving every 5s so
+	# `docker compose up --scale api=N` is picked up live. A single instance
+	# resolves to one upstream — behaviour is unchanged when not scaled. For a
+	# transitional host-run API set API_DNS_NAME=host.docker.internal + API_DNS_PORT.
+	reverse_proxy {
+		dynamic a {
+			name {$API_DNS_NAME:api}
+			port {$API_DNS_PORT:3001}
+			refresh 5s
+		}
+		lb_policy round_robin
+		lb_retries 2
+	}
 }

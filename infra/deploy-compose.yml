@@ -28,13 +28,17 @@ services:
       context: ..
       dockerfile: apps/api/Dockerfile
     image: cmc/api:latest
-    container_name: cmc-api
+    # NO container_name → the API is horizontally scalable (P3.13):
+    #   pnpm infra:up && JWT_SECRET=… AUTH_SECRET=… \
+    #     docker compose -f infra/deploy-compose.yml up -d --scale api=2
+    # Caddy load-balances across the replicas via DNS round-robin (see Caddyfile).
     restart: unless-stopped
     environment:
       NODE_ENV: production
       PORT: 3001
-      # Data services reached by their cmc-net service names.
-      DATABASE_URL: ${DATABASE_URL:-postgresql://cmc_app:cmc_app_dev_password_change_me@postgres:5432/cmc}
+      # Runtime pool (cmc_app) goes through PgBouncer (transaction pooling, P3.13);
+      # the owner URL (privileged / migrations, low volume) stays direct.
+      DATABASE_URL: ${DATABASE_URL:-postgresql://cmc_app:cmc_app_dev_password_change_me@pgbouncer:6432/cmc}
       DATABASE_OWNER_URL: ${DATABASE_OWNER_URL:-postgresql://cmc:cmc_dev_password_change_me@postgres:5432/cmc}
       REDIS_URL: ${REDIS_URL:-redis://:cmc_dev_redis_change_me@redis:6379}
       S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
@@ -49,6 +53,9 @@ services:
       # Optional OTLP collector — unset means "create spans, export nothing"
       # (no localhost:4318 fallback noise).
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    depends_on:
+      pgbouncer:
+        condition: service_started
     networks:
       - default
       - cmc-net
@@ -134,6 +141,33 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+
+  # ---------- Connection pooler (PgBouncer) ----------
+  # Fronts Postgres for the API's runtime pool (cmc_app). Transaction pooling is
+  # safe here: the app sets only tx-scoped GUCs (set_config(...,is_local:=true))
+  # and runs with prepare:false (no protocol-level prepared statements). The
+  # owner/migration path (DATABASE_OWNER_URL) deliberately bypasses the pooler.
+  # P3.13 / ADR-0058.
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: cmc-pgbouncer
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: cmc
+      DB_USER: ${POSTGRES_APP_USER:-cmc_app}
+      DB_PASSWORD: ${POSTGRES_APP_PASSWORD:-cmc_app_dev_password_change_me}
+      POOL_MODE: transaction
+      AUTH_TYPE: scram-sha-256
+      LISTEN_PORT: "6432"
+      MAX_CLIENT_CONN: "1000"
+      DEFAULT_POOL_SIZE: "25"
+      # PgBouncer must not pin server connections across transactions.
+      SERVER_RESET_QUERY: DISCARD ALL
+    networks:
+      - default
+      - cmc-net
 
 volumes:
   caddy_data:

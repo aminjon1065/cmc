@@ -144,6 +144,33 @@ export const PERMISSION_CATALOG = [
     action: "manage",
     description: "Create, list, and revoke API keys for programmatic access",
   },
+  // Wiki / knowledge base (P3.10).
+  { domain: "wiki", action: "read", description: "View wiki spaces + pages" },
+  {
+    domain: "wiki",
+    action: "write",
+    description: "Create / edit wiki pages and comment",
+  },
+  { domain: "wiki", action: "manage", description: "Create + delete wiki spaces" },
+  // Data import (P3.11 — bulk CSV/GeoJSON → domain entities).
+  {
+    domain: "import",
+    action: "run",
+    description: "Run bulk data imports (writes into the target domain)",
+  },
+  {
+    domain: "import",
+    action: "read",
+    description: "View import jobs + quarantined rows",
+  },
+  // Chat / messaging (P3.12).
+  { domain: "chat", action: "read", description: "View chat channels + messages" },
+  { domain: "chat", action: "write", description: "Post / edit own chat messages" },
+  {
+    domain: "chat",
+    action: "manage",
+    description: "Create + delete channels; moderate others' messages",
+  },
 ] as const satisfies readonly PermissionDef[];
 
 /** Helper: the `${domain}:${action}` string for a catalog entry. */
@@ -198,6 +225,12 @@ export const SYSTEM_ROLES: readonly SystemRoleDef[] = [
       "folder:delete",
       "workflow:read",
       "workflow:run",
+      "wiki:read",
+      "wiki:write",
+      "import:run",
+      "import:read",
+      "chat:read",
+      "chat:write",
     ],
   },
   {
@@ -214,6 +247,7 @@ export const SYSTEM_ROLES: readonly SystemRoleDef[] = [
       "gis_layer:read",
       "folder:read",
       "workflow:read",
+      "chat:read",
     ],
   },
 ] as const;

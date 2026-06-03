@@ -17,6 +17,9 @@
   },
   "dependencies": {
     "@cmc/contracts": "workspace:*",
+    "@tiptap/pm": "^2",
+    "@tiptap/react": "^2",
+    "@tiptap/starter-kit": "^2",
     "@xyflow/react": "^12",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

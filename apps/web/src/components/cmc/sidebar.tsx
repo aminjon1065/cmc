@@ -16,6 +16,7 @@ import {
   Shield,
   ShieldCheck,
   Sparkles,
+  Upload,
   Users,
   Video,
   type LucideIcon,
@@ -63,6 +64,7 @@ const NAV: NavGroup[] = [
     label: "Work",
     items: [
       { id: "workflow", label: "Workflows", icon: Network, href: "/workflows" },
+      { id: "imports", label: "Data Import", icon: Upload, href: "/imports" },
       { id: "cases", label: "Cases & Incidents", icon: Briefcase, disabled: true },
     ],
   },
@@ -72,14 +74,14 @@ const NAV: NavGroup[] = [
     items: [
       { id: "docs", label: "Documents", icon: FileText, href: "/documents" },
       { id: "files", label: "Files", icon: Folder, disabled: true },
-      { id: "wiki", label: "Knowledge Base", icon: Files, disabled: true },
+      { id: "wiki", label: "Knowledge Base", icon: Files, href: "/wiki" },
     ],
   },
   {
     id: "comms",
     label: "Communication",
     items: [
-      { id: "chat", label: "Chat", icon: MessageSquare, disabled: true },
+      { id: "chat", label: "Chat", icon: MessageSquare, href: "/chat" },
       { id: "video", label: "Video", icon: Video, disabled: true },
       { id: "notif", label: "Notifications", icon: Inbox, disabled: true },
     ],

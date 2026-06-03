@@ -1,0 +1,106 @@
+# ============================================================================
+# HA DATA-LAYER SAMPLE (P3.13 / ADR-0058) — NOT part of the default stack.
+#
+# This is the *target topology* for the stateful tier: a Postgres primary with a
+# streaming-replication standby, and a Redis master/replica with a 3-node
+# Sentinel quorum for automatic failover. It is a reference you bring up on its
+# own to study/validate the shape — the day-to-day dev stack
+# (infra/docker-compose.yml) stays single-node, and the deploy stack
+# (infra/deploy-compose.yml) already runs 2× API behind Caddy + PgBouncer.
+#
+#   docker compose -f infra/ha/docker-compose.ha.yml up -d
+#   docker compose -f infra/ha/docker-compose.ha.yml config   # lint
+#
+# NOTE on images: this sample uses bitnami images for their batteries-included
+# replication env so the *topology* is legible. PRODUCTION Postgres must be
+# PostGIS-capable (the app uses PostGIS) — run a managed HA Postgres or
+# Patroni/Stolon with the same primary/standby + PgBouncer shape; keep the
+# `postgis/postgis` image for the single-node dev/deploy stacks.
+# ============================================================================
+
+services:
+  # ---------- Postgres primary ----------
+  pg-primary:
+    image: bitnami/postgresql:16
+    environment:
+      POSTGRESQL_REPLICATION_MODE: master
+      POSTGRESQL_REPLICATION_USER: ${PG_REPL_USER:-replicator}
+      POSTGRESQL_REPLICATION_PASSWORD: ${PG_REPL_PASSWORD:-repl_change_me}
+      POSTGRESQL_USERNAME: ${POSTGRES_APP_USER:-cmc_app}
+      POSTGRESQL_PASSWORD: ${POSTGRES_APP_PASSWORD:-cmc_app_dev_password_change_me}
+      POSTGRESQL_DATABASE: ${POSTGRES_DB:-cmc}
+      # Streaming-replication tunables (synchronous_commit left at default = async
+      # standby; set POSTGRESQL_SYNCHRONOUS_COMMIT=on + a sync standby for RPO 0).
+      POSTGRESQL_MAX_WAL_SENDERS: "10"
+      POSTGRESQL_WAL_LEVEL: replica
+    volumes:
+      - pg_primary_data:/bitnami/postgresql
+    restart: unless-stopped
+
+  # ---------- Postgres streaming standby ----------
+  pg-replica:
+    image: bitnami/postgresql:16
+    depends_on:
+      pg-primary:
+        condition: service_started
+    environment:
+      POSTGRESQL_REPLICATION_MODE: slave
+      POSTGRESQL_REPLICATION_USER: ${PG_REPL_USER:-replicator}
+      POSTGRESQL_REPLICATION_PASSWORD: ${PG_REPL_PASSWORD:-repl_change_me}
+      POSTGRESQL_MASTER_HOST: pg-primary
+      POSTGRESQL_MASTER_PORT_NUMBER: "5432"
+      POSTGRESQL_PASSWORD: ${POSTGRES_APP_PASSWORD:-cmc_app_dev_password_change_me}
+    volumes:
+      - pg_replica_data:/bitnami/postgresql
+    restart: unless-stopped
+
+  # ---------- PgBouncer in front of the primary ----------
+  # Same role as the deploy-stack pooler — the API's runtime pool connects here.
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    depends_on:
+      pg-primary:
+        condition: service_started
+    environment:
+      DB_HOST: pg-primary
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB:-cmc}
+      DB_USER: ${POSTGRES_APP_USER:-cmc_app}
+      DB_PASSWORD: ${POSTGRES_APP_PASSWORD:-cmc_app_dev_password_change_me}
+      POOL_MODE: transaction
+      AUTH_TYPE: scram-sha-256
+      LISTEN_PORT: "6432"
+    restart: unless-stopped
+
+  # ---------- Redis master + replica ----------
+  redis-master:
+    image: redis:7-alpine
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:-cmc_dev_redis_change_me}", "--masterauth", "${REDIS_PASSWORD:-cmc_dev_redis_change_me}"]
+    restart: unless-stopped
+
+  redis-replica:
+    image: redis:7-alpine
+    depends_on:
+      redis-master:
+        condition: service_started
+    command: ["redis-server", "--replicaof", "redis-master", "6379", "--requirepass", "${REDIS_PASSWORD:-cmc_dev_redis_change_me}", "--masterauth", "${REDIS_PASSWORD:-cmc_dev_redis_change_me}"]
+    restart: unless-stopped
+
+  # ---------- Redis Sentinel quorum (3 nodes) ----------
+  # Each sentinel copies the mounted template to a writable path (sentinel
+  # rewrites its own config on failover, so the source must not be read-only).
+  redis-sentinel-1: &sentinel
+    image: redis:7-alpine
+    depends_on:
+      redis-master:
+        condition: service_started
+    command: ["sh", "-c", "cp /etc/redis/sentinel.conf /tmp/s.conf && redis-sentinel /tmp/s.conf"]
+    volumes:
+      - ./redis-sentinel.conf:/etc/redis/sentinel.conf:ro
+    restart: unless-stopped
+  redis-sentinel-2: *sentinel
+  redis-sentinel-3: *sentinel
+
+volumes:
+  pg_primary_data:
+  pg_replica_data:

@@ -16,6 +16,8 @@ export const NOTIFICATION_KINDS = [
   "incident.escalated",
   // Visual-workflow notify node (P3.8 / ADR-0053).
   "workflow.notify",
+  // Chat @mention (P3.12b / ADR-0057).
+  "chat.mention",
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 

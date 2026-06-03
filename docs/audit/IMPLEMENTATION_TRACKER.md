@@ -291,9 +291,11 @@ No Temporal, no BPMN, no FSM library, no approval tables, no SLA timer, no escal
 
 | field | value |
 |---|---|
-| **Status** | NOT STARTED |
+| **Status** | DONE — MVP (P3.12a+b / ADR-0057); membership/presence/CH-projection deferred |
 
-No channels, no messages, no presence, no read receipts, no fanout service, no Redis pub/sub. **Complexity: XL.**
+**P3.12a ✅ (channels + messages + realtime):** `chat_channels` + `chat_messages` (author set-null, `edited_at`, soft-delete, feed index, migration 0031, RLS). **Tenant-open** channels (`chat:read`/`write`/`manage`). `ChatService`/Controller — channel create(`manage`)/list/get/delete(cascade); message post(`write`)/list(`before`-cursor)/edit/delete (**author or `chat:manage`**). **Realtime rides P2.3**: every mutation emits a `chat` event to the outbox (atomic) → relay → NATS `tenant.<id>.chat.<eventType>.v1`; `chat→chat:read` in the subject-permission map. real-NATS→WS live smoke.
+
+**P3.12b ✅ (threads + reactions + mentions + web):** threads (`parent_id`, one level; feed top-level + `replyCount`; replies endpoint), reactions (`chat_reactions` unique → idempotent; `{emoji,count,mine}[]` enrichment), mentions (explicit `userId[]` → `chat.mention` notifications); migration 0032. Web `/chat` (sidebar + protected): channel list + stream + composer + emoji reactions + thread panel; **browser polls 4 s** (JWT-over-WS avoided — WS-ticket follow-up). e2e `chat` **8/8**; web `tsc`/`lint`/`build` + 307 smoke. Files: `apps/api/src/modules/chat/`, `apps/web/src/app/chat/`. **Remaining:** membership/private channels, presence/typing/read-receipts, mention-autocomplete UI, CH projection, attachments/search, WS-ticket browser realtime. **Complexity: XL.**
 
 ---
 
@@ -378,9 +380,13 @@ Postgres `pg_trgm` extension is installed. Documents list endpoint uses `ILIKE` 
 
 | field | value |
 |---|---|
-| **Status** | NOT STARTED |
+| **Status** | DONE — MVP (P3.10a+b+c / ADR-0055); per-page ACLs, templates, realtime collab (Yjs §3.22) deferred |
 
-No spaces, pages, block editor, version history, comments, page-permissions, templates. Real-time collab (Yjs) also absent (§3.22). **Complexity: XL.**
+**P3.10a ✅:** `wiki_spaces` + `wiki_pages` (ltree tree per space, TipTap/ProseMirror JSON `content` + derived `content_text`, tsvector GIN, migration 0028) + `wiki_page_versions` (snapshot per save); `WikiService`/Controller — space CRUD, page CRUD + tree + move (repath CASE + cycle guard) + soft-delete subtree, version list/restore (append-only); `wiki:read/write/manage`, RLS. e2e 7/7. Files: `apps/api/src/modules/wiki/`, `packages/db/src/schema/wiki-*.ts`, `packages/contracts/src/wiki.ts`. **Complexity: XL.**
+
+**P3.10b ✅:** `wiki_comments` (page_id cascade, `parent_id` self-FK thread, author set-null, body, soft-delete, migration 0029, RLS). `WikiService.listComments`/`createComment` (same-page parent check → 400) / `deleteComment` (author **or** `wiki:manage`, else 403). Endpoints GET/POST `pages/:id/comments` (read/write), DELETE `comments/:id`. e2e `wiki-comments` 4/4 (threading, oldest-first, cross-page-parent 400, author/manager/non-author delete, RBAC + cross-tenant 404).
+
+**P3.10c ✅:** web wiki (TipTap v2 — `@tiptap/react`+`starter-kit`+`pm`). `/wiki` (space cards + create gated on `wiki:manage`) + `/wiki/[spaceId]` three-pane `WikiWorkspace` — page tree nav (ltree-depth indent, inline create root/child), `PageEditor` (`immediatelyRender:false`, remount-on-key + `setEditable`, toolbar, JSON round-trip), tabbed History (restore) / Comments (threaded, reply, author-or-manage delete via `/rbac/me` userId). `"use server"` actions; sidebar "Knowledge Base" enabled; `/wiki` middleware-protected; prose styles in `globals.css`. Validated: web `tsc`/`lint`/`build` clean, 307-redirect live smoke. Files: `apps/web/src/app/wiki/`. **Remaining:** per-page ACLs, templates, real-time collab (Yjs, §3.22), wiki→federated-search wiring. **Complexity: XL.**
 
 ---
 
@@ -388,10 +394,10 @@ No spaces, pages, block editor, version history, comments, page-permissions, tem
 
 | field | value |
 |---|---|
-| **Status** | NOT STARTED |
-| **Compl. %** | 0 % |
+| **Status** | PARTIAL (in-app API keys done; gateway not) |
+| **Compl. %** | ~40 % |
 
-No Kong / Envoy, no WAF, no quota table, no API key issuance, no per-client rate limit. The Next.js BFF is the closest thing to a gateway today. **OpenAPI doc generation ✅** (P1.10 / ADR-0028): `@nestjs/swagger` + CLI plugin (request DTOs) + Zod-contract response schemas (82 components) served at gated `/v1/openapi.json` (`tenant:manage`) with Swagger UI at web `/admin/api-docs`.
+No Kong / Envoy / WAF yet; the Next.js BFF + Caddy edge are the gateway today. **API keys ✅ (P3.9a / ADR-0054):** `api_keys` (SHA-256 hash, scopes, RLS, migration 0027) + in-app combined auth (`TenantContextMiddleware` resolves `X-API-Key` / `Bearer cmc_…` → api-key principal; `RbacService.resolvePermissions` returns scopes pre-cache → `@Authorize` gates the same `/v1`), per-key + per-tenant Redis quota guard (429), `/v1/api-keys` mgmt (`api_key:manage`, user-only). e2e 8/8. **Web `/admin/api-keys` (P3.9b):** scope picker (from caller's perms), secret-shown-once + copy, list/status, revoke. **OpenAPI doc generation ✅** (P1.10 / ADR-0028): `@nestjs/swagger` + CLI plugin + Zod-contract response schemas served at gated `/v1/openapi.json` + Swagger UI at `/admin/api-docs`. Remaining: outbound webhooks, Kong/Envoy + WAF.
 
 **Complexity:** **L** to add Caddy + a NestJS rate-limit guard + OpenAPI generation; **XL** for the full Kong/Envoy + WAF + quota + analytics surface.
 
@@ -444,9 +450,11 @@ Structured JSON logging with `request_id`+`trace_id`+`tenantId`+`userId` (P0.3 /
 
 | field | value |
 |---|---|
-| **Status** | NOT STARTED |
+| **Status** | PARTIAL — import side done (P3.11a+b / ADR-0056); export side + CDC/scheduler next |
 
-No BullMQ jobs, no CSV/Excel/JSON/GeoJSON parsers, no quarantine queue, no validation pipeline, no CDC, no Airflow/Dagster. **Complexity: XL.**
+**P3.11a ✅ (import backend):** gated BullMQ import queue + worker (`IMPORTS_ENABLED`) — **CSV→incidents** (`csv-parse`) + **GeoJSON→GIS features** (`ST_GeomFromGeoJSON`). `import_jobs` + `import_row_errors` (quarantine) + migration 0030 + RLS. **Per-row validation with partial-commit + quarantine** (zod for incidents / structural for geometry; each insert in a SAVEPOINT so one bad row can't abort the job; counts + status atomic). `create` gates on the **target-domain write perm** (no RBAC escalation); `runJob` compare-and-set claim (queued→processing) so a retry can't double-import. `import:run`/`import:read`. e2e + real-BullMQ live smoke.
+
+**P3.11b ✅ (Excel + Shapefile + web):** two new kinds reusing the pipeline (parsers dynamic-imported) — **`xlsx_incidents`** (`xlsx`/SheetJS, first sheet) + **`shapefile_gis`** (`adm-zip` → `shapefile.read` → GeoJSON; WGS84 assumed). `ImportService` split into parsers vs processors. **`POST /v1/imports/upload-init`** presigns a PUT (transient `imports/<tenant>/…` source, no document row). **Web `/imports`** (sidebar + middleware-protected): job table + expandable quarantine viewer + new-import form (upload-init → presigned PUT → create) via server actions. e2e `imports` **8/8** (incl real hand-built `.shp` zip + upload round-trip); web `tsc`/`lint`/`build` + 307 smoke. Files: `apps/api/src/modules/imports/`, `apps/web/src/app/imports/`. **Remaining:** export side, dedupe/upsert, user-defined field mapping, proj4 reprojection, CDC/scheduler, resumable-job reaper. **Complexity: XL.**
 
 ---
 
@@ -666,6 +674,30 @@ This is the **product surface the UI implies**. No live event ticker, no multi-m
 | Manual | `pnpm infra:up` (core) then `pnpm deploy:up/down/logs/ps/validate` |
 | Validated | full stack: certs issued; HTTPS/2 → API 200; /health/ready 200 all-deps-up (minio via service name); /metrics 404; web 200; all 3 containers healthy |
 | Deferred to | image scanning/SBOM (TD-029) · CI build-push · edge WAF/rate-limit · P4 (mTLS mesh) |
+
+### High-availability plane (P3.13 / ADR-0058)
+
+| | |
+|---|---|
+| Status | DONE — pragmatic HA introduced (2026-06-03) |
+| Stateless | `api` is horizontally scalable — `container_name` dropped, no host port; `docker compose -f infra/deploy-compose.yml up -d --scale api=N`; Caddy API site → **dynamic DNS upstreams** (`dynamic a` + `lb_policy round_robin`, refresh 5s) load-balances replicas live |
+| Pooling | **PgBouncer** (transaction mode) fronts Postgres; runtime `DATABASE_URL`→`pgbouncer:6432`. Safe: tx-scoped GUCs (`set_config(...,is_local:=true)`) + driver `prepare:false`; owner/migration path bypasses the pooler |
+| N-instance correctness | relay / audit sealer / export / projection already `pg_advisory_xact_lock`-guarded; **closed gap** — retention sweep now `pg_try_advisory_xact_lock(40_211_500)`. Verified: Redis-shared sessions/rate-limit/RBAC, per-instance NATS fan-out (realtime spans replicas), shared BullMQ queue |
+| Stateful sample | `infra/ha/docker-compose.ha.yml` — Postgres primary+streaming-standby + PgBouncer + Redis master/replica + 3-node Sentinel (quorum 2) + `redis-sentinel.conf` + README (documented target, not default-up; bitnami images for legibility — prod = PostGIS-capable HA Postgres) |
+| Files | `infra/deploy-compose.yml`, `infra/caddy/Caddyfile`, `infra/ha/`, `apps/api/src/modules/documents/retention.service.ts`, `docs/runbooks/ha.md` |
+| Validated | `tsc` + retention e2e 6/6 + full suite 53/386 (0 regressions); `docker compose config` exit 0 (deploy + ha); `caddy validate` → valid |
+| Deferred | app read-replica routing (`DATABASE_REPLICA_URL`), Redis Sentinel client, automated failover/fencing, multi-region (P4.6) |
+
+### Compliance readiness — SOC 2 (P3.14)
+
+| | |
+|---|---|
+| Status | DONE — control map + gap analysis + evidence register (2026-06-03); docs, no code |
+| Deliverables | `docs/compliance/soc2-control-mapping.md` (TSC CC1–CC9 + Availability + Confidentiality → status → evidence) + `docs/compliance/evidence-register.md` (system-produced evidence w/ cadence/owner + manual gaps + Type I→II path) |
+| Framing | Engineering self-assessment of *technical* controls, not a SOC 2 report; organizational controls flagged 🏛 (management) |
+| Strengths | anchored tamper-evident audit trail (ADR-0029) + SIEM export (ADR-0030), DB-enforced tenant RLS, least-privilege RBAC + scoped API keys, MFA, encrypted-at-rest secrets, backups + restore drill, full-stack observability |
+| Technical gaps | at-rest SSE enforcement + KMS record, mTLS/prod-Vault, CI security scanning (CodeQL/Trivy/SBOM/ZAP), segregated staging + release/rollback gate, running SIEM, DR test, automated access reviews, edge WAF |
+| Org gaps (🏛) | security policy set, risk register, vendor/sub-processor inventory, HR security (onboarding/offboarding/training), defined audit period + control owners |
 
 ---
 

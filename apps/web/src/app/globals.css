@@ -222,3 +222,55 @@
     border: 0.5px solid var(--c-line-2);
   }
 }
+
+/* ---- Wiki / TipTap prose (P3.10c) ---- */
+.wiki-prose {
+  padding: 16px 18px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--c-fg-1);
+  min-height: 320px;
+}
+.wiki-prose:focus { outline: none; }
+.wiki-prose p { margin: 0 0 0.6em; }
+.wiki-prose h1 { font-size: 1.5em; font-weight: 650; margin: 0.6em 0 0.35em; letter-spacing: -0.01em; }
+.wiki-prose h2 { font-size: 1.25em; font-weight: 600; margin: 0.6em 0 0.3em; }
+.wiki-prose h3 { font-size: 1.08em; font-weight: 600; margin: 0.5em 0 0.25em; }
+.wiki-prose ul,
+.wiki-prose ol { margin: 0 0 0.6em; padding-left: 1.4em; }
+.wiki-prose ul { list-style: disc; }
+.wiki-prose ol { list-style: decimal; }
+.wiki-prose li { margin: 0.15em 0; }
+.wiki-prose li > p { margin: 0; }
+.wiki-prose blockquote {
+  margin: 0 0 0.6em;
+  padding-left: 0.9em;
+  border-left: 2px solid var(--c-line-2);
+  color: var(--c-fg-2);
+}
+.wiki-prose code {
+  font-family: var(--font-mono, "JetBrains Mono", ui-monospace, monospace);
+  font-size: 0.88em;
+  background: var(--c-bg-2);
+  padding: 0.08em 0.32em;
+  border-radius: 4px;
+}
+.wiki-prose pre {
+  margin: 0 0 0.6em;
+  padding: 10px 12px;
+  background: var(--c-bg-2);
+  border: 0.5px solid var(--c-line-2);
+  border-radius: 8px;
+  overflow-x: auto;
+}
+.wiki-prose pre code { background: transparent; padding: 0; font-size: 0.85em; }
+.wiki-prose strong { font-weight: 650; }
+.wiki-prose a { color: var(--c-accent); text-decoration: underline; }
+.wiki-prose:empty::before,
+.wiki-prose p.is-editor-empty:first-child::before {
+  content: "Start writing…";
+  color: var(--c-fg-4);
+  pointer-events: none;
+  height: 0;
+  float: left;
+}
