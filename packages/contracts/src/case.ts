@@ -75,6 +75,8 @@ export const CaseSummarySchema = z.object({
   type: z.string(),
   priority: z.number().int(),
   status: CaseStatusSchema,
+  /** Structured region for access scoping (P4.6); null = unassigned/HQ pool. */
+  regionId: z.string().uuid().nullable(),
   assignedTo: UserRefSchema,
   openedBy: UserRefSchema,
   dueAt: z.string().datetime().nullable(),

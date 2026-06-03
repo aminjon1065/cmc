@@ -1,6 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Building2, FileJson2, KeyRound, ShieldCheck, Users } from "lucide-react";
+import {
+  Building2,
+  FileJson2,
+  KeyRound,
+  MapPin,
+  ShieldCheck,
+  Users,
+} from "lucide-react";
 import { auth } from "@/auth";
 import { AppShell } from "@/components/cmc/app-shell";
 import { getBranding } from "@/lib/branding";
@@ -42,6 +49,16 @@ const SECTIONS: {
     icon: ShieldCheck,
     available: true,
     phase: "P1.4c",
+  },
+  {
+    id: "regions",
+    title: "Regions",
+    description:
+      "Manage regions and the per-region visibility of users + operational data.",
+    href: "/admin/regions",
+    icon: MapPin,
+    available: true,
+    phase: "P4.6",
   },
   {
     id: "tenant",

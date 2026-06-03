@@ -70,6 +70,8 @@ export const IncidentSummarySchema = z.object({
   status: IncidentStatusSchema,
   type: z.string(),
   region: z.string(),
+  /** Structured region for access scoping (P4.6); null = unassigned/HQ pool. */
+  regionId: z.string().uuid().nullable(),
   source: z.string().nullable(),
   summary: z.string(),
   latitude: z.number().nullable(),

@@ -9,13 +9,21 @@ import { AppShell } from "@/components/cmc/app-shell";
 import { getBranding } from "@/lib/branding";
 import { getMyAccess, hasPermission } from "@/lib/access";
 import { authedApiFetch, ApiError } from "@/lib/server-api";
+import { fetchRegions, regionNameMap } from "@/lib/regions";
 import { SeverityBadge, StatusBadge } from "@/components/cmc/incident-badges";
 import { CreateIncidentForm } from "./create-incident-form";
 import { IncidentFilters } from "./incident-filters";
 
 export const metadata: Metadata = { title: "Incidents" };
 
-const FILTER_KEYS = ["status", "severity", "region", "type", "q"] as const;
+const FILTER_KEYS = [
+  "status",
+  "severity",
+  "region",
+  "regionId",
+  "type",
+  "q",
+] as const;
 const PAGE_SIZE = 25;
 
 function fmt(ts: string): string {
@@ -59,6 +67,8 @@ export default async function IncidentsPage({
   const { copy } = await getBranding();
   const access = await getMyAccess();
   const canCreate = hasPermission(access, "incident:create");
+  const regions = await fetchRegions();
+  const regionName = regionNameMap(regions);
 
   const params = new URLSearchParams();
   for (const k of FILTER_KEYS) {
@@ -113,7 +123,7 @@ export default async function IncidentsPage({
       <div className="flex flex-col gap-4 p-5">
         <div className="cmc-card">
           <div className="p-3">
-            <IncidentFilters />
+            <IncidentFilters regions={regions} />
           </div>
         </div>
 
@@ -178,6 +188,15 @@ export default async function IncidentsPage({
                         </td>
                         <td className="px-4 py-2.5" style={{ color: "var(--c-fg-2)" }}>
                           {i.region}
+                          {i.regionId && regionName.get(i.regionId) && (
+                            <span
+                              className="cmc-chip ml-1.5"
+                              style={{ color: "var(--c-fg-3)" }}
+                              title="Region (zone)"
+                            >
+                              {regionName.get(i.regionId)}
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 py-2.5" style={{ color: "var(--c-fg-2)" }}>
                           {i.type}

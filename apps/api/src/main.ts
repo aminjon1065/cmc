@@ -16,6 +16,10 @@ import { Logger, RequestMethod, ValidationPipe } from "@nestjs/common";
 import { Logger as PinoLogger } from "nestjs-pino";
 import { loadConfig } from "./config/configuration";
 import { loadVaultSecrets } from "./config/vault-secrets";
+import {
+  loadVaultDbCredentials,
+  renewVaultLease,
+} from "./config/vault-db-credentials";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
 
 // NOTE: AppModule (and the openapi helpers it transitively reaches) are imported
@@ -31,6 +35,24 @@ async function bootstrap() {
   // .env) and before the AppModule import below (whose ConfigModule.forRoot
   // validates process.env at import time).
   await loadVaultSecrets();
+
+  // P4.7b / ADR-0065: when VAULT_DB_CREDS_ENABLED, lease short-lived Postgres
+  // credentials from Vault's DB secrets engine and swap them into DATABASE_URL
+  // (host/db kept) BEFORE validation. A background renewer keeps the lease alive
+  // at ~half its TTL. No-op (static DATABASE_URL) when disabled.
+  const dbCreds = await loadVaultDbCredentials();
+  if (dbCreds.enabled && dbCreds.leaseId && dbCreds.leaseDuration > 0) {
+    const leaseId = dbCreds.leaseId;
+    const everyMs = Math.max(Math.floor(dbCreds.leaseDuration / 2), 30) * 1000;
+    const renewer = setInterval(() => {
+      void renewVaultLease(leaseId).catch((err) =>
+        new Logger("VaultDbCreds").error(
+          `lease renew failed: ${(err as Error).message}`,
+        ),
+      );
+    }, everyMs);
+    renewer.unref?.();
+  }
 
   const config = loadConfig();
 

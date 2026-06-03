@@ -11,6 +11,7 @@ import { AppShell } from "@/components/cmc/app-shell";
 import { getBranding } from "@/lib/branding";
 import { getMyAccess, hasPermission } from "@/lib/access";
 import { authedApiFetch, ApiError } from "@/lib/server-api";
+import { fetchRegions, regionNameMap } from "@/lib/regions";
 import { SeverityBadge, StatusBadge } from "@/components/cmc/incident-badges";
 import { IncidentActions } from "./incident-actions";
 import { IncidentVideo } from "./incident-video";
@@ -62,6 +63,7 @@ export default async function IncidentDetailPage({
   const canVideo = hasPermission(access, "video:read");
   const canVideoWrite = hasPermission(access, "video:write");
   const assignees = await fetchAssignees(canAssign);
+  const regionName = regionNameMap(await fetchRegions());
 
   const Row = ({ k, v }: { k: string; v: React.ReactNode }) => (
     <div className="flex gap-3 py-1.5">
@@ -116,6 +118,12 @@ export default async function IncidentDetailPage({
           <div className="flex flex-col p-4">
             <Row k="Type" v={detail.type} />
             <Row k="Region" v={detail.region} />
+            <Row
+              k="Zone"
+              v={
+                detail.regionId ? (regionName.get(detail.regionId) ?? "—") : "—"
+              }
+            />
             <Row k="Source" v={detail.source ?? "—"} />
             <Row k="Occurred at" v={fmt(detail.occurredAt)} />
             <Row

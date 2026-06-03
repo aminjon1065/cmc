@@ -5,6 +5,7 @@
  */
 export * from "./tenants";
 export * from "./tenant-branding";
+export * from "./regions";
 export * from "./users";
 export * from "./sessions";
 export * from "./audit-log";
@@ -42,3 +43,4 @@ export * from "./chat-reactions";
 export * from "./collab-docs";
 export * from "./video-rooms";
 export * from "./video-recordings";
+export * from "./media-assets";

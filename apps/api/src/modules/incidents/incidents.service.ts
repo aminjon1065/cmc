@@ -22,6 +22,10 @@ import { AuditService } from "../audit/audit.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { OutboxService } from "../events/outbox.service";
 import { IncidentResponseScheduler } from "../temporal/incident-response.scheduler";
+import {
+  RegionScopeService,
+  regionScopeCondition,
+} from "../regions/region-scope.service";
 import type { AppConfig } from "../../config/configuration";
 
 type Actor = {
@@ -38,6 +42,7 @@ export type ListIncidentsFilters = {
   status?: IncidentStatus;
   severity?: number;
   region?: string;
+  regionId?: string;
   type?: string;
   assignedTo?: string;
   q?: string;
@@ -75,6 +80,7 @@ export class IncidentsService {
     private readonly notifications: NotificationsService,
     private readonly outbox: OutboxService,
     private readonly response: IncidentResponseScheduler,
+    private readonly regionScope: RegionScopeService,
     config: ConfigService<AppConfig, true>,
   ) {
     this.natsEnabled = config.get("NATS_ENABLED", { infer: true });
@@ -91,6 +97,8 @@ export class IncidentsService {
     input: CreateIncidentRequest,
     actor: Actor,
   ): Promise<IncidentDetail> {
+    // Stamp the creator's region (P4.6b) so regional reads scope to it.
+    const scope = await this.regionScope.current();
     const id = await this.tenantDb.run(async (tx) => {
       const [row] = await tx
         .insert(schema.incidents)
@@ -100,6 +108,7 @@ export class IncidentsService {
           status: "reported",
           type: input.type,
           region: input.region,
+          regionId: scope.regionId,
           source: input.source ?? null,
           summary: input.summary,
           description: input.description ?? null,
@@ -156,15 +165,20 @@ export class IncidentsService {
   async list(filters: ListIncidentsFilters): Promise<IncidentsListResponse> {
     const limit = Math.min(Math.max(filters.limit ?? 50, 1), 200);
     const offset = Math.max(filters.offset ?? 0, 0);
+    const scope = await this.regionScope.current();
 
     return this.tenantDb.run(async (tx) => {
       const conds = [isNull(schema.incidents.deletedAt)];
+      const rc = regionScopeCondition(schema.incidents.regionId, scope);
+      if (rc) conds.push(rc);
       if (filters.status)
         conds.push(eq(schema.incidents.status, filters.status));
       if (filters.severity)
         conds.push(eq(schema.incidents.severity, filters.severity));
       if (filters.region)
         conds.push(eq(schema.incidents.region, filters.region));
+      if (filters.regionId)
+        conds.push(eq(schema.incidents.regionId, filters.regionId));
       if (filters.type) conds.push(eq(schema.incidents.type, filters.type));
       if (filters.assignedTo)
         conds.push(eq(schema.incidents.assignedTo, filters.assignedTo));
@@ -205,6 +219,7 @@ export class IncidentsService {
   }
 
   async getDetail(id: string): Promise<IncidentDetail | null> {
+    const scope = await this.regionScope.current();
     return this.tenantDb.run(async (tx) => {
       const row = (
         await tx
@@ -214,6 +229,7 @@ export class IncidentsService {
             and(
               eq(schema.incidents.id, id),
               isNull(schema.incidents.deletedAt),
+              regionScopeCondition(schema.incidents.regionId, scope),
             ),
           )
           .limit(1)
@@ -242,10 +258,12 @@ export class IncidentsService {
 
   /** Active-incident aggregates for the dashboard (P1.5c). */
   async stats(): Promise<IncidentStatsResponse> {
+    const scope = await this.regionScope.current();
     return this.tenantDb.run(async (tx) => {
       const base = and(
         isNull(schema.incidents.deletedAt),
         inArray(schema.incidents.status, ACTIVE_STATUSES),
+        regionScopeCondition(schema.incidents.regionId, scope),
       );
 
       const sev = await tx
@@ -561,6 +579,7 @@ export class IncidentsService {
       status: row.status as IncidentStatus,
       type: row.type,
       region: row.region,
+      regionId: row.regionId ?? null,
       source: row.source,
       summary: row.summary,
       latitude: row.latitude != null ? Number(row.latitude) : null,

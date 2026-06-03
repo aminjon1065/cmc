@@ -116,12 +116,18 @@ export class UsersController {
     @Ip() ip: string,
     @Req() req: Request,
   ): Promise<UserDetailResponse> {
-    if (body.name === undefined && body.isActive === undefined) {
-      throw new BadRequestException("Provide at least one of name or isActive");
+    if (
+      body.name === undefined &&
+      body.isActive === undefined &&
+      body.regionId === undefined
+    ) {
+      throw new BadRequestException(
+        "Provide at least one of name, isActive, or regionId",
+      );
     }
     const user = await this.users.updateUser(
       id,
-      { name: body.name, isActive: body.isActive },
+      { name: body.name, isActive: body.isActive, regionId: body.regionId },
       {
         actorId: admin.userId,
         tenantId: admin.tenantId,

@@ -8,6 +8,7 @@
 export * from "./health";
 export * from "./auth";
 export * from "./documents";
+export * from "./region";
 export * from "./branding";
 export * from "./rbac";
 export * from "./mfa";
@@ -31,3 +32,5 @@ export * from "./import";
 export * from "./chat";
 export * from "./collab";
 export * from "./video";
+export * from "./monitoring";
+export * from "./media";

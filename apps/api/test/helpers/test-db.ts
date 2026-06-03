@@ -66,6 +66,7 @@ export async function truncateAll(
       import_row_errors,
       import_jobs,
       collab_docs,
+      media_assets,
       video_recordings,
       video_rooms,
       chat_reactions,
@@ -75,6 +76,7 @@ export async function truncateAll(
       wiki_page_versions,
       wiki_pages,
       wiki_spaces,
+      regions,
       users,
       tenants
     RESTART IDENTITY CASCADE

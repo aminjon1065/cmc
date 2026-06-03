@@ -32,6 +32,9 @@ import { ImportsModule } from "./modules/imports/imports.module";
 import { ChatModule } from "./modules/chat/chat.module";
 import { CollabModule } from "./modules/collab/collab.module";
 import { VideoModule } from "./modules/video/video.module";
+import { MonitoringModule } from "./modules/monitoring/monitoring.module";
+import { MediaModule } from "./modules/media/media.module";
+import { RegionsModule } from "./modules/regions/regions.module";
 import { NotificationsModule } from "./modules/notifications/notifications.module";
 import { IncidentNotificationsModule } from "./modules/incident-notifications/incident-notifications.module";
 import { OpenApiModule } from "./modules/openapi/openapi.module";
@@ -126,6 +129,9 @@ import { loadConfig } from "./config/configuration";
     ChatModule,
     CollabModule,
     VideoModule,
+    MonitoringModule,
+    MediaModule,
+    RegionsModule,
     NotificationsModule,
     IncidentNotificationsModule,
     OpenApiModule,

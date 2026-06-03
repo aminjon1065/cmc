@@ -82,4 +82,56 @@ describe("Vault secrets loader", () => {
     const res = await loadVaultSecrets(env, spy as unknown as typeof fetch);
     expect(res).toEqual({ enabled: true, loaded: [] });
   });
+
+  // ---------- AppRole production auth (P4.7a) ----------
+
+  it("authenticates via AppRole, then reads KV with the issued client token", async () => {
+    const env: Record<string, string | undefined> = {
+      VAULT_ENABLED: "true",
+      VAULT_ADDR: "http://vault.example:8200",
+      VAULT_AUTH_METHOD: "approle",
+      VAULT_ROLE_ID: "role-123",
+      VAULT_SECRET_ID: "secret-456",
+      VAULT_KV_MOUNT: "secret",
+      VAULT_SECRET_PATH: "cmc/api",
+    };
+    const spy = jest.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith("/v1/auth/approle/login")) {
+        return new Response(
+          JSON.stringify({ auth: { client_token: "approle-issued-token" } }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return kvResponse({ MFA_ENC_KEY: "from-vault" });
+    });
+
+    const res = await loadVaultSecrets(env, spy as unknown as typeof fetch);
+
+    expect(res.loaded).toEqual(["MFA_ENC_KEY"]);
+    expect(spy).toHaveBeenCalledTimes(2);
+    // 1) AppRole login POST with role_id + secret_id.
+    const login = spy.mock.calls[0]!;
+    expect(login[0]).toBe("http://vault.example:8200/v1/auth/approle/login");
+    expect(login[1]!.method).toBe("POST");
+    expect(JSON.parse(String(login[1]!.body))).toEqual({
+      role_id: "role-123",
+      secret_id: "secret-456",
+    });
+    // 2) KV read uses the issued client token (NOT a static VAULT_TOKEN).
+    const kv = spy.mock.calls[1]!;
+    expect(kv[0]).toBe("http://vault.example:8200/v1/secret/data/cmc/api");
+    expect(
+      (kv[1]!.headers as Record<string, string>)["X-Vault-Token"],
+    ).toBe("approle-issued-token");
+    expect(env.MFA_ENC_KEY).toBe("from-vault");
+  });
+
+  it("throws when AppRole is selected without role/secret id", async () => {
+    const env = { VAULT_ENABLED: "true", VAULT_AUTH_METHOD: "approle" };
+    const spy = jest.fn();
+    await expect(
+      loadVaultSecrets(env, spy as unknown as typeof fetch),
+    ).rejects.toThrow(/VAULT_ROLE_ID/);
+    expect(spy).not.toHaveBeenCalled();
+  });
 });

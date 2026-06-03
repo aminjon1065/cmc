@@ -2,8 +2,10 @@ import {
   IsBoolean,
   IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
   MinLength,
+  ValidateIf,
 } from "class-validator";
 
 export class UpdateUserDto {
@@ -16,4 +18,10 @@ export class UpdateUserDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  /** Assign (uuid) or clear (null) the user's region (P4.6). */
+  @IsOptional()
+  @ValidateIf((o: UpdateUserDto) => o.regionId !== null)
+  @IsUUID()
+  regionId?: string | null;
 }

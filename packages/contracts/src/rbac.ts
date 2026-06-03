@@ -183,6 +183,32 @@ export const PERMISSION_CATALOG = [
     action: "manage",
     description: "Close / delete any video room in the tenant",
   },
+  // Operational Monitoring Center (P4.3).
+  {
+    domain: "monitoring",
+    action: "read",
+    description: "View the operational monitoring wall + event replay",
+  },
+  // Media management (P4.5).
+  { domain: "media", action: "read", description: "View / stream media assets" },
+  {
+    domain: "media",
+    action: "write",
+    description: "Request media transcodes (make documents streamable)",
+  },
+  // Regions (P4.6 — regional segmentation of users + operational data).
+  { domain: "region", action: "read", description: "View regions" },
+  {
+    domain: "region",
+    action: "manage",
+    description: "Create, edit, and delete regions; assign users to regions",
+  },
+  {
+    domain: "region",
+    action: "all",
+    description:
+      "See data across ALL regions (head office); bypass per-region visibility",
+  },
 ] as const satisfies readonly PermissionDef[];
 
 /** Helper: the `${domain}:${action}` string for a catalog entry. */
@@ -245,6 +271,10 @@ export const SYSTEM_ROLES: readonly SystemRoleDef[] = [
       "chat:write",
       "video:read",
       "video:write",
+      "monitoring:read",
+      "media:read",
+      "media:write",
+      "region:read",
     ],
   },
   {
@@ -263,7 +293,17 @@ export const SYSTEM_ROLES: readonly SystemRoleDef[] = [
       "workflow:read",
       "chat:read",
       "video:read",
+      "monitoring:read",
+      "media:read",
+      "region:read",
     ],
+  },
+  {
+    slug: "hq",
+    name: "Head Office",
+    description:
+      "Head office: cross-region visibility — see data from every region.",
+    permissions: ["region:read", "region:all"],
   },
 ] as const;
 

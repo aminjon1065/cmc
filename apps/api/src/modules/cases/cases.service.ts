@@ -24,6 +24,10 @@ import { TenantDatabaseService } from "../database/tenant-database.service";
 import { AuditService } from "../audit/audit.service";
 import { OutboxService } from "../events/outbox.service";
 import { CaseSlaScheduler } from "../temporal/case-sla.scheduler";
+import {
+  RegionScopeService,
+  regionScopeCondition,
+} from "../regions/region-scope.service";
 
 type Actor = {
   userId: string;
@@ -61,6 +65,7 @@ export class CasesService {
     private readonly audit: AuditService,
     private readonly outbox: OutboxService,
     private readonly sla: CaseSlaScheduler,
+    private readonly regionScope: RegionScopeService,
   ) {}
 
   /** Open statuses still owe SLA work → eligible for an active timer. */
@@ -71,6 +76,8 @@ export class CasesService {
   // ---------- create ----------
 
   async create(input: CreateCaseRequest, actor: Actor): Promise<CaseDetail> {
+    // Stamp the creator's region (P4.6b) so regional reads scope to it.
+    const scope = await this.regionScope.current();
     const id = await this.tenantDb.run(async (tx) => {
       if (input.assignedTo) await this.assertTenantUser(tx, input.assignedTo);
       const [row] = await tx
@@ -81,6 +88,7 @@ export class CasesService {
           type: input.type,
           priority: input.priority ?? 3,
           status: "open",
+          regionId: scope.regionId,
           description: input.description ?? null,
           dueAt: input.dueAt ? new Date(input.dueAt) : null,
           assignedTo: input.assignedTo ?? null,
@@ -129,9 +137,12 @@ export class CasesService {
   async list(filters: ListCasesFilters): Promise<CasesListResponse> {
     const limit = Math.min(Math.max(filters.limit ?? 50, 1), 200);
     const offset = Math.max(filters.offset ?? 0, 0);
+    const scope = await this.regionScope.current();
 
     return this.tenantDb.run(async (tx) => {
       const conds = [isNull(schema.cases.deletedAt)];
+      const rc = regionScopeCondition(schema.cases.regionId, scope);
+      if (rc) conds.push(rc);
       if (filters.status) conds.push(eq(schema.cases.status, filters.status));
       if (filters.priority)
         conds.push(eq(schema.cases.priority, filters.priority));
@@ -166,12 +177,19 @@ export class CasesService {
   }
 
   async getDetail(id: string): Promise<CaseDetail | null> {
+    const scope = await this.regionScope.current();
     return this.tenantDb.run(async (tx) => {
       const row = (
         await tx
           .select()
           .from(schema.cases)
-          .where(and(eq(schema.cases.id, id), isNull(schema.cases.deletedAt)))
+          .where(
+            and(
+              eq(schema.cases.id, id),
+              isNull(schema.cases.deletedAt),
+              regionScopeCondition(schema.cases.regionId, scope),
+            ),
+          )
           .limit(1)
       )[0];
       if (!row) return null;
@@ -181,12 +199,19 @@ export class CasesService {
   }
 
   async listActivity(id: string): Promise<CaseActivitiesResponse> {
+    const scope = await this.regionScope.current();
     return this.tenantDb.run(async (tx) => {
-      // Confirm the case is visible in this tenant (clean 404 upstream).
+      // Confirm the case is visible to this actor (tenant + region) — clean 404.
       const exists = await tx
         .select({ id: schema.cases.id })
         .from(schema.cases)
-        .where(and(eq(schema.cases.id, id), isNull(schema.cases.deletedAt)))
+        .where(
+          and(
+            eq(schema.cases.id, id),
+            isNull(schema.cases.deletedAt),
+            regionScopeCondition(schema.cases.regionId, scope),
+          ),
+        )
         .limit(1);
       if (exists.length === 0) throw new NotFoundException("Case not found");
 
@@ -204,6 +229,7 @@ export class CasesService {
   }
 
   async stats(): Promise<CaseStatsResponse> {
+    const scope = await this.regionScope.current();
     return this.tenantDb.run(async (tx) => {
       const statusRows = await tx
         .select({
@@ -211,7 +237,12 @@ export class CasesService {
           value: sql<number>`count(*)::int`,
         })
         .from(schema.cases)
-        .where(isNull(schema.cases.deletedAt))
+        .where(
+          and(
+            isNull(schema.cases.deletedAt),
+            regionScopeCondition(schema.cases.regionId, scope),
+          ),
+        )
         .groupBy(schema.cases.status);
 
       const prioRows = await tx
@@ -224,6 +255,7 @@ export class CasesService {
           and(
             isNull(schema.cases.deletedAt),
             inArray(schema.cases.status, [...CASE_OPEN_STATUSES]),
+            regionScopeCondition(schema.cases.regionId, scope),
           ),
         )
         .groupBy(schema.cases.priority);
@@ -387,11 +419,18 @@ export class CasesService {
     input: AddCaseCommentRequest,
     actor: Actor,
   ): Promise<CaseActivityResponse> {
+    const scope = await this.regionScope.current();
     return this.tenantDb.run(async (tx) => {
       const exists = await tx
         .select({ id: schema.cases.id })
         .from(schema.cases)
-        .where(and(eq(schema.cases.id, id), isNull(schema.cases.deletedAt)))
+        .where(
+          and(
+            eq(schema.cases.id, id),
+            isNull(schema.cases.deletedAt),
+            regionScopeCondition(schema.cases.regionId, scope),
+          ),
+        )
         .limit(1);
       if (exists.length === 0) throw new NotFoundException("Case not found");
 
@@ -493,6 +532,7 @@ export class CasesService {
       type: row.type,
       priority: row.priority,
       status: row.status as CaseStatus,
+      regionId: row.regionId ?? null,
       assignedTo: ref(row.assignedTo),
       openedBy: ref(row.openedBy),
       dueAt: row.dueAt ? row.dueAt.toISOString() : null,

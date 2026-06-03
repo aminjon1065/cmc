@@ -39,6 +39,11 @@ export class ListIncidentsQuery {
   @IsUUID()
   assignedTo?: string;
 
+  /** Structured region (zone) for access-scoped filtering (P4.6). */
+  @IsOptional()
+  @IsUUID()
+  regionId?: string;
+
   /** When true, only non-terminal incidents (reported/triaged/in_progress). */
   @IsOptional()
   @Transform(({ value }) => value === true || value === "true")

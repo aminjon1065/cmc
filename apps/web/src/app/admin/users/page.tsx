@@ -9,6 +9,7 @@ import { AppShell } from "@/components/cmc/app-shell";
 import { getBranding } from "@/lib/branding";
 import { getMyAccess } from "@/lib/access";
 import { authedApiFetch, ApiError } from "@/lib/server-api";
+import { fetchRegions } from "@/lib/regions";
 import { CreateUserForm } from "./create-user-form";
 import { UserRow } from "./user-row";
 
@@ -52,7 +53,11 @@ export default async function AdminUsersPage() {
   const session = await auth();
   const { copy } = await getBranding();
   const access = await getMyAccess();
-  const [result, roles] = await Promise.all([fetchUsers(), fetchRoles()]);
+  const [result, roles, regions] = await Promise.all([
+    fetchUsers(),
+    fetchRoles(),
+    fetchRegions(),
+  ]);
 
   return (
     <AppShell
@@ -126,6 +131,7 @@ export default async function AdminUsersPage() {
                   >
                     <th className="px-4 py-2 font-medium">User</th>
                     <th className="px-4 py-2 font-medium">Roles</th>
+                    <th className="px-4 py-2 font-medium">Region</th>
                     <th className="px-4 py-2 font-medium">Status</th>
                     <th className="px-4 py-2 font-medium">Last login</th>
                     <th className="px-4 py-2 font-medium">Actions</th>
@@ -137,6 +143,7 @@ export default async function AdminUsersPage() {
                       key={u.id}
                       user={u}
                       roles={roles}
+                      regions={regions}
                       isSelf={u.id === access?.userId}
                     />
                   ))}

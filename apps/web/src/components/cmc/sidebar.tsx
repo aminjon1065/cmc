@@ -5,7 +5,7 @@ import {
   Briefcase,
   FileText,
   Files,
-  Folder,
+  Film,
   Globe2,
   Inbox,
   LayoutDashboard,
@@ -39,7 +39,7 @@ const NAV: NavGroup[] = [
     id: "ops",
     label: "Operations",
     items: [
-      { id: "command", label: "Command Center", icon: Radio, disabled: true },
+      { id: "command", label: "Command Center", icon: Radio, href: "/monitoring" },
       {
         id: "monitor",
         label: "Realtime Monitoring",
@@ -73,7 +73,7 @@ const NAV: NavGroup[] = [
     label: "Knowledge",
     items: [
       { id: "docs", label: "Documents", icon: FileText, href: "/documents" },
-      { id: "files", label: "Files", icon: Folder, disabled: true },
+      { id: "media", label: "Media", icon: Film, href: "/media" },
       { id: "wiki", label: "Knowledge Base", icon: Files, href: "/wiki" },
     ],
   },
@@ -118,6 +118,8 @@ export async function Sidebar({
   const canAdmin = isAdmin(access);
   const canIncidents = hasPermission(access, "incident:read");
   const canVideo = hasPermission(access, "video:read");
+  const canMonitor = hasPermission(access, "monitoring:read");
+  const canMedia = hasPermission(access, "media:read");
 
   const initials = (user?.name ?? "")
     .split(/\s+/)
@@ -177,9 +179,13 @@ export async function Sidebar({
                   ? "/admin"
                   : item.id === "cases" && canIncidents
                     ? "/incidents"
-                    : item.id === "notif"
-                      ? "/notifications"
-                      : item.href;
+                    : item.id === "command" && canMonitor
+                      ? "/monitoring"
+                      : item.id === "media" && canMedia
+                        ? "/media"
+                        : item.id === "notif"
+                          ? "/notifications"
+                          : item.href;
               const disabled =
                 item.id === "admin"
                   ? !canAdmin
@@ -187,9 +193,13 @@ export async function Sidebar({
                     ? !canIncidents
                     : item.id === "video"
                       ? !canVideo
-                      : item.id === "notif"
-                        ? false
-                        : item.disabled;
+                      : item.id === "command"
+                        ? !canMonitor
+                        : item.id === "media"
+                          ? !canMedia
+                          : item.id === "notif"
+                            ? false
+                            : item.disabled;
               const content = (
                 <span
                   className="relative flex items-center gap-2.5 rounded-md px-2 py-1 text-[12px]"

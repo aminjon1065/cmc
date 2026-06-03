@@ -15,9 +15,10 @@ import { Logger } from "@nestjs/common";
  * `loadConfig()` — in `main.ts`. `env` and `fetchImpl` are parameters so the
  * loader is hermetically testable without a live Vault.
  *
- * The dynamic database-secrets engine (short-lived `cmc_app` credentials with
- * lease renewal) and the Vault Agent sidecar are the documented prod follow-on
- * (ADR-0044) — this first cut is a static KV read.
+ * Production auth (P4.7a / ADR-0065): `VAULT_AUTH_METHOD` selects `token` (dev:
+ * `VAULT_TOKEN`) or `approle` (prod: `VAULT_ROLE_ID`+`VAULT_SECRET_ID` → a
+ * short-lived client token via the AppRole login). The dynamic database-secrets
+ * engine (short-lived `cmc_app` credentials with lease renewal) is P4.7b.
  */
 
 type Env = Record<string, string | undefined>;
@@ -42,15 +43,12 @@ export async function loadVaultSecrets(
 
   const logger = new Logger("VaultSecrets");
   const addr = (env.VAULT_ADDR ?? "http://localhost:8200").replace(/\/+$/, "");
-  const token = env.VAULT_TOKEN;
   const mount = env.VAULT_KV_MOUNT ?? "secret";
   const path = (env.VAULT_SECRET_PATH ?? "cmc/api").replace(/^\/+|\/+$/g, "");
 
-  if (!token) {
-    throw new Error(
-      "VAULT_ENABLED=true but VAULT_TOKEN is not set — cannot authenticate to Vault.",
-    );
-  }
+  // P4.7a: resolve a Vault token via the configured auth method — `token` (dev)
+  // or `approle` (prod) — then read KV v2 with it.
+  const token = await resolveVaultToken(env, fetchImpl, addr, logger);
 
   // KV v2 read API: GET /v1/{mount}/data/{path}; the secret map is at .data.data
   // (the outer .data also carries .metadata — version, created_time, etc.).
@@ -92,4 +90,70 @@ export async function loadVaultSecrets(
       (loaded.length ? `: ${loaded.join(", ")}` : ""),
   );
   return { enabled: true, loaded };
+}
+
+/**
+ * Resolve a usable Vault token (P4.7a). `token` (default, dev) returns
+ * `VAULT_TOKEN` directly; `approle` (prod) performs the AppRole login
+ * (`POST /v1/auth/{mount}/login` with `role_id`+`secret_id`) and returns the
+ * issued `client_token`. Throws (never silently degrades) when the required
+ * inputs are missing or the login fails.
+ */
+export async function resolveVaultToken(
+  env: Env,
+  fetchImpl: FetchLike,
+  addr: string,
+  logger: Logger,
+): Promise<string> {
+  const method = (env.VAULT_AUTH_METHOD ?? "token").toLowerCase();
+
+  if (method === "approle") {
+    const roleId = env.VAULT_ROLE_ID;
+    const secretId = env.VAULT_SECRET_ID;
+    if (!roleId || !secretId) {
+      throw new Error(
+        "VAULT_AUTH_METHOD=approle requires VAULT_ROLE_ID and VAULT_SECRET_ID.",
+      );
+    }
+    const mount = (env.VAULT_APPROLE_MOUNT ?? "approle").replace(
+      /^\/+|\/+$/g,
+      "",
+    );
+    const url = `${addr}/v1/auth/${mount}/login`;
+    let res: Response;
+    try {
+      res = await fetchImpl(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role_id: roleId, secret_id: secretId }),
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`Vault AppRole login to ${url} failed: ${msg}`);
+    }
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(
+        `Vault AppRole login ${url} returned ${res.status} ${res.statusText}${
+          body ? ` — ${body}` : ""
+        }`,
+      );
+    }
+    const json = (await res.json()) as { auth?: { client_token?: string } };
+    const clientToken = json.auth?.client_token;
+    if (!clientToken) {
+      throw new Error("Vault AppRole login returned no client_token.");
+    }
+    logger.log("authenticated to Vault via AppRole");
+    return clientToken;
+  }
+
+  // Default: static token (dev-mode root token, or a pre-issued token).
+  const token = env.VAULT_TOKEN;
+  if (!token) {
+    throw new Error(
+      "VAULT_ENABLED=true with token auth but VAULT_TOKEN is not set — cannot authenticate to Vault.",
+    );
+  }
+  return token;
 }

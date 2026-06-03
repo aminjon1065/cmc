@@ -494,9 +494,33 @@ Structured JSON logging with `request_id`+`trace_id`+`tenantId`+`userId` (P0.3 /
 
 | field | value |
 |---|---|
-| **Status** | NOT STARTED |
+| **Status** | ✅ DONE — substrate + web player + watermark (P4.5a+b+c; ADR-0063) |
 
-No transcoding workers, no FFmpeg pipeline, no HLS streaming, no signed URLs for media-specific access patterns. **Complexity: L.**
+**P4.5a ✅ (media substrate — gated FFmpeg→HLS transcode + BFF stream proxy):** new `media:read`/`media:write` (operator+auditor). `media_assets` (FK documents, kind/status/playlist_key/poster_key/duration; RLS; migration 0037). **Gated BullMQ `media-transcode` seam** (`MEDIA_TRANSCODE_ENABLED`; `bullmq`/`ioredis` dynamic-imported) + worker (isTest-skipped) → `MediaService.transcode` shells out to **ffmpeg → HLS → S3** (`media/<tenant>/<asset>/index.m3u8` + segments + poster); the SFU... source is an uploaded **document** (P2.12/P3.4). Contracts `media.ts`. `MediaService`: `requestTranscode` (document → pending asset + enqueue), list/get, and the **BFF HLS proxy** — `getPlaylist` (rewrites segment URIs → `seg/<name>`) + `getSegment` (proxies `.ts` bytes, regex-guarded against traversal). `MediaController` `POST /v1/media/transcode` + `GET /assets`, `/assets/:id`, `/assets/:id/playlist.m3u8`, `/assets/:id/seg/:name` (StreamableFile), all `@Authorize`. **BFF**: the player streams through per-request RBAC-checked endpoints — no JWT in the browser, no public S3 URLs. e2e `media` **3/3** (transcode→pending + list/get; RBAC + unknown-doc/cross-tenant 404; HLS playlist-rewrite + segment bytes + invalid-name 400 + cross-tenant 404). Suite **57 suites / 415 tests**, zero regressions. **Boundary:** real ffmpeg→HLS isn't headless-tested (worker gated off in tests; the proxy is tested against HLS seeded in MinIO). Files: `apps/api/src/modules/media/`, `packages/db/src/schema/media-assets.ts`.
+
+**P4.5b ✅ (web media + HLS player):** `hls.js`. **BFF HLS proxy routes** `/api/media/[id]/playlist.m3u8` + `/api/media/[id]/seg/[name]` (bearer attached server-side → API; player streams same-origin, no JWT in browser). `/media` page (gated `media:read`) → `MediaWorkspace`: asset list + status badges (polls 5s while pending/processing), "Make streamable" (documentId → `requestTranscode`), and `MediaPlayer` (`hls.js`, dynamic ssr:false, native-HLS fallback) over the proxied playlist. Sidebar "Media" entry (replaced disabled "Files"), gated; middleware protects `/media`. Web `tsc`/`lint`/`build` green; smoke `/media`→307 + playlist proxy→401. Files: `apps/web/src/app/media/`, `apps/web/src/app/api/media/`.
+
+**P4.5c ✅ (watermarking + close):** optional **burned-in text watermark**. `media_assets.watermark` (migration 0038, no RLS change), `CreateMediaTranscodeSchema.watermark` (≤100 chars) + `MediaAssetSchema.watermark` (nullable). `MediaService.transcode` adds an ffmpeg **`drawtext`** filter (`-vf drawtext=…`, bottom-left, semi-transparent white on a dark box) when set — text **shell-escaped for the filtergraph** (`\ ' : %`); optional `MEDIA_WATERMARK_FONT` → `fontfile` (drawtext needs a font; default ffmpeg built-in). Burned into pixels → survives download/screen-capture (unlike a player overlay). `MediaController` parses the full schema → `requestTranscode(actor, documentId, watermark?)`. **Web**: watermark `<input>` on the "Make streamable" form → `requestTranscodeAction(documentId, watermark?)`. e2e `media` **4/4** (added watermark round-trip: provided→stored, omitted→null). Suite **57 suites / 416 tests**, zero regressions; eslint clean; web `tsc`/`lint`/`build` green; smoke `/media`→307 + playlist proxy→401. **ADR-0063** covers P4.5 a–c. **Boundary:** real ffmpeg watermark burn-in is manual/live (worker gated off in tests). **P4.5 closed.**
+
+**Follow-ons:** multi-bitrate ABR ladder; document-picker integration on the documents page (today a document ID is entered directly); per-tenant watermark presets (logo/position/opacity); derived-rendition retention. **Complexity: L.**
+
+---
+
+## Regional Segmentation (P4.6)
+
+| field | value |
+|---|---|
+| **Status** | ✅ DONE — substrate + hard scoping + web (P4.6a/b/c; ADR-0064) |
+
+**Reframed 2026-06-03:** "P4.6 Multi-region DR" → **regional segmentation**. Single-site deployment (server + backups at the head office) ⇒ no physical multi-region DR (cross-DC replication / regional Tempo+Loki / DNS failover out of scope; **off-site backup** = follow-on). "Region" = a logical division of users + operational data *within* the tenant; regional users see only their own region, the head office (`region:all`) sees all. Decisions (2026-06-03): region inside the tenant; **hard** separation + HQ-sees-all; **incidents+cases** scope first; **seed TJ regions + admin CRUD**.
+
+**P4.6a ✅ (regions substrate):** perms `region:read`/`region:manage`/`region:all` + system role **`hq`** (region:read + region:all); operator/auditor get region:read, tenant_admin via `*`. `regions` table (per-tenant code+name, unique (tenant,code), RLS, migration 0039) + `users.region_id` (FK regions, set-null). Contracts `region.ts` + `DEFAULT_TJ_REGIONS` (Душанбе / Согд / Хатлон / ГБАО / РРП). `RegionsService` + `RegionsController`: `GET /v1/regions` (region:read), create/update/delete (region:manage; delete → 409 if users assigned). User→region via the existing `PATCH /v1/users/:id` (`regionId`, in-tenant-validated → 404 if unknown). `ensureDefaultRegionsForTenant` wired into dev seed + e2e fixtures. e2e `regions` **5/5** (seed+RBAC; create/dup/bad/operator; update/cross-tenant; assign/clear/unknown; delete-guard). Suite **58 suites / 421 tests**, zero regressions (rbac role-set assertions updated for `hq`). Files: `apps/api/src/modules/regions/`, `packages/db/src/schema/regions.ts`.
+
+**P4.6b ✅ (hard region scoping on incidents + cases):** `region_id` (FK regions, set-null) on incidents + cases (migration 0040; separate from the incidents free-text `region` label; RLS unchanged). `RegionScopeService.current()` → `{ seeAll, regionId }` (seeAll for `region:all` / API-key / no-context; else `users.region_id`); `regionScopeCondition()` → `region_id IS NOT DISTINCT FROM $::uuid`. Applied to incidents `list`/`getDetail`/`stats` + cases `list`/`getDetail`/`stats`/`listActivity`/`addComment` (out-of-region detail/mutation → 404 via the scoped getDetail). `create` stamps the creator's region; `regionId` exposed on Incident/Case summaries. e2e `region-scoping` **3/3**. Suite **59 suites / 424 tests**, zero regressions. **Follow-on:** monitoring wall (P4.3) + ClickHouse analytics (P2.6) not yet region-scoped (HQ-oriented aggregates). Files: `apps/api/src/modules/regions/region-scope.service.ts`.
+
+**P4.6c ✅ (web + close):** `/admin/regions` (CRUD, gated `region:manage`) + admin-overview card; user→region assignment on `/admin/users` (dropdown → `PATCH /v1/users/:id`, new Region column); incidents structured-region **badge** (list + detail) + **zone filter** (new `GET /v1/incidents?regionId=` filter, composes with scope); shared `lib/regions.ts`. **ADR-0064** covers P4.6 a–c. Web `tsc`/`lint`/`build` green; smoke `/admin/regions`→307. Files: `apps/web/src/app/admin/regions/`, `apps/web/src/lib/regions.ts`, `apps/web/src/app/incidents/`. **P4.6 closed.**
+
+**Follow-ons:** region-scope the monitoring wall (P4.3) + ClickHouse analytics (P2.6); cases web UI (+ region badge/filter there); HQ region-picker on create; consolidate incidents free-text `region` → `region_id`; off-site backup (single-site DR carry-over). **Complexity: L.**
 
 ---
 
@@ -510,9 +534,15 @@ No transcoding workers, no FFmpeg pipeline, no HLS streaming, no signed URLs for
 
 | field | value |
 |---|---|
-| **Status** | NOT STARTED |
+| **Status** | DONE — MVP end-to-end (P4.3a+b+c / ADR-0062); WS-push + ClickHouse counts + multi-monitor presets deferred |
 
-This is the **product surface the UI implies**. No live event ticker, no multi-monitor layout, no real KPI tiles backed by data, no time-replay. The hero ribbon "ELEVATED ALERT · Flood Watch" is hardcoded copy. **Complexity: XL** (needs §3.6 events, §3.27 incidents, §3.4 GIS, §3.23 cases all in place).
+**P4.3a ✅ (monitoring backend — summary snapshot + audit_log replay):** new `monitoring:read` perm (operator + auditor + tenant_admin). Contracts `monitoring.ts`. `MonitoringService` — **pure Postgres aggregation** (RLS-scoped; deliberately no ClickHouse dependency so the wall is always available + e2e-testable): `summary()` returns a live snapshot — incidents `active` + `byStatus` + `bySeverity`, `recentIncidents` (8), `recentEvents` (20, from `audit_log` — the alert-ticker feed), open video-room count, `generatedAt`; `replay(from,to,limit)` returns the `audit_log` operational action timeline over a window, ascending, capped at 2000. `MonitoringController`: `GET /v1/monitoring/summary` (polled by the wall) + `GET /v1/monitoring/replay?from=&to=&limit=`, both `@Authorize("monitoring:read")`. e2e `monitoring` **5/5** (summary counts + recent events; replay window + ascending order; bad-window 400; RBAC 403; tenant isolation — another tenant sees 0). Suite **56 suites / 412 tests**, zero regressions. Files: `apps/api/src/modules/monitoring/`.
+
+**P4.3b ✅ (web wall view + alert ticker):** `/monitoring` page (gated `monitoring:read`, server-fetches the summary) → `MonitoringWall` (client) **polls `/monitoring/summary` every 4s** (server action) with a live/stale indicator. KPI tiles (active incidents, SEV-1 critical, open calls, recent-event count), by-severity bars + by-status counts, recent-incidents list (links to `/incidents/[id]`), and a live **alert ticker** (recentEvents — outcome dot + time + action + resourceType). Lifted the disabled **"Command Center"** sidebar entry → `/monitoring`, gated `monitoring:read`; middleware protects `/monitoring`. Web `tsc`/`lint`/`build` green; smoke `/monitoring`→307 login. Files: `apps/web/src/app/monitoring/`.
+
+**P4.3c ✅ (time-replay scrubber):** `ReplayPanel` on `/monitoring` — datetime-local window picker loads `/monitoring/replay`, then a scrubber (range slider) + **Play/Pause** auto-advance steps through the `audit_log` timeline as it happened (current-time readout + a sliding 40-event feed with the current event highlighted). Web `tsc`/`lint`/`build` green. Files: `apps/web/src/app/monitoring/replay-panel.tsx`.
+
+**Follow-ons (ADR-0062):** WS-push (P2.3 WS-ticket) for instant tiles/ticker; ClickHouse-backed counts/trends for very large tenants; map snapshot tile + multi-monitor layout presets; replay overlay on the map / incident timeline. **Complexity: XL** (reuses §3.27 incidents, §3.15 audit, §3.12 video, §3.6 events).
 
 ---
 
@@ -648,15 +678,25 @@ This is the **product surface the UI implies**. No live event ticker, no multi-m
 
 | | |
 |---|---|
-| Status | DEV MODE + first secret migrated (P2.14 / ADR-0044) — 2026-06-02 |
-| Files | `apps/api/src/config/vault-secrets.ts` (loader), `src/main.ts` (dynamic AppModule import after overlay), `src/config/configuration.ts` (`VAULT_*`), `infra/docker-compose.yml` (`vault` dev + `vault-init`) |
-| How | Gated in-process loader: `VAULT_ENABLED` → KV v2 read (`/v1/{mount}/data/{path}`, `X-Vault-Token`) → overlay keys into `process.env` before validation (Vault > `.env`). Off by default → pure-env no-op. Dev compose runs Vault dev mode (in-memory, root token) + seeds `secret/cmc/api` |
+| Status | ✅ **PRODUCTION-READY (P2.14 + P4.7a/b · ADR-0044 + ADR-0065)** — 2026-06-03: AppRole + KV v2 auth + dynamic DB credentials (lease + renew) |
+| Files | `apps/api/src/config/vault-secrets.ts` (KV loader + `resolveVaultToken`), `vault-db-credentials.ts` (lease/swap/renew), `src/main.ts` (both loaders + lease renewer), `src/config/configuration.ts` (`VAULT_*`), `infra/docker-compose.yml` (`vault` dev + `vault-init`) |
+| How | Gated boot loaders (pre-DI, env overlay before validation; Vault > `.env`; off → pure-env no-op). **Auth (P4.7a):** `VAULT_AUTH_METHOD` `token` dev / `approle` prod (`/v1/auth/{mount}/login` `role_id`+`secret_id` → `client_token`). **KV (P2.14):** read `/v1/{mount}/data/{path}` → overlay keys. **Dynamic DB creds (P4.7b):** `VAULT_DB_CREDS_ENABLED` → lease `{mount}/creds/{role}` → **swap into `DATABASE_URL` userinfo** (host/db kept); `main.ts` renews the lease at ~½ TTL. `DATABASE_OWNER_URL` stays static; secrets never logged |
 | First secret | **MFA_ENC_KEY** — `SecretBoxService` reads it via `config.get` unchanged |
-| Tests | `apps/api/test/e2e/vault-secrets.e2e-spec.ts` — 5 hermetic (faked fetch+env). Live smoke: invalid env key + Vault on → boots; Vault off → fails |
-| Gotcha | `ConfigModule.forRoot({ validate })` validates at module-import → `main.ts` imports `AppModule` dynamically after the overlay |
-| Deferred | dynamic DB-creds engine + per-pod lease + renewal; AppRole/k8s auth (not static token); Vault Agent sidecar; runtime refresh; multi-path secrets |
-| Blocks | hardened non-dev deployment (dynamic creds) |
-| Complexity | M done; L remaining for dynamic engine + auth methods |
+| Tests | **13 hermetic** — `vault-secrets.e2e-spec.ts` 7 (token + AppRole + KV) + `vault-db-credentials.e2e-spec.ts` 6 (gating, DB-engine read + userinfo swap, AppRole reuse, missing role/URL, lease renew). Live smoke: real Vault dev container (AppRole + DB secrets engine) |
+| Gotcha | `ConfigModule.forRoot({ validate })` validates at module-import → `main.ts` imports `AppModule` dynamically after both overlays run |
+| Deferred (follow-on) | credential **rotation** (re-fetch + hot-swap pool on expiry); k8s auth method; Vault Agent sidecar; **mTLS/TLS to Postgres+Redis** (Linkerd N/A on single-site); Vault Transit backup-encryption |
+| Complexity | done (M+L); rotation/hot-swap + k8s-auth + mTLS remaining |
+
+### Realtime analytics (P4.8)
+
+| | |
+|---|---|
+| Status | ✅ DONE (P4.8a/b · ADR-0066) — 2026-06-03: ClickHouse-native anomaly detection + proactive alerts |
+| How | Pure `detectAnomalies` (rolling mean+stddev → Z-score, `minStddev` floor) over the CH daily incident series (`incident_daily_stats_by_region`, gap-filled via `buildDailyTrend`). `GET /v1/analytics/anomalies` (`incident:read`; degrades to `unavailable` when CH off). Proactive `AnomalyAlertService` (gated + isTest-skipped) scans tenants, dedups per (tenant,day,direction) via Redis `SET NX`, notifies `monitoring:read` holders (`analytics.anomaly` kind). Web dashboard widget (server-seeded + 60s BFF poll) |
+| Tests | `analytics-anomalies.e2e-spec.ts` **9** (pure spike/dip/flat/short + faked-CH endpoint + RBAC) + `analytics-anomaly-alert.e2e-spec.ts` **1** (new-anomaly notify + dedup). Live smoke: real ClickHouse query + the interval |
+| Files | `apps/api/src/modules/analytics/anomaly-detector.ts`, `anomaly-alert.service.ts`, `dashboard-analytics.service.ts`, `analytics.controller.ts`; `apps/web/src/app/dashboard/anomalies-widget.tsx` |
+| Deferred (follow-on) | Flink / true streaming; more signals (audit-rate, case volume, per-region); per-tenant thresholds + admin tuning; ML detection |
+| Complexity | done (L) |
 
 ### Backups plane (Postgres)
 
@@ -717,32 +757,32 @@ This is the **product surface the UI implies**. No live event ticker, no multi-m
 
 | Module | Status | Compl. % | Complexity to finish |
 |---|---|---|---|
-| 3.1 IAM | PARTIAL | 30 % | L |
+| 3.1 IAM | PARTIAL | 40 % | L |
 | 3.2 Multi-Tenancy | DONE (shared-schema mode) | 50 % | L (for cryptographic + migration tooling) |
-| 3.3 RBAC/ABAC | NOT STARTED | 0 % | L → XL |
+| 3.3 RBAC/ABAC | PARTIAL (RBAC done; ABAC pending) | 45 % | XL (ABAC/OPA) |
 | 3.4 GIS | IN PROGRESS (substrate + tiles + map, P2.7–P2.9) | 28 % | XXL |
-| 3.5 Analytics | NOT STARTED | 0 % | XL |
-| 3.6 Realtime Events | NOT STARTED | 0 % | L → XL |
+| 3.5 Analytics | PARTIAL (CH projections + query API, P2.2/P2.5/P2.6) | 24 % | XL |
+| 3.6 Realtime Events | PARTIAL (NATS outbox + relay + consumers + WS, P2.1–P2.5) | 48 % | L → XL |
 | 3.7 Dashboard Builder | NOT STARTED | 0 % | L |
 | 3.8 File Mgmt | PARTIAL | 20 % | XL |
 | 3.9 ECM | PARTIAL | 10 % | XL |
-| 3.10 Workflow | NOT STARTED | 0 % | XL |
-| 3.11 Chat | NOT STARTED | 0 % | XL |
-| 3.12 Video | NOT STARTED | 0 % | XXL |
+| 3.10 Workflow | PARTIAL (Temporal + visual builder, P3.1/P3.2/P3.8) | 16 % | XL |
+| 3.11 Chat | MVP DONE (P3.12 a–b) | 45 % | XL |
+| 3.12 Video | DONE — MVP (P4.2 a–c) | 65 % | XXL |
 | 3.13 Notifications | P1.6 DONE (a–c) | 60 % | L |
-| 3.14 Search | NOT STARTED | 3 % | XL |
-| 3.15 Audit | PARTIAL | 45 % | M |
-| 3.16 Wiki | NOT STARTED | 0 % | XL |
-| 3.17 API Gateway | NOT STARTED | 0 % | L → XL |
+| 3.14 Search | PARTIAL (federated search, P3.6/P3.7) | 30 % | XL |
+| 3.15 Audit | PARTIAL | 85 % | L |
+| 3.16 Wiki | MVP DONE (P3.10 a–c) | 40 % | XL |
+| 3.17 API Gateway | PARTIAL (in-app API keys + OpenAPI) | 40 % | L → XL |
 | 3.18 AI Readiness | NOT STARTED | 2 % | XXL |
 | 3.19 Admin Panel | P1.4 DONE (a–d) | 60 % | L |
-| 3.20 Observability | NOT STARTED | 5 % | L → XL |
-| 3.21 Import/Export | NOT STARTED | 0 % | XL |
-| 3.22 Realtime Collab | NOT STARTED | 0 % | XL |
+| 3.20 Observability | IN PROGRESS (logs + metrics + traces) | 55 % | L → XL |
+| 3.21 Import/Export | PARTIAL (import side, P3.11 a–b) | 30 % | XL |
+| 3.22 Realtime Collab | DONE — MVP (P4.1 a–c) | 70 % | XL |
 | 3.23 Cases | IN PROGRESS (backend, P2.10) | 45 % | L (web UI + SLA/types/links) |
-| 3.24 Media | NOT STARTED | 0 % | L |
+| 3.24 Media | DONE (a–c, P4.5) | 80 % | L |
 | 3.25 Geo Analytics | NOT STARTED | 0 % | sub-scope of 3.4 |
-| 3.26 Ops Monitoring | NOT STARTED | 0 % | XL |
+| 3.26 Ops Monitoring | DONE — MVP (P4.3 a–c) | 60 % | XL |
 | 3.27 Incidents | P1.5 DONE (a–c) | 55 % | L → XL |
 
 **Aggregate completion against ToR §3 surface:** ~**6 %**.

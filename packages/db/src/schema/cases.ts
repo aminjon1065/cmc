@@ -10,6 +10,7 @@ import {
 import { sql } from "drizzle-orm";
 import { tenants } from "./tenants";
 import { users } from "./users";
+import { regions } from "./regions";
 
 /**
  * Cases (P2.10 / ADR-0040) — the second operational domain module after
@@ -36,6 +37,14 @@ export const cases = pgTable(
     priority: smallint("priority").notNull().default(3),
     /** Lifecycle state — one of CASE_STATUSES. */
     status: varchar("status", { length: 20 }).notNull().default("open"),
+    /**
+     * Structured region for access scoping (P4.6); NULL = unassigned / head-
+     * office pool. Visibility is enforced in the service layer (`region:all`
+     * sees all).
+     */
+    regionId: uuid("region_id").references(() => regions.id, {
+      onDelete: "set null",
+    }),
 
     assignedTo: uuid("assigned_to").references(() => users.id, {
       onDelete: "set null",
@@ -60,6 +69,7 @@ export const cases = pgTable(
   (t) => ({
     tenantIdx: index("cases_tenant_idx").on(t.tenantId),
     statusIdx: index("cases_status_idx").on(t.tenantId, t.status),
+    regionIdx: index("cases_region_idx").on(t.tenantId, t.regionId),
     assignedIdx: index("cases_assigned_idx").on(t.assignedTo),
     dueIdx: index("cases_due_idx").on(t.dueAt),
     // Full-text search (P2.11 / ADR-0041).

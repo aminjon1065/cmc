@@ -8,6 +8,7 @@ import { IncidentProjectionConsumer } from "./incident-projection.consumer";
 import { IncidentProjectionSubscriber } from "./incident-projection.subscriber";
 import { AuditProjectionService } from "./audit-projection.service";
 import { DashboardAnalyticsService } from "./dashboard-analytics.service";
+import { AnomalyAlertService } from "./anomaly-alert.service";
 import { AnalyticsController } from "./analytics.controller";
 
 /**
@@ -29,12 +30,14 @@ import { AnalyticsController } from "./analytics.controller";
     IncidentProjectionSubscriber,
     AuditProjectionService,
     DashboardAnalyticsService,
+    AnomalyAlertService,
   ],
   exports: [
     CLICKHOUSE_CLIENT,
     IncidentProjectionConsumer,
     AuditProjectionService,
     DashboardAnalyticsService,
+    AnomalyAlertService,
   ],
 })
 export class AnalyticsModule {}

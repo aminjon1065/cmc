@@ -1,5 +1,6 @@
 import * as argon2 from "argon2";
 import {
+  DEFAULT_TJ_REGIONS,
   PERMISSION_CATALOG,
   SYSTEM_ROLES,
   type Permission,
@@ -149,6 +150,23 @@ export async function ensureAllSystemRoles(
   return map;
 }
 
+/**
+ * Seed the default (Tajikistan) regions for a tenant (mirrors the production
+ * seed's `ensureDefaultRegionsForTenant`). Idempotent. (P4.6)
+ */
+export async function seedDefaultRegions(
+  sql: ReturnType<typeof ownerSql>,
+  tenantId: string,
+): Promise<void> {
+  for (const r of DEFAULT_TJ_REGIONS) {
+    await sql`
+      INSERT INTO regions (tenant_id, code, name)
+      VALUES (${tenantId}, ${r.code}, ${r.name})
+      ON CONFLICT (tenant_id, code) DO NOTHING
+    `;
+  }
+}
+
 /** Assign a role to a user (idempotent). */
 export async function assignRole(
   sql: ReturnType<typeof ownerSql>,
@@ -198,6 +216,8 @@ export async function createTenantWithAdmin(
   // Seed the full system-role set for the tenant (matches production seed),
   // then grant tenant_admin to the user unless opted out.
   const roleIds = await ensureAllSystemRoles(sql, tenant.id);
+  // Seed default regions too (matches production seed). (P4.6)
+  await seedDefaultRegions(sql, tenant.id);
   if (overrides.grantAdminRole !== false) {
     await assignRole(sql, {
       userId: user.id,

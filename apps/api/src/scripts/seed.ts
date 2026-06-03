@@ -21,6 +21,7 @@ import {
   ensureSystemRolesForTenant,
   assignRoleToUser,
 } from "../modules/rbac/rbac-seed";
+import { ensureDefaultRegionsForTenant } from "../modules/regions/region-seed";
 
 loadEnv({ path: resolve(__dirname, "../../.env") });
 
@@ -124,6 +125,10 @@ async function main() {
     console.log(
       `✓ RBAC: permission catalog + ${roleIdBySlug.size} system roles for ${tenant.slug}`,
     );
+
+    // P4.6: default (Tajikistan) regions for the tenant. Idempotent.
+    await ensureDefaultRegionsForTenant(db, tenant.id);
+    console.log(`✓ Regions: default Tajikistan regions for ${tenant.slug}`);
 
     const adminUser = (
       await db

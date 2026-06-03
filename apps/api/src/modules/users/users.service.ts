@@ -221,7 +221,7 @@ export class UsersService {
    */
   async updateUser(
     id: string,
-    changes: { name?: string; isActive?: boolean },
+    changes: { name?: string; isActive?: boolean; regionId?: string | null },
     actor: AdminActor,
   ): Promise<UserSummary> {
     const existing = await this.getUserDetail(id);
@@ -232,6 +232,20 @@ export class UsersService {
       throw new ForbiddenException("You cannot deactivate your own account");
     }
 
+    // A non-null region must be a real region in this tenant (RLS-scoped, so a
+    // cross-tenant region id is a clean 404). null clears the assignment.
+    const regionProvided = changes.regionId !== undefined;
+    if (regionProvided && changes.regionId !== null) {
+      const found = await this.tenantDb.run((tx) =>
+        tx
+          .select({ id: schema.regions.id })
+          .from(schema.regions)
+          .where(eq(schema.regions.id, changes.regionId!))
+          .limit(1),
+      );
+      if (found.length === 0) throw new NotFoundException("Region not found");
+    }
+
     await this.tenantDb.run((tx) =>
       tx
         .update(schema.users)
@@ -240,6 +254,7 @@ export class UsersService {
           ...(changes.isActive !== undefined
             ? { isActive: changes.isActive }
             : {}),
+          ...(regionProvided ? { regionId: changes.regionId } : {}),
           updatedAt: sql`now()`,
         })
         .where(eq(schema.users.id, id)),
@@ -314,6 +329,7 @@ export class UsersService {
       hasPassword: !!user.passwordHash,
       lastLoginAt: user.lastLoginAt ? user.lastLoginAt.toISOString() : null,
       createdAt: user.createdAt.toISOString(),
+      regionId: user.regionId ?? null,
       roles,
     };
   }

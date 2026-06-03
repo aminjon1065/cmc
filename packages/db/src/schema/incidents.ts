@@ -11,6 +11,7 @@ import {
 import { sql } from "drizzle-orm";
 import { tenants } from "./tenants";
 import { users } from "./users";
+import { regions } from "./regions";
 
 /**
  * Incidents (P1.5 / ADR-0023) — the first operational domain module.
@@ -40,6 +41,14 @@ export const incidents = pgTable(
     /** Free-text categoricals (web offers jurisdiction suggestions). */
     type: varchar("type", { length: 80 }).notNull(),
     region: varchar("region", { length: 120 }).notNull(),
+    /**
+     * Structured region for access scoping (P4.6); separate from the free-text
+     * `region` label above. NULL = unassigned / head-office pool. Visibility is
+     * enforced in the service layer (`region:all` sees all).
+     */
+    regionId: uuid("region_id").references(() => regions.id, {
+      onDelete: "set null",
+    }),
     source: varchar("source", { length: 120 }),
 
     summary: varchar("summary", { length: 300 }).notNull(),
@@ -71,6 +80,7 @@ export const incidents = pgTable(
     tenantIdx: index("incidents_tenant_idx").on(t.tenantId),
     statusIdx: index("incidents_status_idx").on(t.tenantId, t.status),
     severityIdx: index("incidents_severity_idx").on(t.tenantId, t.severity),
+    regionIdx: index("incidents_region_idx").on(t.tenantId, t.regionId),
     occurredIdx: index("incidents_occurred_idx").on(t.occurredAt),
     assignedIdx: index("incidents_assigned_idx").on(t.assignedTo),
     // Full-text search (P2.11 / ADR-0041): GIN over a language-neutral

@@ -2,10 +2,12 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { INCIDENT_STATUSES } from "@cmc/contracts";
+import { INCIDENT_STATUSES, type Region } from "@cmc/contracts";
 import { STATUS_LABEL } from "@/components/cmc/incident-badges";
 
-export function IncidentFilters() {
+const KEYS = ["status", "severity", "region", "regionId", "type", "q"];
+
+export function IncidentFilters({ regions }: { regions: Region[] }) {
   const router = useRouter();
   const sp = useSearchParams();
 
@@ -13,16 +15,14 @@ export function IncidentFilters() {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const next = new URLSearchParams();
-    for (const k of ["status", "severity", "region", "type", "q"]) {
+    for (const k of KEYS) {
       const v = String(fd.get(k) ?? "").trim();
       if (v) next.set(k, v);
     }
     router.push(next.toString() ? `/incidents?${next.toString()}` : "/incidents");
   }
 
-  const hasFilters = ["status", "severity", "region", "type", "q"].some((k) =>
-    sp.get(k),
-  );
+  const hasFilters = KEYS.some((k) => sp.get(k));
 
   return (
     <form onSubmit={onSubmit} className="flex flex-wrap items-end gap-2">
@@ -67,6 +67,24 @@ export function IncidentFilters() {
           defaultValue={sp.get("region") ?? ""}
         />
       </label>
+      {regions.length > 0 && (
+        <label className="flex flex-col gap-1">
+          <span className="cmc-label">Zone</span>
+          <select
+            name="regionId"
+            className="cmc-input"
+            style={{ width: 150 }}
+            defaultValue={sp.get("regionId") ?? ""}
+          >
+            <option value="">All zones</option>
+            {regions.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <label className="flex flex-col gap-1">
         <span className="cmc-label">Type</span>
         <input

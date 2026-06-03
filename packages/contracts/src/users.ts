@@ -25,6 +25,8 @@ export const UserSummarySchema = z.object({
   hasPassword: z.boolean(),
   lastLoginAt: z.string().datetime().nullable(),
   createdAt: z.string().datetime(),
+  /** Region this user belongs to (P4.6); null = unassigned / head-office pool. */
+  regionId: z.string().uuid().nullable(),
   roles: z.array(UserRoleRefSchema),
 });
 export type UserSummary = z.infer<typeof UserSummarySchema>;
@@ -51,8 +53,14 @@ export const UpdateUserRequestSchema = z
   .object({
     name: z.string().trim().min(1).max(200).optional(),
     isActive: z.boolean().optional(),
+    /** Assign (uuid) or clear (null) the user's region (P4.6). */
+    regionId: z.string().uuid().nullable().optional(),
   })
-  .refine((v) => v.name !== undefined || v.isActive !== undefined, {
-    message: "Provide at least one of name or isActive",
-  });
+  .refine(
+    (v) =>
+      v.name !== undefined ||
+      v.isActive !== undefined ||
+      v.regionId !== undefined,
+    { message: "Provide at least one of name, isActive, or regionId" },
+  );
 export type UpdateUserRequest = z.infer<typeof UpdateUserRequestSchema>;

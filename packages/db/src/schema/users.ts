@@ -8,6 +8,7 @@ import {
   boolean,
 } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants";
+import { regions } from "./regions";
 
 /**
  * Users are scoped to a tenant. Email uniqueness is per-tenant: the same
@@ -27,6 +28,14 @@ export const users = pgTable(
     name: varchar("name", { length: 255 }).notNull(),
     passwordHash: varchar("password_hash", { length: 255 }),
     isActive: boolean("is_active").notNull().default(true),
+    /**
+     * Region this user belongs to (P4.6). NULL = unassigned / head-office pool.
+     * Regional visibility is enforced in the service layer (a user without
+     * `region:all` sees only rows matching their `region_id`).
+     */
+    regionId: uuid("region_id").references(() => regions.id, {
+      onDelete: "set null",
+    }),
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -39,6 +48,7 @@ export const users = pgTable(
   (t) => ({
     tenantEmailUq: uniqueIndex("users_tenant_email_uq").on(t.tenantId, t.email),
     tenantIdx: index("users_tenant_idx").on(t.tenantId),
+    regionIdx: index("users_region_idx").on(t.tenantId, t.regionId),
   }),
 );
 

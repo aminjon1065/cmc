@@ -18,6 +18,8 @@ export const NOTIFICATION_KINDS = [
   "workflow.notify",
   // Chat @mention (P3.12b / ADR-0057).
   "chat.mention",
+  // Realtime-analytics anomaly alert (P4.8b / ADR-0066).
+  "analytics.anomaly",
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 

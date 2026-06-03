@@ -1,5 +1,8 @@
 import { Controller, Get, Query, UseGuards } from "@nestjs/common";
-import type { DashboardAnalyticsResponse } from "@cmc/contracts";
+import type {
+  AnomaliesResponse,
+  DashboardAnalyticsResponse,
+} from "@cmc/contracts";
 import { DashboardAnalyticsService } from "./dashboard-analytics.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { AuthorizeGuard } from "../../common/authz/authorize.guard";
@@ -28,5 +31,29 @@ export class AnalyticsController {
       user.tenantId,
       Number.isFinite(parsed) ? parsed : undefined,
     );
+  }
+
+  /**
+   * Realtime anomaly detection (P4.8 / ADR-0066) — incident-volume days that
+   * deviate from the recent rolling baseline (Z-score). ClickHouse-backed,
+   * tenant-scoped; degrades to `source: "unavailable"` when CH is off.
+   */
+  @Get("anomalies")
+  @Authorize("incident:read")
+  async anomalies(
+    @CurrentUser() user: TenantContext,
+    @Query("days") days?: string,
+    @Query("window") window?: string,
+    @Query("z") z?: string,
+  ): Promise<AnomaliesResponse> {
+    const num = (v?: string) => {
+      const n = v ? Number(v) : NaN;
+      return Number.isFinite(n) ? n : undefined;
+    };
+    return this.dashboard.anomalies(user.tenantId, {
+      days: num(days),
+      window: num(window),
+      zThreshold: num(z),
+    });
   }
 }

@@ -56,6 +56,24 @@ const EnvSchema = z.object({
   VAULT_TOKEN: emptyAsUndefined(z.string().optional()),
   VAULT_KV_MOUNT: z.string().default("secret"),
   VAULT_SECRET_PATH: z.string().default("cmc/api"),
+  // P4.7a: production auth method. `token` (dev: VAULT_TOKEN root/dev token) or
+  // `approle` (prod: VAULT_ROLE_ID + VAULT_SECRET_ID → a short-lived client
+  // token via the AppRole login). The loader resolves a token via the chosen
+  // method, then reads KV v2 exactly as before.
+  VAULT_AUTH_METHOD: z.enum(["token", "approle"]).default("token"),
+  VAULT_ROLE_ID: emptyAsUndefined(z.string().optional()),
+  VAULT_SECRET_ID: emptyAsUndefined(z.string().optional()),
+  VAULT_APPROLE_MOUNT: z.string().default("approle"),
+  // P4.7b: dynamic database credentials via the Vault DB secrets engine. When
+  // enabled, the boot loader leases short-lived Postgres creds from
+  // `{mount}/creds/{role}` and swaps them into DATABASE_URL's userinfo (host/db
+  // kept). Off by default → static DATABASE_URL (backward-compatible).
+  VAULT_DB_CREDS_ENABLED: z
+    .string()
+    .default("false")
+    .transform((v) => v.toLowerCase() === "true"),
+  VAULT_DB_MOUNT: z.string().default("database"),
+  VAULT_DB_ROLE: emptyAsUndefined(z.string().optional()),
 
   // --- Durable workflows / Temporal (P3.1 / ADR-0045) ---
   // Code-defined durable workflows (first: per-case SLA-escalation timers,
@@ -156,6 +174,16 @@ const EnvSchema = z.object({
   AUDIT_PROJECTION_INTERVAL_SEC: z.coerce.number().int().min(0).default(15),
   AUDIT_PROJECTION_BATCH_SIZE: z.coerce.number().int().positive().default(1000),
 
+  // P4.8b: proactive realtime-anomaly detector. When enabled (and ClickHouse is
+  // active), a background scan flags incident-volume anomalies and notifies
+  // `monitoring:read` holders (once per tenant/day/direction). Off by default →
+  // the /v1/analytics/anomalies endpoint still works on-demand.
+  ANALYTICS_ANOMALY_DETECTOR_ENABLED: z
+    .string()
+    .default("false")
+    .transform((v) => v.toLowerCase() === "true"),
+  ANALYTICS_ANOMALY_INTERVAL_SEC: z.coerce.number().int().min(0).default(300),
+
   S3_ENDPOINT: z.string().url(),
   S3_PUBLIC_ENDPOINT: z.string().url().optional(),
   S3_REGION: z.string().default("us-east-1"),
@@ -214,6 +242,19 @@ const EnvSchema = z.object({
     .default("false")
     .transform((v) => v.toLowerCase() === "true"),
   PREVIEW_MAX_DIM: z.coerce.number().int().positive().default(512),
+
+  // --- Media management (P4.5 / ADR-0063) ---
+  // Gated BullMQ worker transcodes an uploaded video document to HLS (ffmpeg,
+  // dynamic-imported) → S3. Off by default (jobs are created but not processed);
+  // ffmpeg must be in the worker image. The browser streams via the BFF proxy.
+  MEDIA_TRANSCODE_ENABLED: z
+    .string()
+    .default("false")
+    .transform((v) => v.toLowerCase() === "true"),
+  MEDIA_HLS_SEGMENT_SECONDS: z.coerce.number().int().positive().default(6),
+  // Optional TTF/OTF path for the ffmpeg `drawtext` watermark (P4.5c). Empty →
+  // rely on the image's fontconfig default (a font must still be present).
+  MEDIA_WATERMARK_FONT: z.string().default(""),
 
   // --- Bulk data import (P3.11 / ADR-0056) ---
   // BullMQ worker parses an uploaded file and bulk-inserts into a target domain

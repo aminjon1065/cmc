@@ -148,7 +148,7 @@ describe("RBAC", () => {
     const slugs = (res.body.roles as { slug: string }[])
       .map((r) => r.slug)
       .sort();
-    expect(slugs).toEqual(["auditor", "operator", "tenant_admin"]);
+    expect(slugs).toEqual(["auditor", "hq", "operator", "tenant_admin"]);
     const admin = res.body.roles.find(
       (r: { slug: string }) => r.slug === "tenant_admin",
     );
@@ -226,8 +226,8 @@ describe("RBAC", () => {
     const tokA = (await loginAs(app, adminA)).accessToken;
     const res = await authed(app, tokA).get("/v1/rbac/roles").expect(200);
 
-    // Every role returned belongs to tenant A (its own 3 system roles), not B's.
-    expect(res.body.roles).toHaveLength(3);
+    // Every role returned belongs to tenant A (its own 4 system roles), not B's.
+    expect(res.body.roles).toHaveLength(4);
     // (RLS guarantees A can't even see B's role ids; the count is the proof.)
   });
 

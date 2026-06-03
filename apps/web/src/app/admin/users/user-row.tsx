@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { UserSummary } from "@cmc/contracts";
+import type { Region, UserSummary } from "@cmc/contracts";
 import {
   assignRoleAction,
   deleteUserAction,
@@ -21,10 +21,12 @@ function fmt(ts: string): string {
 export function UserRow({
   user,
   roles,
+  regions,
   isSelf,
 }: {
   user: UserSummary;
   roles: RoleRef[];
+  regions: Region[];
   isSelf: boolean;
 }) {
   const router = useRouter();
@@ -139,6 +141,26 @@ export function UserRow({
             </span>
           )}
         </div>
+      </td>
+
+      <td className="px-4 py-2.5 align-top">
+        <select
+          className="cmc-input"
+          style={{ height: 24, padding: "0 6px", fontSize: 11, maxWidth: 150 }}
+          value={user.regionId ?? ""}
+          onChange={(e) =>
+            run(updateUserAction(user.id, { regionId: e.target.value || null }))
+          }
+          disabled={busy}
+          title="Assign this user to a region"
+        >
+          <option value="">Unassigned</option>
+          {regions.map((r) => (
+            <option key={r.id} value={r.id}>
+              {r.name}
+            </option>
+          ))}
+        </select>
       </td>
 
       <td className="px-4 py-2.5 align-top">
