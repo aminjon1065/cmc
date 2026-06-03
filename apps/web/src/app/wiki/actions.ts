@@ -177,6 +177,8 @@ export async function createCommentAction(
   pageId: string,
   body: string,
   parentId?: string | null,
+  /** Anchored comment (P4.1c): encoded Yjs relative positions + quoted text. */
+  anchor?: { anchor: string; anchorText: string },
 ): Promise<ActionResult<WikiComment>> {
   if (!body.trim()) return { ok: false, error: "Comment is empty." };
   try {
@@ -187,6 +189,9 @@ export async function createCommentAction(
         body: JSON.stringify({
           body: body.trim(),
           ...(parentId ? { parentId } : {}),
+          ...(anchor
+            ? { anchor: anchor.anchor, anchorText: anchor.anchorText }
+            : {}),
         }),
       },
     );

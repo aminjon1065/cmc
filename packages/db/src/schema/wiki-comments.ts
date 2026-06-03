@@ -14,6 +14,12 @@ import { wikiPages } from "./wiki-pages";
  * Wiki page comments (P3.10b / ADR-0055). Threaded via `parent_id` (a reply
  * points at its parent comment). Tenant-isolated via RLS; soft-deleted so a
  * deleted parent can keep its thread context.
+ *
+ * Anchored comments (P4.1c / ADR-0060): a top-level comment may be pinned to a
+ * range of the collaborative document. `anchor` holds the encoded Yjs relative
+ * positions (`{from,to}` base64, via y-prosemirror) — they auto-rebase as the
+ * text is edited; `anchorText` is the quoted snapshot for display/fallback.
+ * Both null for ordinary page-level comments.
  */
 export const wikiComments = pgTable(
   "wiki_comments",
@@ -33,6 +39,10 @@ export const wikiComments = pgTable(
       onDelete: "set null",
     }),
     body: text("body").notNull(),
+    /** Encoded Yjs relative positions `{from,to}` (anchored comments only). */
+    anchor: text("anchor"),
+    /** Quoted text snapshot at anchor time (display/fallback). */
+    anchorText: text("anchor_text"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

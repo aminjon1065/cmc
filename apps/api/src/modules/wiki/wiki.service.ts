@@ -456,6 +456,8 @@ export class WikiService {
       parentId: r.parentId,
       authorId: r.authorId,
       body: r.body,
+      anchor: r.anchor ?? null,
+      anchorText: r.anchorText ?? null,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
     };
@@ -504,6 +506,8 @@ export class WikiService {
       if (!parent || parent.pageId !== pageId)
         throw new BadRequestException("Parent comment not found on this page.");
     }
+    // Anchored comments are top-level only (anchoring a reply is meaningless).
+    const isAnchored = !input.parentId && !!input.anchor;
     const [row] = await this.tenantDb.run((tx) =>
       tx
         .insert(schema.wikiComments)
@@ -513,10 +517,15 @@ export class WikiService {
           parentId: input.parentId ?? null,
           authorId: ctx.userId,
           body: input.body,
+          anchor: isAnchored ? input.anchor! : null,
+          anchorText: isAnchored ? (input.anchorText ?? null) : null,
         })
         .returning(),
     );
-    await this.auditRec("wiki.comment_created", row!.id, { pageId });
+    await this.auditRec("wiki.comment_created", row!.id, {
+      pageId,
+      anchored: isAnchored,
+    });
     return this.toComment(row!);
   }
 

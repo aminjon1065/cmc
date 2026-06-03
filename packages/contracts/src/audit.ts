@@ -119,3 +119,27 @@ export const AuditSealResponseSchema = z.object({
   chainsTouched: z.number().int(),
 });
 export type AuditSealResponse = z.infer<typeof AuditSealResponseSchema>;
+
+/**
+ * Anchor coverage for the caller's tenant over a recent window (P3.15). One row
+ * per UTC day with sealed audit activity; `gaps` flags past days that have
+ * sealed rows but NO Merkle anchor (evidence of a dropped/missing daily anchor).
+ */
+export const AuditAnchorStatusDaySchema = z.object({
+  date: z.string(),
+  sealedRows: z.number().int().nonnegative(),
+  anchored: z.boolean(),
+  merkleRoot: z.string().nullable(),
+});
+export type AuditAnchorStatusDay = z.infer<typeof AuditAnchorStatusDaySchema>;
+
+export const AuditAnchorStatusResponseSchema = z.object({
+  tenantScope: z.string(),
+  days: z.array(AuditAnchorStatusDaySchema),
+  /** Past UTC days (date strings) with sealed rows but no anchor — should be empty. */
+  gaps: z.array(z.string()),
+  checkedAt: z.string(),
+});
+export type AuditAnchorStatusResponse = z.infer<
+  typeof AuditAnchorStatusResponseSchema
+>;

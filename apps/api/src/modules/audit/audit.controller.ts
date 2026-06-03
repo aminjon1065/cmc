@@ -10,6 +10,7 @@ import {
 } from "@nestjs/common";
 import type {
   AuditAnchorResponse,
+  AuditAnchorStatusResponse,
   AuditChainVerifyResponse,
   AuditExportFlushResponse,
   AuditExportStatusResponse,
@@ -78,6 +79,20 @@ export class AuditController {
       throw new NotFoundException(`No sealed audit rows to anchor for ${day}`);
     }
     return res;
+  }
+
+  /**
+   * Anchor coverage for the caller's tenant over a recent window (P3.15):
+   * per-day sealed/anchored state + `gaps` (past days with sealed rows but no
+   * Merkle anchor — evidence of a missed daily anchor).
+   */
+  @Get("anchor/status")
+  @Authorize("tenant:manage")
+  async anchorStatus(
+    @CurrentUser() user: TenantContext,
+    @Query("days") days?: string,
+  ): Promise<AuditAnchorStatusResponse> {
+    return this.chain.anchorStatus(user.tenantId, days ? Number(days) : 14);
   }
 
   /** SIEM export status: cursor position, pending rows, format, transport. */

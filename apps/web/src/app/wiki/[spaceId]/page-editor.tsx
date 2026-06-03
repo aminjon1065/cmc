@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect } from "react";
-import { useEditor, EditorContent, type JSONContent } from "@tiptap/react";
+import {
+  useEditor,
+  EditorContent,
+  type Editor,
+  type JSONContent,
+} from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import type { ProseMirrorDoc } from "@cmc/contracts";
 
@@ -48,64 +53,72 @@ export function PageEditor({
 
   return (
     <div className="flex flex-col">
-      {editable && (
-        <div
-          className="flex flex-wrap items-center gap-1 px-3 py-2"
-          style={{ borderBottom: "0.5px solid var(--c-line-2)" }}
-        >
-          <TbBtn
-            on={() => editor.chain().focus().toggleBold().run()}
-            active={editor.isActive("bold")}
-            label="B"
-            bold
-          />
-          <TbBtn
-            on={() => editor.chain().focus().toggleItalic().run()}
-            active={editor.isActive("italic")}
-            label="I"
-            italic
-          />
-          <Sep />
-          <TbBtn
-            on={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-            active={editor.isActive("heading", { level: 1 })}
-            label="H1"
-          />
-          <TbBtn
-            on={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-            active={editor.isActive("heading", { level: 2 })}
-            label="H2"
-          />
-          <TbBtn
-            on={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-            active={editor.isActive("heading", { level: 3 })}
-            label="H3"
-          />
-          <Sep />
-          <TbBtn
-            on={() => editor.chain().focus().toggleBulletList().run()}
-            active={editor.isActive("bulletList")}
-            label="• List"
-          />
-          <TbBtn
-            on={() => editor.chain().focus().toggleOrderedList().run()}
-            active={editor.isActive("orderedList")}
-            label="1. List"
-          />
-          <Sep />
-          <TbBtn
-            on={() => editor.chain().focus().toggleBlockquote().run()}
-            active={editor.isActive("blockquote")}
-            label="❝"
-          />
-          <TbBtn
-            on={() => editor.chain().focus().toggleCodeBlock().run()}
-            active={editor.isActive("codeBlock")}
-            label="</>"
-          />
-        </div>
-      )}
+      {editable && <EditorToolbar editor={editor} />}
       <EditorContent editor={editor} />
+    </div>
+  );
+}
+
+/**
+ * The formatting toolbar, shared between the manual {@link PageEditor} and the
+ * collaborative editor (`collab-page-editor.tsx`) so both expose the same marks.
+ */
+export function EditorToolbar({ editor }: { editor: Editor }) {
+  return (
+    <div
+      className="flex flex-wrap items-center gap-1 px-3 py-2"
+      style={{ borderBottom: "0.5px solid var(--c-line-2)" }}
+    >
+      <TbBtn
+        on={() => editor.chain().focus().toggleBold().run()}
+        active={editor.isActive("bold")}
+        label="B"
+        bold
+      />
+      <TbBtn
+        on={() => editor.chain().focus().toggleItalic().run()}
+        active={editor.isActive("italic")}
+        label="I"
+        italic
+      />
+      <Sep />
+      <TbBtn
+        on={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+        active={editor.isActive("heading", { level: 1 })}
+        label="H1"
+      />
+      <TbBtn
+        on={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+        active={editor.isActive("heading", { level: 2 })}
+        label="H2"
+      />
+      <TbBtn
+        on={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+        active={editor.isActive("heading", { level: 3 })}
+        label="H3"
+      />
+      <Sep />
+      <TbBtn
+        on={() => editor.chain().focus().toggleBulletList().run()}
+        active={editor.isActive("bulletList")}
+        label="• List"
+      />
+      <TbBtn
+        on={() => editor.chain().focus().toggleOrderedList().run()}
+        active={editor.isActive("orderedList")}
+        label="1. List"
+      />
+      <Sep />
+      <TbBtn
+        on={() => editor.chain().focus().toggleBlockquote().run()}
+        active={editor.isActive("blockquote")}
+        label="❝"
+      />
+      <TbBtn
+        on={() => editor.chain().focus().toggleCodeBlock().run()}
+        active={editor.isActive("codeBlock")}
+        label="</>"
+      />
     </div>
   );
 }

@@ -157,6 +157,7 @@ const RESPONSE_SCHEMA: Record<string, string> = {
   "get /v1/audit/chain/verify": "AuditChainVerifyResponse",
   "post /v1/audit/chain/seal": "AuditSealResponse",
   "post /v1/audit/chain/anchor": "AuditAnchorResponse",
+  "get /v1/audit/anchor/status": "AuditAnchorStatusResponse",
   "get /v1/audit/export/status": "AuditExportStatusResponse",
   "post /v1/audit/export/flush": "AuditExportFlushResponse",
   "get /v1/audit/projection/status": "AuditProjectionStatusResponse",

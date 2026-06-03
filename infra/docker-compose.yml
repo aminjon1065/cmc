@@ -360,6 +360,70 @@ services:
         echo "seeded secret/cmc/api"
     restart: "no"
 
+  # Video conferencing SFU (P4.2 / ADR-0061). Gated: the API connects only when
+  # LIVEKIT_ENABLED. Keys in livekit.yaml match the API's dev LIVEKIT_API_KEY/
+  # SECRET. DEV ONLY (no TLS); behind Caddy + real TURN in prod.
+  livekit:
+    image: livekit/livekit-server:v1.8
+    container_name: cmc-livekit
+    restart: unless-stopped
+    command: ["--config", "/etc/livekit.yaml"]
+    volumes:
+      - ./livekit/livekit.yaml:/etc/livekit.yaml:ro
+    ports:
+      - "${LIVEKIT_PORT:-7880}:7880"
+      - "${LIVEKIT_TCP_PORT:-7881}:7881"
+      - "50000-50100:50000-50100/udp"
+    healthcheck:
+      test:
+        ["CMD", "wget", "-qO-", "http://127.0.0.1:7880"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+  # TURN/STUN relay for NAT traversal (P4.2 / ADR-0061). DEV ONLY: static
+  # long-term credential; in prod use rotating credentials + TLS.
+  coturn:
+    image: coturn/coturn:4.6
+    container_name: cmc-coturn
+    restart: unless-stopped
+    command:
+      - "-n"
+      - "--lt-cred-mech"
+      - "--realm=cmc"
+      - "--user=cmc:cmc_turn_dev"
+      - "--no-tls"
+      - "--no-dtls"
+      - "--min-port=50200"
+      - "--max-port=50250"
+    ports:
+      - "${COTURN_PORT:-3478}:3478"
+      - "${COTURN_PORT:-3478}:3478/udp"
+      - "50200-50250:50200-50250/udp"
+
+  # Recording egress (P4.2c / ADR-0061). Composites a room (headless Chrome) and
+  # uploads the MP4 to the S3 target the API supplies per request. Heavy →
+  # **opt-in** via `--profile egress` (not started by the default infra:up).
+  livekit-egress:
+    image: livekit/egress:v1.8
+    container_name: cmc-livekit-egress
+    profiles: ["egress"]
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      livekit:
+        condition: service_started
+    environment:
+      EGRESS_CONFIG_FILE: /etc/egress.yaml
+    volumes:
+      - ./livekit/egress.yaml:/etc/egress.yaml:ro
+    # Headless Chrome needs a larger shm + SYS_ADMIN for the sandbox.
+    shm_size: "1gb"
+    cap_add:
+      - SYS_ADMIN
+
 volumes:
   nats_data:
   clickhouse_data:

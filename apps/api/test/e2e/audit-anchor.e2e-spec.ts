@@ -178,6 +178,63 @@ describe("Audit Merkle anchoring", () => {
     expect(puts).toHaveLength(0);
   });
 
+  it("anchor status surfaces a past sealed-but-unanchored day as a gap (P3.15)", async () => {
+    // A row dated yesterday → its own (tenant, day) chain.
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    await sql.begin(async (tx) => {
+      await tx`select set_config('app.bypass_rls', 'on', true)`;
+      await tx`INSERT INTO audit_log (tenant_id, actor_type, action, resource_type, outcome, occurred_at)
+               VALUES (${tenant.id}, 'system', 'past.event', 'test', 'success', now() - make_interval(days => 1))`;
+    });
+    await chain.sealPendingChains();
+
+    const before = await chain.anchorStatus(tenant.id, 7);
+    const ydByDate = before.days.find((d) => d.date === yesterday);
+    expect(ydByDate?.sealedRows).toBe(1);
+    expect(ydByDate?.anchored).toBe(false);
+    expect(before.gaps).toContain(yesterday); // dropped-day evidence
+
+    // Anchoring it clears the gap.
+    await chain.anchorChain(tenant.id, yesterday);
+    const after = await chain.anchorStatus(tenant.id, 7);
+    expect(after.gaps).not.toContain(yesterday);
+    expect(after.days.find((d) => d.date === yesterday)?.anchored).toBe(true);
+  });
+
+  it("concurrent anchoring writes the WORM object exactly once (HA advisory lock, P3.15)", async () => {
+    await seed(tenant.id, 3);
+    await chain.sealPendingChains();
+
+    const [a, b] = await Promise.all([
+      chain.anchorChain(tenant.id, today()),
+      chain.anchorChain(tenant.id, today()),
+    ]);
+    // Exactly one created it; the other observed the existing anchor.
+    expect([a!.alreadyAnchored, b!.alreadyAnchored].sort()).toEqual([false, true]);
+    expect(a!.merkleRoot).toBe(b!.merkleRoot);
+    expect(puts).toHaveLength(1); // single WORM write despite the race
+
+    const rows = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM audit_chain_anchor WHERE tenant_scope = ${tenant.id}`;
+    expect(rows[0]!.n).toBe(1);
+  });
+
+  it("anchor/status endpoint: 403 non-admin, 200 admin (P3.15)", async () => {
+    await seed(tenant.id, 2);
+    await chain.sealPendingChains();
+    const m = await loginAs(app, member);
+    await authed(app, m.accessToken)
+      .get("/v1/audit/anchor/status?days=7")
+      .expect(403);
+    const a = await loginAs(app, admin);
+    const res = await authed(app, a.accessToken)
+      .get("/v1/audit/anchor/status?days=7")
+      .expect(200);
+    expect(res.body.tenantScope).toBe(tenant.id);
+    expect(Array.isArray(res.body.days)).toBe(true);
+    expect(Array.isArray(res.body.gaps)).toBe(true);
+  });
+
   it("anchor endpoint: 401 anon, 403 non-admin, 200 admin", async () => {
     await seed(tenant.id, 2);
 

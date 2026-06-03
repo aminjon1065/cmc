@@ -30,6 +30,8 @@ import { ApiKeysModule } from "./modules/api-keys/api-keys.module";
 import { WikiModule } from "./modules/wiki/wiki.module";
 import { ImportsModule } from "./modules/imports/imports.module";
 import { ChatModule } from "./modules/chat/chat.module";
+import { CollabModule } from "./modules/collab/collab.module";
+import { VideoModule } from "./modules/video/video.module";
 import { NotificationsModule } from "./modules/notifications/notifications.module";
 import { IncidentNotificationsModule } from "./modules/incident-notifications/incident-notifications.module";
 import { OpenApiModule } from "./modules/openapi/openapi.module";
@@ -122,6 +124,8 @@ import { loadConfig } from "./config/configuration";
     WikiModule,
     ImportsModule,
     ChatModule,
+    CollabModule,
+    VideoModule,
     NotificationsModule,
     IncidentNotificationsModule,
     OpenApiModule,

@@ -91,6 +91,40 @@ describe("Wiki comments (P3.10b)", () => {
     ]);
   });
 
+  it("stores an anchored comment's anchor + snapshot; ignores anchors on replies (P4.1c)", async () => {
+    const anchor = JSON.stringify({ from: "AQHb", to: "AQHc" }); // opaque to the API
+    const anchored = await authed(app, opAToken)
+      .post(`/v1/wiki/pages/${pageId}/comments`)
+      .send({ body: "pinned", anchor, anchorText: "the quoted text" })
+      .expect(201);
+    expect(anchored.body.comment.anchor).toBe(anchor);
+    expect(anchored.body.comment.anchorText).toBe("the quoted text");
+
+    // An ordinary comment has null anchor fields.
+    const plain = await authed(app, opAToken)
+      .post(`/v1/wiki/pages/${pageId}/comments`)
+      .send({ body: "plain" })
+      .expect(201);
+    expect(plain.body.comment.anchor).toBeNull();
+    expect(plain.body.comment.anchorText).toBeNull();
+
+    // Anchoring a reply is meaningless → the anchor is dropped.
+    const reply = await authed(app, opAToken)
+      .post(`/v1/wiki/pages/${pageId}/comments`)
+      .send({ body: "reply", parentId: anchored.body.comment.id, anchor })
+      .expect(201);
+    expect(reply.body.comment.anchor).toBeNull();
+
+    // The anchor round-trips through the list.
+    const list = await authed(app, adminToken)
+      .get(`/v1/wiki/pages/${pageId}/comments`)
+      .expect(200);
+    const got = list.body.comments.find(
+      (c: { id: string }) => c.id === anchored.body.comment.id,
+    );
+    expect(got.anchor).toBe(anchor);
+  });
+
   it("rejects a reply whose parent is on another page (400)", async () => {
     const space = (
       await authed(app, adminToken).post("/v1/wiki/spaces").send({ name: "S2" }).expect(201)

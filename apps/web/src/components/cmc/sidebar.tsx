@@ -82,7 +82,7 @@ const NAV: NavGroup[] = [
     label: "Communication",
     items: [
       { id: "chat", label: "Chat", icon: MessageSquare, href: "/chat" },
-      { id: "video", label: "Video", icon: Video, disabled: true },
+      { id: "video", label: "Video", icon: Video, href: "/video" },
       { id: "notif", label: "Notifications", icon: Inbox, disabled: true },
     ],
   },
@@ -117,6 +117,7 @@ export async function Sidebar({
   const access = await getMyAccess();
   const canAdmin = isAdmin(access);
   const canIncidents = hasPermission(access, "incident:read");
+  const canVideo = hasPermission(access, "video:read");
 
   const initials = (user?.name ?? "")
     .split(/\s+/)
@@ -184,9 +185,11 @@ export async function Sidebar({
                   ? !canAdmin
                   : item.id === "cases"
                     ? !canIncidents
-                    : item.id === "notif"
-                      ? false
-                      : item.disabled;
+                    : item.id === "video"
+                      ? !canVideo
+                      : item.id === "notif"
+                        ? false
+                        : item.disabled;
               const content = (
                 <span
                   className="relative flex items-center gap-2.5 rounded-md px-2 py-1 text-[12px]"

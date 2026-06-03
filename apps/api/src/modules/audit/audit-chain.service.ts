@@ -22,6 +22,7 @@ import { schema } from "@cmc/db";
 import {
   AUDIT_SYSTEM_SCOPE,
   type AuditAnchorResponse,
+  type AuditAnchorStatusResponse,
   type AuditChainVerifyResponse,
   type AuditSealResponse,
 } from "@cmc/contracts";
@@ -34,6 +35,13 @@ type AnchorRow = typeof schema.auditChainAnchor.$inferSelect;
 
 /** Advisory-lock key so only one sealer runs at a time cluster-wide. */
 const SEAL_LOCK_KEY = 40_211_100;
+/**
+ * Advisory-lock key serialising the anchorer cluster-wide (P3.15). The daily
+ * anchor cron fires on every API instance; without this two instances could
+ * both write the WORM object + race the unique `(scope, day)` insert. Held only
+ * while a single chain is anchored — anchoring is low-volume (daily).
+ */
+const ANCHOR_LOCK_KEY = 40_211_600;
 const DAY_MS = 86_400_000;
 
 function sha256hex(input: string): string {
@@ -85,6 +93,7 @@ export class AuditChainService implements OnModuleInit, OnModuleDestroy {
   private readonly anchorBucket: string;
   private readonly anchorLockMode: "GOVERNANCE" | "COMPLIANCE";
   private readonly anchorRetentionDays: number;
+  private readonly isProd: boolean;
   private timer: NodeJS.Timeout | null = null;
 
   constructor(
@@ -101,9 +110,19 @@ export class AuditChainService implements OnModuleInit, OnModuleDestroy {
     this.anchorRetentionDays = config.get("AUDIT_ANCHOR_RETENTION_DAYS", {
       infer: true,
     });
+    this.isProd = config.get("NODE_ENV", { infer: true }) === "production";
   }
 
   onModuleInit(): void {
+    // Compliance posture guard (P3.15): GOVERNANCE-mode anchors can be deleted
+    // by a privileged user (BypassGovernanceRetention) → not true WORM. In
+    // production this defeats the tamper-proof guarantee, so flag it loudly.
+    if (this.isProd && this.anchorEnabled && this.anchorLockMode !== "COMPLIANCE") {
+      this.logger.error(
+        "AUDIT_ANCHOR_LOCK_MODE=GOVERNANCE in production — audit Merkle anchors are NOT immutable " +
+          "(deletable via BypassGovernanceRetention). Set AUDIT_ANCHOR_LOCK_MODE=COMPLIANCE for WORM anchoring.",
+      );
+    }
     if (!this.enabled || this.intervalSec <= 0 || this.isTest) return;
     this.timer = setInterval(() => {
       void this.sealPendingChains().catch((err) =>
@@ -305,6 +324,12 @@ export class AuditChainService implements OnModuleInit, OnModuleDestroy {
     const dayEnd = new Date(dayStart.getTime() + DAY_MS);
 
     return this.tenantDb.runPrivileged(async (tx) => {
+      // Serialise anchoring cluster-wide (P3.15): the daily cron runs on every
+      // instance, so hold the lock across the existing-check → WORM write →
+      // insert. A loser blocks, then sees `existing` and returns idempotently —
+      // no duplicate object write, no unique-violation race.
+      await tx.execute(sql`select pg_advisory_xact_lock(${ANCHOR_LOCK_KEY})`);
+
       const [existing] = await tx
         .select()
         .from(schema.auditChainAnchor)
@@ -422,6 +447,70 @@ export class AuditChainService implements OnModuleInit, OnModuleDestroy {
       if (res && !res.alreadyAnchored) anchored++;
     }
     return { anchored };
+  }
+
+  /**
+   * Anchor coverage for a scope over the last `days` UTC days (P3.15). Per day:
+   * sealed-row count + whether a Merkle anchor exists. `gaps` are PAST days with
+   * sealed rows but no anchor — direct evidence a daily anchor was missed/dropped
+   * (the compliance signal an operator/auditor monitors).
+   */
+  async anchorStatus(
+    tenantId: string | null,
+    days: number,
+  ): Promise<AuditAnchorStatusResponse> {
+    const scope = this.scopeOf(tenantId);
+    const n = Math.min(Math.max(days, 1), 90);
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const since = new Date(`${todayStr}T00:00:00.000Z`);
+    since.setUTCDate(since.getUTCDate() - (n - 1));
+    const sinceStr = since.toISOString().slice(0, 10);
+
+    return this.tenantDb.runPrivileged(async (tx) => {
+      const sealedRaw = (await tx.execute(sql`
+        SELECT to_char((occurred_at AT TIME ZONE 'UTC')::date, 'YYYY-MM-DD') AS day,
+               count(*) FILTER (WHERE this_hash IS NOT NULL)::int AS sealed
+          FROM audit_log
+         WHERE ${tenantId === null ? sql`tenant_id IS NULL` : sql`tenant_id = ${tenantId}`}
+           AND occurred_at >= ${since.toISOString()}::timestamptz
+         GROUP BY day
+      `)) as unknown as Array<{ day: string; sealed: number }>;
+
+      const anchors = await tx
+        .select()
+        .from(schema.auditChainAnchor)
+        .where(
+          and(
+            eq(schema.auditChainAnchor.tenantScope, scope),
+            gte(schema.auditChainAnchor.chainDate, sinceStr),
+          ),
+        );
+
+      const sealedByDay = new Map(sealedRaw.map((r) => [r.day, r.sealed]));
+      const rootByDay = new Map(anchors.map((a) => [a.chainDate, a.merkleRoot]));
+      const allDays = new Set<string>([
+        ...sealedByDay.keys(),
+        ...rootByDay.keys(),
+      ]);
+      const daysOut = [...allDays]
+        .sort()
+        .map((date) => ({
+          date,
+          sealedRows: sealedByDay.get(date) ?? 0,
+          anchored: rootByDay.has(date),
+          merkleRoot: rootByDay.get(date) ?? null,
+        }));
+      const gaps = daysOut
+        .filter((d) => d.date < todayStr && d.sealedRows > 0 && !d.anchored)
+        .map((d) => d.date);
+
+      return {
+        tenantScope: scope,
+        days: daysOut,
+        gaps,
+        checkedAt: new Date().toISOString(),
+      };
+    });
   }
 
   // ---------- verification ----------

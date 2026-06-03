@@ -20,6 +20,7 @@ import {
   savePageAction,
 } from "../actions";
 import { PageEditor } from "./page-editor";
+import { CollabPageEditor, type CollabStatus } from "./collab-page-editor";
 
 const EMPTY_DOC: ProseMirrorDoc = { type: "doc", content: [] };
 
@@ -47,6 +48,12 @@ export function WikiWorkspace({
   const [page, setPage] = useState<WikiPage | null>(null);
   const [title, setTitle] = useState("");
   const [editing, setEditing] = useState(false);
+  // Collaboration state for the page being edited. `null` = not attempting;
+  // "failed" = fall back to the manual save-based editor.
+  const [collabStatus, setCollabStatus] = useState<CollabStatus | null>(null);
+  const [peers, setPeers] = useState(0);
+  // The anchored comment a highlight click jumped to (flashed in the panel).
+  const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
   const [loadKey, setLoadKey] = useState(0);
   const [versions, setVersions] = useState<WikiPageVersion[]>([]);
   const [comments, setComments] = useState<WikiComment[]>([]);
@@ -71,6 +78,7 @@ export function WikiWorkspace({
       setBusy(true);
       setMsg(null);
       setEditing(false);
+      setCollabStatus(null);
       const res = await getPageAction(id);
       setBusy(false);
       if (!res.ok) {
@@ -107,7 +115,7 @@ export function WikiWorkspace({
     }
     setPages(res.data.pages);
     await loadPage(res.data.id);
-    setEditing(true);
+    startEdit();
   }
 
   async function save() {
@@ -177,6 +185,76 @@ export function WikiWorkspace({
     setLoadKey((k) => k + 1);
     setMsg({ kind: "ok", text: `Restored → v${res.data.currentVersionNo}.` });
     void refreshSide(res.data.id);
+  }
+
+  // Enter edit mode and attempt live collaboration (falls back to manual save
+  // if the feature is off or the WS can't be reached — see CollabPageEditor).
+  function startEdit() {
+    setMsg(null);
+    setPeers(0);
+    setCollabStatus("connecting");
+    setEditing(true);
+  }
+
+  // Manual-fallback cancel: discard local edits and return to view.
+  function cancelEdit() {
+    if (!page) return;
+    setEditing(false);
+    setCollabStatus(null);
+    setTitle(page.title);
+    contentRef.current = page.content;
+    setLoadKey((k) => k + 1);
+  }
+
+  // Exit collaborative editing. The body is already persisted server-side by
+  // Hocuspocus; only a title rename needs an explicit (title-only) write that
+  // leaves the collaborative content untouched.
+  async function doneEditing() {
+    if (!selectedId || !page) return;
+    const newTitle = title.trim() || "Untitled";
+    if (newTitle !== page.title) {
+      setBusy(true);
+      const res = await savePageAction(selectedId, { title: newTitle });
+      setBusy(false);
+      if (!res.ok) {
+        setMsg({ kind: "err", text: res.error });
+        return;
+      }
+    }
+    setCollabStatus(null);
+    await loadPage(selectedId);
+  }
+
+  // Live collaboration is on when editing and the connection hasn't failed.
+  const collabMode =
+    editing && collabStatus !== null && collabStatus !== "failed";
+
+  // Anchored comments (have a Yjs position) → rendered as editor highlights.
+  const anchoredComments = useMemo(
+    () =>
+      comments
+        .filter((c) => c.anchor)
+        .map((c) => ({ id: c.id, anchor: c.anchor! })),
+    [comments],
+  );
+
+  // Create an anchored comment from a selection in the collab editor.
+  async function createAnchored(
+    anchor: string,
+    anchorText: string,
+    body: string,
+  ) {
+    if (!selectedId) return;
+    const res = await createCommentAction(selectedId, body, null, {
+      anchor,
+      anchorText,
+    });
+    if (!res.ok) {
+      setMsg({ kind: "err", text: res.error });
+      return;
+    }
+    setTab("comments");
+    await refreshSide(selectedId);
   }
 
   return (
@@ -328,32 +406,40 @@ export function WikiWorkspace({
               >
                 v{page.currentVersionNo}
               </span>
+              {editing && collabMode && (
+                <CollabBadge status={collabStatus} peers={peers} />
+              )}
               {canWrite &&
                 (editing ? (
-                  <>
+                  collabMode ? (
                     <button
                       className="cmc-btn"
-                      onClick={save}
+                      onClick={doneEditing}
                       disabled={busy}
                     >
-                      {busy ? "Saving…" : "Save"}
+                      {busy ? "…" : "Done"}
                     </button>
-                    <button
-                      className="cmc-btn"
-                      disabled={busy}
-                      onClick={() => {
-                        setEditing(false);
-                        setTitle(page.title);
-                        contentRef.current = page.content;
-                        setLoadKey((k) => k + 1);
-                      }}
-                    >
-                      Cancel
-                    </button>
-                  </>
+                  ) : (
+                    <>
+                      <button
+                        className="cmc-btn"
+                        onClick={save}
+                        disabled={busy}
+                      >
+                        {busy ? "Saving…" : "Save"}
+                      </button>
+                      <button
+                        className="cmc-btn"
+                        disabled={busy}
+                        onClick={cancelEdit}
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  )
                 ) : (
                   <>
-                    <button className="cmc-btn" onClick={() => setEditing(true)}>
+                    <button className="cmc-btn" onClick={startEdit}>
                       Edit
                     </button>
                     <button
@@ -368,14 +454,29 @@ export function WikiWorkspace({
                 ))}
             </div>
             <div className="flex-1 overflow-auto">
-              <PageEditor
-                key={loadKey}
-                content={contentRef.current}
-                editable={editing}
-                onChange={(doc) => {
-                  contentRef.current = doc;
-                }}
-              />
+              {collabMode ? (
+                <CollabPageEditor
+                  key={`collab-${selectedId}-${loadKey}`}
+                  pageId={selectedId}
+                  anchoredComments={anchoredComments}
+                  onStatusChange={setCollabStatus}
+                  onPeers={setPeers}
+                  onCreateAnchored={createAnchored}
+                  onActivateComment={(id) => {
+                    setTab("comments");
+                    setActiveCommentId(id);
+                  }}
+                />
+              ) : (
+                <PageEditor
+                  key={loadKey}
+                  content={contentRef.current}
+                  editable={editing}
+                  onChange={(doc) => {
+                    contentRef.current = doc;
+                  }}
+                />
+              )}
             </div>
           </div>
         )}
@@ -412,6 +513,7 @@ export function WikiWorkspace({
               canWrite={canWrite}
               canManage={canManage}
               currentUserId={currentUserId}
+              activeCommentId={activeCommentId}
               onChanged={() => refreshSide(selectedId)}
               setMsg={setMsg}
             />
@@ -420,6 +522,35 @@ export function WikiWorkspace({
       </div>
     </div>
   );
+}
+
+function CollabBadge({
+  status,
+  peers,
+}: {
+  status: CollabStatus | null;
+  peers: number;
+}) {
+  if (status === "connecting") {
+    return (
+      <span className="text-[10px]" style={{ color: "var(--c-fg-4)" }}>
+        Connecting…
+      </span>
+    );
+  }
+  if (status === "live") {
+    return (
+      <span
+        className="flex items-center gap-1 text-[10px]"
+        style={{ color: "var(--c-accent)" }}
+        title="Live collaboration — changes save automatically"
+      >
+        <span style={{ fontSize: 8 }}>●</span>
+        Live{peers > 1 ? ` · ${peers} editing` : ""}
+      </span>
+    );
+  }
+  return null;
 }
 
 function TabBtn({
@@ -559,6 +690,7 @@ function CommentPanel({
   canWrite,
   canManage,
   currentUserId,
+  activeCommentId,
   onChanged,
   setMsg,
 }: {
@@ -567,6 +699,7 @@ function CommentPanel({
   canWrite: boolean;
   canManage: boolean;
   currentUserId: string | null;
+  activeCommentId: string | null;
   onChanged: () => void;
   setMsg: (m: Msg) => void;
 }) {
@@ -632,12 +765,27 @@ function CommentPanel({
 
   function Item({ c, depth }: { c: WikiComment; depth: number }) {
     const kids = childrenOf.get(c.id) ?? [];
+    const isActive = c.id === activeCommentId;
     return (
       <div style={{ marginLeft: depth * 12 }}>
         <div
           className="rounded-md px-2 py-1.5"
-          style={{ background: "var(--c-bg-2)" }}
+          style={{
+            background: isActive
+              ? "color-mix(in srgb, var(--c-accent) 14%, transparent)"
+              : "var(--c-bg-2)",
+            border: isActive ? "0.5px solid var(--c-accent)" : undefined,
+          }}
         >
+          {c.anchor && c.anchorText && (
+            <div
+              className="mb-1 truncate border-l-2 pl-1.5 text-[10px] italic"
+              style={{ borderColor: "var(--c-accent)", color: "var(--c-fg-3)" }}
+              title={c.anchorText}
+            >
+              📌 “{c.anchorText}”
+            </div>
+          )}
           <div className="flex items-center gap-2">
             <span className="text-[10.5px] font-medium" style={{ color: "var(--c-fg-2)" }}>
               {who(c)}

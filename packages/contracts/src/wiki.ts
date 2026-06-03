@@ -118,6 +118,10 @@ export const WikiCommentSchema = z.object({
   parentId: z.string().uuid().nullable(),
   authorId: z.string().uuid().nullable(),
   body: z.string(),
+  /** Encoded Yjs relative positions `{from,to}` for an anchored comment. */
+  anchor: z.string().nullable(),
+  /** Quoted text snapshot at anchor time (anchored comments only). */
+  anchorText: z.string().nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -127,6 +131,13 @@ export const CreateWikiCommentSchema = z.object({
   body: z.string().min(1).max(10_000),
   /** Parent comment id for a threaded reply; omit for a top-level comment. */
   parentId: z.string().uuid().nullable().optional(),
+  /**
+   * Anchored comment (P4.1c): encoded Yjs relative positions `{from,to}` (top-
+   * level only — anchoring a reply is not supported). `anchorText` is the quoted
+   * snapshot. Both omitted for an ordinary page-level comment.
+   */
+  anchor: z.string().max(8_000).optional(),
+  anchorText: z.string().max(2_000).optional(),
 });
 export type CreateWikiCommentRequest = z.infer<typeof CreateWikiCommentSchema>;
 

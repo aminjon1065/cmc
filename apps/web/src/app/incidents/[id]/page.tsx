@@ -13,6 +13,7 @@ import { getMyAccess, hasPermission } from "@/lib/access";
 import { authedApiFetch, ApiError } from "@/lib/server-api";
 import { SeverityBadge, StatusBadge } from "@/components/cmc/incident-badges";
 import { IncidentActions } from "./incident-actions";
+import { IncidentVideo } from "./incident-video";
 
 export const metadata: Metadata = { title: "Incident" };
 
@@ -58,6 +59,8 @@ export default async function IncidentDetailPage({
   const canResolve = hasPermission(access, "incident:resolve");
   const canAssign = hasPermission(access, "incident:assign");
   const canDelete = hasPermission(access, "incident:delete");
+  const canVideo = hasPermission(access, "video:read");
+  const canVideoWrite = hasPermission(access, "video:write");
   const assignees = await fetchAssignees(canAssign);
 
   const Row = ({ k, v }: { k: string; v: React.ReactNode }) => (
@@ -157,6 +160,22 @@ export default async function IncidentDetailPage({
             />
           </div>
         </div>
+
+        {/* Video (P4.2c) */}
+        {canVideo && (
+          <div className="cmc-card lg:col-span-3">
+            <div className="cmc-card-header">
+              <span className="cmc-label">Video</span>
+            </div>
+            <div className="p-4">
+              <IncidentVideo
+                incidentId={detail.id}
+                summary={detail.summary}
+                canStart={canVideoWrite}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </AppShell>
   );

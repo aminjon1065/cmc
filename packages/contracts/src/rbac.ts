@@ -171,6 +171,18 @@ export const PERMISSION_CATALOG = [
     action: "manage",
     description: "Create + delete channels; moderate others' messages",
   },
+  // Video conferencing (P4.2).
+  { domain: "video", action: "read", description: "View video rooms" },
+  {
+    domain: "video",
+    action: "write",
+    description: "Create video rooms and join (mint a room token)",
+  },
+  {
+    domain: "video",
+    action: "manage",
+    description: "Close / delete any video room in the tenant",
+  },
 ] as const satisfies readonly PermissionDef[];
 
 /** Helper: the `${domain}:${action}` string for a catalog entry. */
@@ -231,6 +243,8 @@ export const SYSTEM_ROLES: readonly SystemRoleDef[] = [
       "import:read",
       "chat:read",
       "chat:write",
+      "video:read",
+      "video:write",
     ],
   },
   {
@@ -248,6 +262,7 @@ export const SYSTEM_ROLES: readonly SystemRoleDef[] = [
       "folder:read",
       "workflow:read",
       "chat:read",
+      "video:read",
     ],
   },
 ] as const;

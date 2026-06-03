@@ -29,3 +29,5 @@ export * from "./api-key";
 export * from "./wiki";
 export * from "./import";
 export * from "./chat";
+export * from "./collab";
+export * from "./video";

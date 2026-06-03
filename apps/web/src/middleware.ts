@@ -27,7 +27,8 @@ export default auth((req) => {
     nextUrl.pathname.startsWith("/workflows") ||
     nextUrl.pathname.startsWith("/wiki") ||
     nextUrl.pathname.startsWith("/imports") ||
-    nextUrl.pathname.startsWith("/chat");
+    nextUrl.pathname.startsWith("/chat") ||
+    nextUrl.pathname.startsWith("/video");
 
   if (isProtected && !isAuthed) {
     const loginUrl = new URL("/login", nextUrl);
