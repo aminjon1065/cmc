@@ -6,6 +6,7 @@ import {
   CreateMultipartUploadCommand,
   DeleteObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   GetObjectCommand,
   UploadPartCommand,
@@ -214,6 +215,30 @@ export class StorageService {
     await this.internal.send(
       new DeleteObjectCommand({ Bucket: input.bucket, Key: input.key }),
     );
+  }
+
+  /**
+   * List objects under a prefix (server-side, internal client). Used by the
+   * single-site DR backup-freshness check (P5.DR). One page (MaxKeys); enough
+   * to find the newest backup by `lastModified`.
+   */
+  async listObjects(input: {
+    bucket: string;
+    prefix?: string;
+    maxKeys?: number;
+  }): Promise<Array<{ key: string; size: number; lastModified?: Date }>> {
+    const res = await this.internal.send(
+      new ListObjectsV2Command({
+        Bucket: input.bucket,
+        Prefix: input.prefix,
+        MaxKeys: input.maxKeys ?? 1000,
+      }),
+    );
+    return (res.Contents ?? []).map((o) => ({
+      key: o.Key ?? "",
+      size: o.Size ?? 0,
+      lastModified: o.LastModified,
+    }));
   }
 
   /** Read an object's bytes (server-side) — used by the preview worker (P2.13). */

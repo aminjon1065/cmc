@@ -53,6 +53,8 @@ export async function truncateAll(
       consumed_events,
       projection_cursors,
       sessions,
+      document_embeddings,
+      document_text,
       document_versions,
       documents,
       folders,

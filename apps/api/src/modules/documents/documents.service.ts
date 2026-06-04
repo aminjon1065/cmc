@@ -27,9 +27,11 @@ import { TenantContextService } from "../../common/tenant-context/tenant-context
 import { AuditService } from "../audit/audit.service";
 import { StorageService } from "../storage/storage.service";
 import { PreviewService } from "../previews/preview.service";
+import { DocumentExtractionService } from "./document-extraction.service";
 import { FoldersService } from "../folders/folders.service";
 import { FolderAccessService } from "../folders/folder-access.service";
 import { SEARCH_INDEX, type SearchIndex } from "../search/search-index";
+import { VectorIndexService } from "../vector/vector-index.service";
 
 export type ListDocumentsParams = {
   q?: string;
@@ -57,36 +59,56 @@ export class DocumentsService {
     private readonly folders: FoldersService,
     private readonly folderAccess: FolderAccessService,
     @Inject(SEARCH_INDEX) private readonly searchIndex: SearchIndex,
+    private readonly vector: VectorIndexService,
+    private readonly extraction: DocumentExtractionService,
     private readonly config: ConfigService<AppConfig, true>,
   ) {}
 
   /** Best-effort search index upsert; never throws (search is non-critical). */
   private async indexDoc(doc: DocRow): Promise<void> {
-    if (!this.searchIndex.active) return;
+    if (this.searchIndex.active) {
+      try {
+        await this.searchIndex.indexDocument({
+          id: doc.id,
+          tenantId: doc.tenantId,
+          name: doc.name,
+          description: doc.description,
+          mimeType: doc.mimeType,
+          folderId: doc.folderId,
+          status: doc.status,
+          createdAt: doc.createdAt.toISOString(),
+          updatedAt: doc.updatedAt.toISOString(),
+        });
+      } catch (err) {
+        this.logger.warn(`index failed for ${doc.id}: ${msg(err)}`);
+      }
+    }
+    // P5.2: best-effort embedding index (no-op when vector/LLM is off).
     try {
-      await this.searchIndex.indexDocument({
+      await this.vector.indexDocument({
         id: doc.id,
         tenantId: doc.tenantId,
         name: doc.name,
         description: doc.description,
-        mimeType: doc.mimeType,
-        folderId: doc.folderId,
-        status: doc.status,
-        createdAt: doc.createdAt.toISOString(),
-        updatedAt: doc.updatedAt.toISOString(),
       });
     } catch (err) {
-      this.logger.warn(`index failed for ${doc.id}: ${msg(err)}`);
+      this.logger.warn(`vector index failed for ${doc.id}: ${msg(err)}`);
     }
   }
 
   /** Best-effort search index removal; never throws. */
   private async unindexDoc(tenantId: string, id: string): Promise<void> {
-    if (!this.searchIndex.active) return;
+    if (this.searchIndex.active) {
+      try {
+        await this.searchIndex.deleteDocument(tenantId, id);
+      } catch (err) {
+        this.logger.warn(`unindex failed for ${id}: ${msg(err)}`);
+      }
+    }
     try {
-      await this.searchIndex.deleteDocument(tenantId, id);
+      await this.vector.removeDocument(id);
     } catch (err) {
-      this.logger.warn(`unindex failed for ${id}: ${msg(err)}`);
+      this.logger.warn(`vector unindex failed for ${id}: ${msg(err)}`);
     }
   }
 
@@ -256,6 +278,7 @@ export class DocumentsService {
     await this.recordInitialVersion(updated!);
     await this.indexDoc(updated!);
     await this.previews.enqueue(ctx.tenantId, documentId);
+    await this.extraction.enqueue(ctx.tenantId, documentId); // P5.6b — extract text
     return updated!;
   }
 
@@ -427,6 +450,7 @@ export class DocumentsService {
     await this.recordInitialVersion(updated!); // v1 (P3.4)
     await this.indexDoc(updated!); // P3.6
     await this.previews.enqueue(ctx.tenantId, documentId);
+    await this.extraction.enqueue(ctx.tenantId, documentId); // P5.6b — extract text
     return updated!;
   }
 
@@ -762,6 +786,7 @@ export class DocumentsService {
       metadata: { versionNo: pending.versionNo },
     });
     await this.previews.enqueue(ctx.tenantId, documentId);
+    await this.extraction.enqueue(ctx.tenantId, documentId); // P5.6b — extract text
     const current = await this.getByIdOrFail(documentId);
     await this.indexDoc(current); // P3.6 — bytes/mime changed
     return current;

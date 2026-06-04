@@ -288,6 +288,20 @@
       "when": 1780482868795,
       "tag": "0040_shiny_rocket_raccoon",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1780500948259,
+      "tag": "0041_loving_talos",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1780542056061,
+      "tag": "0042_uneven_next_avengers",
+      "breakpoints": true
     }
   ]
 }

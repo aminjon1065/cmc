@@ -184,12 +184,64 @@ const EnvSchema = z.object({
     .transform((v) => v.toLowerCase() === "true"),
   ANALYTICS_ANOMALY_INTERVAL_SEC: z.coerce.number().int().min(0).default(300),
 
+  // P5.1: self-hosted LLM gateway. Gated by LLM_ENABLED → a real OpenAI-compatible
+  // client (vLLM / Ollama / llama.cpp at LLM_BASE_URL) vs a noop. Per-tenant
+  // rate-limit; metadata-only audit unless LLM_LOG_PROMPTS (raw prompts/responses).
+  LLM_ENABLED: z
+    .string()
+    .default("false")
+    .transform((v) => v.toLowerCase() === "true"),
+  LLM_BASE_URL: z.string().url().default("http://localhost:8000"),
+  LLM_API_KEY: emptyAsUndefined(z.string().optional()),
+  LLM_MODEL: z.string().default("llama-3.1-8b-instruct"),
+  LLM_RATE_LIMIT_PER_MIN: z.coerce.number().int().positive().default(60),
+  LLM_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
+  LLM_LOG_PROMPTS: z
+    .string()
+    .default("false")
+    .transform((v) => v.toLowerCase() === "true"),
+  /** Embeddings model on the same OpenAI-compatible gateway (P5.2). */
+  LLM_EMBED_MODEL: z.string().default("bge-m3"),
+
+  // P5.2: vector pipeline. Effective gate is VECTOR_ENABLED AND the LLM provider
+  // being active → documents are embedded + stored (Postgres) for semantic
+  // search (P5.3). Default on, so enabling the LLM enables embedding.
+  VECTOR_ENABLED: z
+    .string()
+    .default("true")
+    .transform((v) => v.toLowerCase() === "true"),
+
+  // P5.4: RAG. Reuses the LLM gateway (P5.1) + hybrid retrieval (P5.3); no
+  // separate enable flag — RAG is available whenever the LLM provider is active.
+  // TOP_K sources are retrieved (permission-filtered); their text is assembled
+  // into a context capped at CONTEXT_CHAR_BUDGET characters.
+  RAG_TOP_K: z.coerce.number().int().positive().max(20).default(5),
+  RAG_CONTEXT_CHAR_BUDGET: z.coerce.number().int().positive().default(6000),
+
+  // P5.6: document intelligence (text extraction / OCR). Gated seam — when off
+  // (dev/test/CI default), the extractor is a no-op. The real extractor (PDF
+  // text-layer + Tesseract OCR for scans) is a CPU/sovereign live boundary: its
+  // libs (pdf-parse, tesseract.js) are installed on the serving host only.
+  // OCR_LANG is Tesseract's language pack ("eng+rus" for the TJ КЧС by default).
+  DOC_EXTRACT_ENABLED: z
+    .string()
+    .default("false")
+    .transform((v) => v.toLowerCase() === "true"),
+  DOC_EXTRACT_MAX_CHARS: z.coerce.number().int().positive().default(200_000),
+  DOC_EXTRACT_OCR_LANG: z.string().default("eng+rus"),
+
   S3_ENDPOINT: z.string().url(),
   S3_PUBLIC_ENDPOINT: z.string().url().optional(),
   S3_REGION: z.string().default("us-east-1"),
   S3_ACCESS_KEY: z.string().min(1),
   S3_SECRET_KEY: z.string().min(1),
   S3_BUCKET_FILES: z.string().min(1),
+
+  // P5.DR: single-site disaster-recovery backup-freshness check (over the P0.5
+  // nightly dumps in the backups bucket). `fresh` = newest dump younger than the
+  // RPO window; powers GET /v1/ops/backups/status (+ a future Prometheus alert).
+  BACKUP_S3_BUCKET: z.string().min(1).default("cmc-backups"),
+  BACKUP_RPO_HOURS: z.coerce.number().int().positive().default(36),
   S3_FORCE_PATH_STYLE: z
     .string()
     .default("true")

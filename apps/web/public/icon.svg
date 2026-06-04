@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="CMC">
+  <rect width="512" height="512" fill="#0b0f14"/>
+  <path d="M256 96 L392 152 V268 C392 350 332 404 256 432 C180 404 120 350 120 268 V152 Z"
+        fill="none" stroke="#3b82f6" stroke-width="22" stroke-linejoin="round"/>
+  <text x="256" y="300" text-anchor="middle" font-family="system-ui, sans-serif"
+        font-size="120" font-weight="700" fill="#e5edf7" letter-spacing="2">CMC</text>
+</svg>

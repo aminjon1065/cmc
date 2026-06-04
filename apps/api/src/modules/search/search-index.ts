@@ -15,6 +15,8 @@ export interface IndexedDocument {
   status: string;
   createdAt: string;
   updatedAt: string;
+  /** Extracted full text (P5.6); optional so existing callers/fakes still satisfy. */
+  content?: string | null;
 }
 
 /** A search hit (P3.6b uses this). */

@@ -38,6 +38,7 @@ export class RealSearchIndex implements SearchIndex {
             status: { type: "keyword" },
             createdAt: { type: "date" },
             updatedAt: { type: "date" },
+            content: { type: "text" },
           },
         },
       },
@@ -57,6 +58,7 @@ export class RealSearchIndex implements SearchIndex {
         status: doc.status,
         createdAt: doc.createdAt,
         updatedAt: doc.updatedAt,
+        content: doc.content ?? null,
       },
       refresh: true,
     });
@@ -88,7 +90,7 @@ export class RealSearchIndex implements SearchIndex {
               {
                 multi_match: {
                   query,
-                  fields: ["name^2", "description"],
+                  fields: ["name^2", "description", "content"],
                 },
               },
             ],

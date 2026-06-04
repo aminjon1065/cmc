@@ -9,6 +9,7 @@ import { ConfigService } from "@nestjs/config";
 import { SearchService } from "./search.service";
 import { SearchController } from "./search.controller";
 import { FoldersModule } from "../folders/folders.module";
+import { VectorModule } from "../vector/vector.module";
 import {
   SEARCH_INDEX,
   type SearchIndex,
@@ -39,7 +40,7 @@ class SearchIndexBootstrap implements OnModuleInit {
  * Exports SEARCH_INDEX so DocumentsService can index on write.
  */
 @Module({
-  imports: [FoldersModule],
+  imports: [FoldersModule, VectorModule],
   controllers: [SearchController],
   providers: [
     SearchService,

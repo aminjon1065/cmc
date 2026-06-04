@@ -2,11 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import type { CreateIncidentRequest } from "@cmc/contracts";
 import {
   REGION_SUGGESTIONS,
   TYPE_SUGGESTIONS,
   SOURCE_SUGGESTIONS,
 } from "@/lib/incident-suggestions";
+import { queueIncident } from "@/lib/offline-incidents";
+import { QUEUE_EVENT } from "@/components/pwa-register";
 import { createIncidentAction } from "./actions";
 
 /** "YYYY-MM-DDTHH:mm" in local time for a datetime-local input default. */
@@ -60,7 +63,7 @@ export function CreateIncidentForm() {
     e.preventDefault();
     setBusy(true);
     setError(null);
-    const res = await createIncidentAction({
+    const input: CreateIncidentRequest = {
       severity,
       type,
       region,
@@ -70,15 +73,36 @@ export function CreateIncidentForm() {
       occurredAt: new Date(occurredAt).toISOString(),
       latitude: latitude.trim() === "" ? undefined : Number(latitude),
       longitude: longitude.trim() === "" ? undefined : Number(longitude),
-    });
-    setBusy(false);
-    if (!res.ok) {
-      setError(res.error);
+    };
+
+    // Offline (or server unreachable mid-submit): persist the draft locally and
+    // let PwaRegister replay it on reconnect (P4.4 / ADR-0075).
+    const queueOffline = async () => {
+      await queueIncident(input);
+      window.dispatchEvent(new Event(QUEUE_EVENT));
+      setBusy(false);
+      reset();
+      setOpen(false);
+      router.push("/incidents");
+    };
+
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      await queueOffline();
       return;
     }
-    reset();
-    setOpen(false);
-    router.push(`/incidents/${res.data.id}`);
+    try {
+      const res = await createIncidentAction(input);
+      setBusy(false);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      reset();
+      setOpen(false);
+      router.push(`/incidents/${res.data.id}`);
+    } catch {
+      await queueOffline();
+    }
   }
 
   if (!open) {

@@ -35,6 +35,11 @@ import { VideoModule } from "./modules/video/video.module";
 import { MonitoringModule } from "./modules/monitoring/monitoring.module";
 import { MediaModule } from "./modules/media/media.module";
 import { RegionsModule } from "./modules/regions/regions.module";
+import { LlmModule } from "./modules/llm/llm.module";
+import { VectorModule } from "./modules/vector/vector.module";
+import { RagModule } from "./modules/rag/rag.module";
+import { CopilotModule } from "./modules/copilot/copilot.module";
+import { BackupsModule } from "./modules/backups/backups.module";
 import { NotificationsModule } from "./modules/notifications/notifications.module";
 import { IncidentNotificationsModule } from "./modules/incident-notifications/incident-notifications.module";
 import { OpenApiModule } from "./modules/openapi/openapi.module";
@@ -132,6 +137,11 @@ import { loadConfig } from "./config/configuration";
     MonitoringModule,
     MediaModule,
     RegionsModule,
+    LlmModule,
+    VectorModule,
+    RagModule,
+    CopilotModule,
+    BackupsModule,
     NotificationsModule,
     IncidentNotificationsModule,
     OpenApiModule,

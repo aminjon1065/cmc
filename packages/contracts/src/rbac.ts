@@ -209,6 +209,12 @@ export const PERMISSION_CATALOG = [
     description:
       "See data across ALL regions (head office); bypass per-region visibility",
   },
+  // LLM gateway (P5.1 — self-hosted AI substrate).
+  {
+    domain: "llm",
+    action: "use",
+    description: "Call the LLM gateway (chat completion)",
+  },
 ] as const satisfies readonly PermissionDef[];
 
 /** Helper: the `${domain}:${action}` string for a catalog entry. */
@@ -275,6 +281,7 @@ export const SYSTEM_ROLES: readonly SystemRoleDef[] = [
       "media:read",
       "media:write",
       "region:read",
+      "llm:use",
     ],
   },
   {

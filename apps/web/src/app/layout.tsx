@@ -1,7 +1,11 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Onest, JetBrains_Mono } from "next/font/google";
 import { getPublicBranding } from "@/lib/branding";
+import { PwaRegister } from "@/components/pwa-register";
 import "./globals.css";
+
+/** PWA theme color (P4.4 / ADR-0075). */
+export const viewport: Viewport = { themeColor: "#0b0f14" };
 
 const display = Geist({
   subsets: ["latin", "cyrillic"],
@@ -44,7 +48,10 @@ export default async function RootLayout({
       className={`dark ${display.variable} ${ui.variable} ${mono.variable}`}
       suppressHydrationWarning
     >
-      <body className="min-h-screen antialiased">{children}</body>
+      <body className="min-h-screen antialiased">
+        {children}
+        <PwaRegister />
+      </body>
     </html>
   );
 }

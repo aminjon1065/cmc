@@ -413,10 +413,10 @@ No Kong / Envoy / WAF yet; the Next.js BFF + Caddy edge are the gateway today. *
 
 | field | value |
 |---|---|
-| **Status** | NOT STARTED |
-| **Compl. %** | 2 % (pgvector installed) |
+| **Status** | IN PROGRESS (Horizon P5) — substrate landed |
+| **Compl. %** | ~52 % (LLM gateway P5.1 + vector P5.2 + semantic search P5.3 + RAG P5.4 + copilots P5.5 + document intelligence P5.6 done) |
 
-No vector tables, no embedding workers, no LLM gateway, no RAG, no copilot infrastructure, no OCR, no LLM-call audit. **Complexity: XXL.**
+**Done:** ✅ LLM gateway + LLM-call (metadata) audit (P5.1 · ADR-0067 — gated OpenAI-compatible seam, per-tenant rate-limit); ✅ vector tables + embedding pipeline (P5.2 · ADR-0068 — `document_embeddings` Postgres `jsonb`, best-effort indexer via the gateway `embed()`); ✅ semantic search (P5.3 · ADR-0069 — brute-force vector kNN fused into `/v1/search` by RRF, permission-aware); ✅ RAG framework (P5.4 · ADR-0070 — strictly-grounded, cited, audited `/v1/rag/ask`); ✅ per-module copilots (P5.5 · ADR-0071 — read-only, module-scoped, record-anchored `/v1/copilot/ask`; framework + Incidents); ✅ document intelligence / OCR (P5.6 · ADR-0072 — gated PDF text-layer + Tesseract extraction → OpenSearch `content` + re-embed). **Remaining:** classification + structured extraction; chunking; async embedding workers; pgvector ANN / Qdrant at scale; action-capable copilots. **Complexity: XXL.**
 
 ---
 
@@ -605,13 +605,14 @@ Structured JSON logging with `request_id`+`trace_id`+`tenantId`+`userId` (P0.3 /
 | Blocks | §3.14, parts of §3.8/§3.9 |
 | Complexity | L to deploy + index documents/messages; XL for permission-aware indexing + hybrid BM25+vector |
 
-### Vector plane (Qdrant / pgvector)
+### Vector plane (Postgres jsonb → pgvector / Qdrant)
 
 | | |
 |---|---|
-| Status | PARTIAL (pgvector installed, unused) |
-| Blocks | §3.18 / §16 |
-| Complexity | M to start indexing with pgvector; L to migrate to Qdrant when scale demands |
+| Status | ✅ IN USE (P5.2 · ADR-0068 — 2026-06-03): `document_embeddings` (Postgres `jsonb`, RLS) populated best-effort from the document lifecycle via the LLM-gateway `embed()`. See **AI / Vector pipeline (P5.2)** above |
+| Reframe | Vectors stored as Postgres `jsonb` (no extension, no container) on the PostGIS image — **pgvector ANN index / Qdrant is the scale follow-on** (swaps in without changing the pipeline) |
+| Blocks | §3.18 / §16 — unblocks P5.3 semantic search |
+| Complexity | done (jsonb store + indexer, L); M for the pgvector ANN index; L to migrate to Qdrant when scale demands |
 
 ### Realtime plane (WebSocket gateway)
 
@@ -697,6 +698,111 @@ Structured JSON logging with `request_id`+`trace_id`+`tenantId`+`userId` (P0.3 /
 | Files | `apps/api/src/modules/analytics/anomaly-detector.ts`, `anomaly-alert.service.ts`, `dashboard-analytics.service.ts`, `analytics.controller.ts`; `apps/web/src/app/dashboard/anomalies-widget.tsx` |
 | Deferred (follow-on) | Flink / true streaming; more signals (audit-rate, case volume, per-region); per-tenant thresholds + admin tuning; ML detection |
 | Complexity | done (L) |
+
+### AI / LLM gateway (P5.1)
+
+| | |
+|---|---|
+| Status | ✅ DONE (P5.1 · ADR-0067) — 2026-06-03: gated OpenAI-compatible LLM gateway + per-tenant rate-limit + metadata audit. First item of Horizon P5 (AI tier) |
+| How | Gated `LLM_PROVIDER` seam (Noop / `OpenAiCompatLlmProvider` fetch → `{LLM_BASE_URL}/v1/chat/completions`; `LLM_ENABLED`) — works vs vLLM/Ollama/llama.cpp, no vendor SDK. `LlmService`: Redis per-tenant rate-limit (`cmc:llm:rl:{tenant}` → 429) + audit (`llm.complete`, metadata-only unless `LLM_LOG_PROMPTS`; failure audits durable); 503 disabled / 502 provider error. `POST /v1/llm/complete` (`llm:use`; non-streaming). Config-only, no migration |
+| Tests | `apps/api/test/e2e/llm.e2e-spec.ts` **5** (Noop factory; completion + metadata-only audit (raw prompt absent); 403; 400; 429). Live smoke: real vLLM on a GPU host |
+| Files | `apps/api/src/modules/llm/` (`llm.provider.ts`, `llm.service.ts`, `llm.controller.ts`, `llm.module.ts`); `packages/contracts/src/llm.ts`; `llm:use` perm; `LLM_*` config |
+| Deferred (follow-on) | SSE streaming; token-bucket + per-user limits; ~~embeddings (P5.2)~~ ✅ done; model routing/fallback + prompt-injection guardrails; vLLM compose profile + GPU manifest |
+| Complexity | done (L); substrate for P5.4 RAG / P5.5 copilots |
+
+### AI / Vector pipeline (P5.2)
+
+| | |
+|---|---|
+| Status | ✅ DONE (P5.2 · ADR-0068) — 2026-06-03: embeddings via the LLM gateway + Postgres `jsonb` vector store + gated best-effort indexer. Second AI substrate of Horizon P5 |
+| Reframe | Plan named **Qdrant** / "migrate or supplement pgvector". Dev/test Postgres is **PostGIS** → stacking pgvector (or `CREATE EXTENSION vector`) is non-trivial + breaks the suite if absent; Qdrant is a heavy new container. First cut stores vectors **in Postgres as `jsonb`** (no extension, no container), gated. **pgvector ANN / Qdrant = scale follow-on** that swaps in without changing the pipeline |
+| How | `LlmProvider.embed(texts, model)` (OpenAI-compatible `/v1/embeddings`; `LLM_EMBED_MODEL` default `bge-m3`) reuses the P5.1 gateway — one AI substrate for chat + embeddings. `document_embeddings` (migration 0041, RLS): `document_id` FK cascade **unique** (one vector/doc, upsert), `model`, `dims`, `embedding` **`jsonb`**. `VectorIndexService` active only when **`VECTOR_ENABLED` AND provider up** (no-op in dev/test/CI). Best-effort on the document lifecycle (`DocumentsService.indexDoc` embed+upsert on finalize; `removeDocument` on delete — never blocks the write path, mirrors OpenSearch P3.6). `reindexAll` backfill; `status` `{active, indexed}`. `GET /v1/vector/status` (`document:read`) + `POST /v1/vector/reindex` (`document:write`) |
+| Tests | `apps/api/test/e2e/vector.e2e-spec.ts` **4** (reindex embeds available docs asserting dims/model/the stored vector; idempotent upsert — no dup rows; status; RBAC 403 — faked provider). Live smoke: real OpenAI-compatible `/v1/embeddings` |
+| Files | `apps/api/src/modules/vector/` (`vector-index.service.ts`, `vector.controller.ts`, `vector.module.ts`); `apps/api/src/modules/llm/llm.provider.ts` (`embed()`); `packages/db/src/schema/document-embeddings.ts` (+ migration 0041); `packages/contracts/src/vector.ts`; `DocumentsService` index/unindex hook; `VECTOR_ENABLED` + `LLM_EMBED_MODEL` config |
+| Deferred (follow-on) | pgvector ANN index / Qdrant at scale; async (NATS) embedding worker; embed incidents + cases; chunk long docs; full-content extraction (P5.6); ~~semantic search over the vectors (P5.3)~~ ✅ done |
+| Complexity | done (L); substrate for P5.3 semantic search / P5.4 RAG |
+
+### AI / Semantic search (P5.3)
+
+| | |
+|---|---|
+| Status | ✅ DONE (P5.3 · ADR-0069) — 2026-06-03: brute-force vector kNN fused into the federated `/v1/search` by RRF, permission-aware. Third AI item of Horizon P5 |
+| Decisions | AskUserQuestion: **brute-force cosine over jsonb** (no pgvector — ANN = scale follow-on) · **RRF fusion reusing P3.7** · **fold into `/v1/search`** (one surface). Vectors are **documents-only** (P5.2 deferred incidents/cases), so the lane augments the documents portion |
+| How | Pure `cosineSimilarity(a,b)` (`vector/cosine.ts`; 0 for non-comparable dims/zero-norm) + `VectorIndexService.similar(query,cap)` (gated; embeds the query via the LLM gateway, RLS-reads tenant vectors, scores equal-dim rows, drops non-positive, top-`cap` `{id,score}[]` — symmetric with the OpenSearch lane). `SearchService` resolves the lane before the tx and hydrates via the **same `hydrateDocHits`** as keyword → **folder-access + RLS + `ready`-only + `deleted_at` filters apply identically** (permission-aware). `fuse()` **sums RRF per `(type,id)`** → a doc in both lanes is **deduped to one boosted `hybrid` hit** (`SearchSource` += `vector`,`hybrid`); disjoint lanes unchanged (P3.7 preserved). **Also fixed a P5.2 bug:** `reindexAll` filtered `status="available"` but docs finalize to `ready` (live indexer + hydrate use `ready`; the e2e masked it) → would embed nothing / drop hits |
+| Tests | `apps/api/test/e2e/search-semantic.e2e-spec.ts` **7** (pure cosine ×3; vector-only doc → `vector`; both-lane doc deduped → `hybrid` w/ boosted score; soft-deleted nearest-neighbour dropped by hydrate; no `document:read` → empty). Faked provider; OpenSearch off → keyword lane = Postgres FTS. Live smoke: real `/v1/embeddings` |
+| Files | `apps/api/src/modules/vector/cosine.ts` (new), `vector-index.service.ts` (`similar()` + status fix); `apps/api/src/modules/search/search.service.ts` (vector lane + `hydrateDocHits` + per-item RRF), `search.module.ts` (+`VectorModule`); `packages/contracts/src/search.ts` (`vector`+`hybrid`) |
+| Deferred (follow-on) | pgvector ANN / Qdrant at scale; query-embedding cache; embed + search incidents+cases; chunk long docs (P5.6); web `hybrid`/`vector` source badge (P3.7b) |
+| Complexity | done (L); substrate for P5.4 RAG |
+
+### AI / RAG framework (P5.4)
+
+| | |
+|---|---|
+| Status | ✅ DONE (P5.4 · ADR-0070) — 2026-06-03: strictly-grounded, cited, audited Q&A composed from the existing AI seams. Fourth AI item of Horizon P5 |
+| Decisions | AskUserQuestion: retrieval **reuses `/v1/search`** (P5.3 hybrid, permission-aware) · **strict grounding + inline `[n]` citations** · new **`POST /v1/rag/ask`** · audit = **metadata + cited source ids** (no raw text). **Composition seam — no new model/store/migration** |
+| How | `RagService.ask`: 503 if provider inactive → retrieve via `SearchService.search` (hits already RBAC+folder filtered, so RAG grounds only in what the caller may read) → **no sources = honest no-answer, `grounded:false`, NO LLM call** (still audited) → numbered context from `title`+`snippet` (docs = name+description until P5.6) bounded by `RAG_CONTEXT_CHAR_BUDGET` → generate via `LlmService.complete` (inherits rate-limit + 502 + `llm.complete` audit) with a strict-grounding prompt @ temp 0 → parse `[n]` → `citations[]` ({type,id,title}) → **`rag.ask` audit** = metadata + `citedSources` provenance (raw Q/A only under `LLM_LOG_PROMPTS`; failure durable) |
+| Tests | `apps/api/test/e2e/rag.e2e-spec.ts` **6** (grounded + `[n]`→id citation; no-answer with **no LLM call**; metadata-only audit — cited ids present, raw question absent; 403 без llm:use; 400 empty; 503 disabled). Faked provider; real permission-aware hybrid retrieval. Live smoke: real generation |
+| Files | `apps/api/src/modules/rag/` (`rag.service.ts`, `rag.controller.ts`, `rag.module.ts`); `packages/contracts/src/rag.ts`; `RAG_TOP_K`+`RAG_CONTEXT_CHAR_BUDGET` config; `app.module.ts` |
+| Deferred (follow-on) | SSE streaming; RAG-specific rate limit; full-content context + chunking (P5.6); ground in incidents/cases bodies; web ask-UI with rendered citations; faithfulness/citation-coverage eval |
+| Complexity | done (L); substrate for P5.5 copilots |
+
+### AI / Per-module copilots (P5.5)
+
+| | |
+|---|---|
+| Status | ✅ DONE (P5.5 · ADR-0071) — 2026-06-03: read-only, module-scoped, record-anchored copilot over a unified endpoint. Framework + **Incidents** copilot; GIS/Docs/Workflow follow-on. Fifth AI item of Horizon P5 |
+| Decisions | AskUserQuestion: **read-only advisory** (actions = follow-on) · **framework + Incidents first** · **module-scoped RAG + `resourceId` anchor** · **unified `/v1/copilot/ask`**. Composition seam — **no new model/store/migration/permission** |
+| How | `CopilotService` per-module registry `{readPermission, domainTypes, systemPrompt, loadAnchor}` (incidents → `incident:read`, `["incident"]`, EOC persona, anchor via `IncidentsService.getDetail`). 503 if provider off → resolve perms (**llm:use w/o module read-perm → honest no-answer, no leak**) → optional `resourceId` anchor (pinned, only if accessible) → module-scoped `SearchService` retrieval filtered to `domainTypes` → merge+dedupe → shared `assembleContext` → no sources ⇒ no-answer, **no LLM call** → else `LlmService.complete` (rate-limit/502/`llm.complete` audit) w/ strict-grounding prompt @ temp 0 → `resolveCitations` → **`copilot.ask` audit** (module + cited-id provenance; raw Q/A only under `LLM_LOG_PROMPTS`). **DRY:** `assembleContext`+`resolveCitations` extracted to `rag/grounding.ts`, shared with RAG |
+| Tests | `apps/api/test/e2e/copilot.e2e-spec.ts` **7** (module grounding + `[n]`→id; `resourceId` anchor w/o keyword match; llm:use без incident:read → no-answer + no LLM call; metadata-only `copilot.ask` audit; 403; 400 empty/unknown module; 503 disabled). Faked provider; real permission-aware retrieval. Suite 67/471 — all AI suites green; full-green captured at P5.4 (66/464); the P5.5 serial run was 65/67 (2 unrelated suites — `rate-limit`, `documents-search-index` — timed out at 153s/900s on local host exhaustion, not regressions). Live smoke: real generation |
+| Files | `apps/api/src/modules/copilot/` (`copilot.service.ts`, `copilot.controller.ts`, `copilot.module.ts`); `apps/api/src/modules/rag/grounding.ts` (new, shared; `RagService` refactored to use it); `packages/contracts/src/copilot.ts`; `app.module.ts` |
+| Deferred (follow-on) | GIS/Docs/Workflow copilots (registry entries + anchor loaders); action-capable (tool-calling + per-tool RBAC + confirm); web copilot panels per module; SSE streaming; copilot rate limit |
+| Complexity | done (L) |
+
+### AI / Document intelligence (P5.6)
+
+| | |
+|---|---|
+| Status | ✅ DONE (P5.6 · ADR-0072) — 2026-06-03: gated text extraction (PDF text-layer + Tesseract OCR) → OpenSearch `content` + P5.2 re-embed. Sixth AI item of Horizon P5 |
+| Decisions | For sovereign КЧС single-site/no-GPU: **Tesseract + PDF text-layer** (CPU, live boundary) · **text only** (classification/fields follow-on) · **async BullMQ** (like preview P2.13) · **OpenSearch `content` + re-embed**. Mirrors preview pipeline; split a (substrate) / b (async+re-index) |
+| How | `document_text` sidecar (migration 0042, RLS; `document_id` unique, `content`/`char_count`/`status`/`extracted_at`) — sidecar so big text doesn't bloat list/get. Gated `TEXT_EXTRACTOR` (Noop / Real live-boundary `pdf-parse`+`tesseract.js` via non-literal dyn-import → out of build/test deps). `DocumentExtractionService.extract` (runForTenant → loadReadyDoc → `getObjectBytes` → extract → cap → upsert; 503/404) + `status`. `POST /v1/documents/:id/extract` (`document:write`) + `GET :id/text` (`document:read`). **Async:** gated `EXTRACT_QUEUE`+`ExtractWorker`; `DocumentsService` auto-enqueues on finalize. **Re-index:** `extract()` best-effort → OpenSearch `indexDocument({…,content})` + vector re-embed with content (`IndexedDocument`/`DocLike` += optional `content`) |
+| Tests | `document-extraction` **7** (extract/store/idempotent/empty/not-extracted/404/RBAC/503) + `document-extract-pipeline` **2** (re-index→OpenSearch content + `document_embeddings` row; auto-enqueue on finalize). Blast radius **15 suites / 81 tests** green serially (documents/search/vector/rag/copilot/previews/extraction). Live smoke: real Tesseract + BullMQ worker (`DOC_EXTRACT_ENABLED`, libs on host) |
+| Files | `packages/db/src/schema/document-text.ts` (+ mig 0042); `packages/contracts/src/document-text.ts`; `apps/api/src/modules/documents/` (`text-extractor{,.impl}.ts`, `extract.queue{,-impl}.ts`, `extract.worker.ts`, `document-extraction.{service,controller}.ts`, `documents.{service,module}.ts`); `search-index{,.impl}.ts` + `vector-index.service.ts` (`content`); `DOC_EXTRACT_*` config |
+| Deferred (follow-on) | classification + structured field/entity extraction; chunking long docs (>8k embed cap); per-page OCR + lang auto-detect + confidence; web extracted-text view + reindex-all-with-content |
+| Complexity | done (L); unlocks full-content for FTS/semantic/RAG/copilots |
+
+### Sovereign / air-gap install (P5.8)
+
+| | |
+|---|---|
+| Status | ✅ DONE (P5.8 · ADR-0073) — 2026-06-03: offline `docker save` bundle + SHA-256 manifest + on-site install/verify scripts. (P5.7 multi-region active-active ⛔ N/A — single-site) |
+| Decisions | **images tar + compose + scripts** (not OCI registry) · **full stack** · **SHA-256 manifest + verify** (no signing). Build on a connected host, transfer one tamper-evident tarball, install fully offline |
+| How | `infra/airgap/build-bundle.sh` (build from-source images → enumerate all images across deploy+data+observability compose via `config --images` → `docker save\|gzip` → stage compose/.env/scripts → `MANIFEST.sha256` → tarball). `verify-bundle.sh` (`sha256sum -c`). `install.sh` (verify→`docker load`→.env→data plane→Postgres health→migrate→`up -d`→`/health` smoke). Gated AI flags stay off unless on-host toolchain present |
+| Tests | `bash -n` clean ×3 + image-enumeration dry-run vs live compose. Infra/ops (like P3.13/P0.5) — no jest; real offline build→install drill = manual. No app code touched |
+| Files | `infra/airgap/{build-bundle,verify-bundle,install}.sh`; `docs/runbooks/sovereign-airgap-install.md` |
+| Deferred (follow-on) | cosign/GPG signing (provenance); slim core+profiles build; delta upgrade bundles |
+| Complexity | done (M) |
+
+### Single-site DR readiness (P5.DR — reframed from P5.7)
+
+| | |
+|---|---|
+| Status | ✅ DONE (P5.DR · ADR-0074) — 2026-06-03: backup-freshness endpoint + RPO/RTO + restore-drill runbook. The single-site analogue of multi-region resilience (P5.7 active-active ⛔ N/A) |
+| How | `StorageService.listObjects` (`ListObjectsV2`) → `BackupStatusService.status()` (newest `postgres/*.dump` by `lastModified`, age vs RPO → `fresh`). `GET /v1/ops/backups/status` (`monitoring:read`). Config `BACKUP_S3_BUCKET`/`BACKUP_RPO_HOURS` (36). Runbook `docs/runbooks/disaster-recovery.md` (RPO/RTO, freshness check, `pnpm db:restore` drill, air-gap rebuild P5.8, warm-standby P3.13) |
+| Tests | `backup-status` **4** (fresh/stale/empty/RBAC). Faked StorageService listing. Live boundary: real MinIO + restore drill |
+| Files | `apps/api/src/modules/backups/*`; `StorageService.listObjects`; `packages/contracts/src/backup.ts`; `BACKUP_*` config; `docs/runbooks/disaster-recovery.md` |
+| Deferred (follow-on) | Prometheus `cmc_backup_age_hours` gauge + Alertmanager rule; scheduled freshness notification; periodic **test-restore** (restorability); WAL/PITR |
+| Complexity | done (S) |
+
+### Mobile / PWA companion (P4.4)
+
+| | |
+|---|---|
+| Status | ✅ DONE (P4.4 · ADR-0075) — 2026-06-03: installable PWA on the existing Next.js + offline incident capture. (Was DEFERRED; PWA chosen over React Native for single-site/air-gap/sovereign) |
+| How | `app/manifest.ts` (→ `/manifest.webmanifest`, installable), `public/sw.js` (conservative: precache offline shell, nav network-first→`/offline`, API/RSC untouched), `public/icon.svg` + `viewport.themeColor`, `app/offline`, `components/pwa-register.tsx` (SW register + online/offline & queue badge + **drain on reconnect**). Offline capture: `lib/offline-incidents.ts` (IndexedDB queue); create-incident form queues when offline / on action throw; replayed via the same `createIncidentAction` (BFF+RLS+audit) on reconnect |
+| Tests | Web **tsc ✓ / lint ✓ / `next build` ✓** (29 routes incl. generated manifest + /offline). `output:standalone` ⇒ `next start` smoke N/A; auth/middleware untouched (307/401 unchanged). Live boundary: install + SW offline nav + IndexedDB→sync = manual browser smoke |
+| Files | `apps/web/{public/sw.js,public/icon.svg,src/app/manifest.ts,src/app/offline/page.tsx,src/components/pwa-register.tsx,src/lib/offline-incidents.ts,src/app/layout.tsx,src/app/incidents/create-incident-form.tsx}` |
+| Deferred (follow-on) | offline for more modules + read offline-first cache; Web Push (SW in place) + background-sync; encrypt queued drafts; PNG icon set; install-prompt UX |
+| Complexity | done (M) |
 
 ### Backups plane (Postgres)
 
