@@ -21,6 +21,7 @@ import {
   Video,
   type LucideIcon,
 } from "lucide-react";
+import { getTranslations } from "next-intl/server";
 import { Emblem } from "./emblem";
 import { getMyAccess, hasPermission, isAdmin } from "@/lib/access";
 
@@ -121,6 +122,10 @@ export async function Sidebar({
   const canMonitor = hasPermission(access, "monitoring:read");
   const canMedia = hasPermission(access, "media:read");
 
+  // Localized nav labels (RU default + TG) — keyed by the stable group/item id.
+  const tNav = await getTranslations("nav");
+  const tCommon = await getTranslations("common");
+
   const initials = (user?.name ?? "")
     .split(/\s+/)
     .map((p) => p[0])
@@ -166,7 +171,7 @@ export async function Sidebar({
                 letterSpacing: "0.08em",
               }}
             >
-              {group.label}
+              {tNav(`groups.${group.id}`)}
             </div>
             {group.items.map((item) => {
               const isActive = active === item.id;
@@ -228,7 +233,7 @@ export async function Sidebar({
                       flex: "0 0 auto",
                     }}
                   />
-                  <span className="truncate">{item.label}</span>
+                  <span className="truncate">{tNav(`items.${item.id}`)}</span>
                 </span>
               );
               if (href && !disabled) {
@@ -242,7 +247,7 @@ export async function Sidebar({
                 <div
                   key={item.id}
                   aria-disabled={disabled || undefined}
-                  title={disabled ? "Coming soon" : undefined}
+                  title={disabled ? tCommon("comingSoon") : undefined}
                 >
                   {content}
                 </div>
@@ -272,7 +277,7 @@ export async function Sidebar({
             className="truncate text-[11.5px] font-medium"
             style={{ color: "var(--c-fg-1)" }}
           >
-            {user?.name ?? "Signed-out"}
+            {user?.name ?? tCommon("signedOut")}
           </div>
           <div
             className="truncate text-[10px]"

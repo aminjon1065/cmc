@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import type { PermissionCatalogEntry } from "@cmc/contracts";
 import { createRoleAction } from "./actions";
 import { PermissionPicker } from "./permission-picker";
@@ -21,6 +22,7 @@ export function CreateRoleForm({
   catalog: PermissionCatalogEntry[];
 }) {
   const router = useRouter();
+  const t = useTranslations("admin");
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
@@ -80,7 +82,7 @@ export function CreateRoleForm({
         className="cmc-btn cmc-btn-primary"
         onClick={() => setOpen(true)}
       >
-        + New custom role
+        {t("roles.newCustomRole")}
       </button>
     );
   }
@@ -89,19 +91,19 @@ export function CreateRoleForm({
     <form onSubmit={onSubmit} className="flex flex-col gap-3">
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1">
-          <span className="cmc-label">Name</span>
+          <span className="cmc-label">{t("roles.fName")}</span>
           <input
             className="cmc-input"
             style={{ width: 220 }}
             value={name}
             onChange={(e) => onName(e.target.value)}
-            placeholder="Regional Coordinator"
+            placeholder={t("roles.fNamePlaceholder")}
             maxLength={128}
             required
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="cmc-label">Slug</span>
+          <span className="cmc-label">{t("roles.fSlug")}</span>
           <input
             className="cmc-input cmc-mono"
             style={{ width: 180 }}
@@ -110,25 +112,25 @@ export function CreateRoleForm({
               setSlug(e.target.value);
               setSlugEdited(true);
             }}
-            placeholder="regional_coord"
+            placeholder={t("roles.fSlugPlaceholder")}
             maxLength={64}
             required
           />
         </label>
         <label className="flex flex-1 flex-col gap-1" style={{ minWidth: 200 }}>
-          <span className="cmc-label">Description</span>
+          <span className="cmc-label">{t("roles.fDescription")}</span>
           <input
             className="cmc-input"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Optional"
+            placeholder={t("roles.fDescriptionPlaceholder")}
             maxLength={255}
           />
         </label>
       </div>
 
       <div>
-        <div className="cmc-label mb-1.5">Permissions</div>
+        <div className="cmc-label mb-1.5">{t("roles.permissions")}</div>
         <PermissionPicker
           catalog={catalog}
           selected={selected}
@@ -145,7 +147,7 @@ export function CreateRoleForm({
 
       <div className="flex items-center gap-2">
         <button type="submit" className="cmc-btn cmc-btn-primary" disabled={busy}>
-          {busy ? "Creating…" : "Create role"}
+          {busy ? t("roles.creating") : t("roles.createRole")}
         </button>
         <button
           type="button"
@@ -156,7 +158,7 @@ export function CreateRoleForm({
           }}
           disabled={busy}
         >
-          Cancel
+          {t("roles.cancel")}
         </button>
       </div>
     </form>

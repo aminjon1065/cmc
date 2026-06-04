@@ -8,59 +8,67 @@ import {
 import { AppShell } from "@/components/cmc/app-shell";
 import { getBranding } from "@/lib/branding";
 import { authedApiFetch, ApiError } from "@/lib/server-api";
+import { getTranslations } from "next-intl/server";
 import { NewWorkflowButton } from "./new-workflow-button";
 
-export const metadata: Metadata = { title: "Workflows" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("workflows");
+  return { title: t("metaTitle") };
+}
+
+type WorkflowsFetchError = {
+  ok: false;
+  errorKey: "errShape" | "errApi" | "errForbidden" | "errLoad";
+  status?: number;
+};
 
 async function fetchWorkflows(): Promise<
-  { ok: true; workflows: Workflow[] } | { ok: false; error: string }
+  { ok: true; workflows: Workflow[] } | WorkflowsFetchError
 > {
   try {
     const raw = await authedApiFetch<unknown>("/workflows");
     const parsed = WorkflowsListResponseSchema.safeParse(raw);
-    if (!parsed.success) return { ok: false, error: "Unexpected API shape." };
+    if (!parsed.success) return { ok: false, errorKey: "errShape" };
     return { ok: true, workflows: parsed.data.workflows };
   } catch (err) {
     if (err instanceof ApiError) {
-      return {
-        ok: false,
-        error:
-          err.status === 403
-            ? "You don't have permission to view workflows."
-            : `API ${err.status}`,
-      };
+      return err.status === 403
+        ? { ok: false, errorKey: "errForbidden" }
+        : { ok: false, errorKey: "errApi", status: err.status };
     }
-    return { ok: false, error: "Failed to load workflows." };
+    return { ok: false, errorKey: "errLoad" };
   }
 }
 
 export default async function WorkflowsPage() {
   const session = await auth();
   const { copy } = await getBranding();
+  const t = await getTranslations("workflows");
+  const tc = await getTranslations("common");
   const result = await fetchWorkflows();
 
   return (
     <AppShell
       active="workflow"
-      crumbs={["Work", "Workflows"]}
+      crumbs={[t("crumbWork"), t("crumbWorkflows")]}
       tenant={session?.tenantSlug}
       branding={{ orgName: copy.orgName, orgShort: copy.orgShort }}
-      user={{ name: session?.user?.name, role: "Operations" }}
+      user={{ name: session?.user?.name, role: tc("roleOps") }}
     >
       <div
         className="flex items-center gap-5 px-5 py-4"
         style={{ borderBottom: "0.5px solid var(--c-line-2)" }}
       >
         <div>
-          <div className="cmc-label mb-1">Work · Workflows</div>
+          <div className="cmc-label mb-1">{t("kicker")}</div>
           <div
             className="cmc-display text-[22px] font-semibold"
             style={{ letterSpacing: "-0.01em" }}
           >
-            Workflows
+            {t("title")}
           </div>
           <div className="mt-1 text-[11.5px]" style={{ color: "var(--c-fg-3)" }}>
-            Visual automations — build a graph, run it on Temporal.
+            {t("subtitle")}
           </div>
         </div>
         <div className="flex-1" />
@@ -79,14 +87,16 @@ export default async function WorkflowsPage() {
                   "0.5px solid color-mix(in srgb, var(--c-sev-1) 30%, transparent)",
               }}
             >
-              {result.error}
+              {result.errorKey === "errApi"
+                ? t("errApi", { status: result.status ?? 0 })
+                : t(result.errorKey)}
             </div>
           ) : result.workflows.length === 0 ? (
             <div
               className="p-6 text-center text-[12px]"
               style={{ color: "var(--c-fg-3)" }}
             >
-              No workflows yet. Create one to get started.
+              {t("noWorkflows")}
             </div>
           ) : (
             <table className="w-full text-[12px]">
@@ -98,11 +108,11 @@ export default async function WorkflowsPage() {
                     borderBottom: "0.5px solid var(--c-line-2)",
                   }}
                 >
-                  <th className="px-4 py-2 font-medium">Name</th>
-                  <th className="px-4 py-2 font-medium">Trigger</th>
-                  <th className="px-4 py-2 font-medium">Status</th>
-                  <th className="px-4 py-2 font-medium">Nodes</th>
-                  <th className="px-4 py-2 font-medium">Version</th>
+                  <th className="px-4 py-2 font-medium">{t("thName")}</th>
+                  <th className="px-4 py-2 font-medium">{t("thTrigger")}</th>
+                  <th className="px-4 py-2 font-medium">{t("thStatus")}</th>
+                  <th className="px-4 py-2 font-medium">{t("thNodes")}</th>
+                  <th className="px-4 py-2 font-medium">{t("thVersion")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -122,8 +132,8 @@ export default async function WorkflowsPage() {
                     </td>
                     <td className="px-4 py-2.5" style={{ color: "var(--c-fg-2)" }}>
                       {w.trigger.type === "event"
-                        ? `event · ${w.trigger.event ?? "—"}`
-                        : "manual"}
+                        ? t("triggerEvent", { event: w.trigger.event ?? "—" })
+                        : t("triggerManual")}
                     </td>
                     <td className="px-4 py-2.5">
                       <span
@@ -137,7 +147,7 @@ export default async function WorkflowsPage() {
                             : "var(--c-bg-3)",
                         }}
                       >
-                        {w.enabled ? "enabled" : "draft"}
+                        {w.enabled ? t("statusEnabled") : t("statusDraft")}
                       </span>
                     </td>
                     <td className="px-4 py-2.5" style={{ color: "var(--c-fg-3)" }}>

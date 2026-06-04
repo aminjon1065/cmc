@@ -1,19 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import type { NotificationPref } from "@cmc/contracts";
 import { setPreferenceAction } from "./actions";
-
-const KIND_LABEL: Record<string, string> = {
-  "incident.assigned": "Assigned to an incident",
-  "incident.transitioned": "An incident I'm involved in changes status",
-};
 
 export function NotificationPreferences({
   initial,
 }: {
   initial: NotificationPref[];
 }) {
+  const t = useTranslations("notifications");
   const [prefs, setPrefs] = useState(initial);
   const [busy, setBusy] = useState(false);
 
@@ -37,7 +34,7 @@ export function NotificationPreferences({
   return (
     <div className="cmc-card">
       <div className="cmc-card-header">
-        <span className="cmc-label">Preferences</span>
+        <span className="cmc-label">{t("preferences")}</span>
       </div>
       <div className="flex flex-col">
         <div
@@ -48,9 +45,9 @@ export function NotificationPreferences({
             borderBottom: "0.5px solid var(--c-line-2)",
           }}
         >
-          <span className="flex-1">Notify me when…</span>
-          <span style={{ width: 70, textAlign: "center" }}>In-app</span>
-          <span style={{ width: 70, textAlign: "center" }}>Email</span>
+          <span className="flex-1">{t("notifyMeWhen")}</span>
+          <span style={{ width: 70, textAlign: "center" }}>{t("inApp")}</span>
+          <span style={{ width: 70, textAlign: "center" }}>{t("email")}</span>
         </div>
         {prefs.map((p) => (
           <div
@@ -59,7 +56,11 @@ export function NotificationPreferences({
             style={{ borderBottom: "0.5px solid var(--c-line-1)" }}
           >
             <span className="flex-1" style={{ color: "var(--c-fg-2)" }}>
-              {KIND_LABEL[p.kind] ?? p.kind}
+              {p.kind === "incident.assigned"
+                ? t("kindAssigned")
+                : p.kind === "incident.transitioned"
+                  ? t("kindTransitioned")
+                  : p.kind}
             </span>
             <span style={{ width: 70, textAlign: "center" }}>
               <input

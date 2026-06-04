@@ -11,16 +11,7 @@ import {
   markAllReadAction,
   markReadAction,
 } from "@/app/notifications/actions";
-
-function ago(iso: string): string {
-  const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
-  if (s < 60) return "just now";
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
-}
+import { useTranslations } from "next-intl";
 
 export function NotificationBell({
   initialCount,
@@ -30,9 +21,23 @@ export function NotificationBell({
   initialItems: NotificationSummary[];
 }) {
   const router = useRouter();
+  const t = useTranslations("notifications");
   const [open, setOpen] = useState(false);
   const [count, setCount] = useState(initialCount);
   const [items, setItems] = useState(initialItems);
+
+  function ago(iso: string): string {
+    const s = Math.max(
+      0,
+      Math.floor((Date.now() - new Date(iso).getTime()) / 1000),
+    );
+    if (s < 60) return t("agoJustNow");
+    const m = Math.floor(s / 60);
+    if (m < 60) return t("agoMinutes", { count: m });
+    const h = Math.floor(m / 60);
+    if (h < 24) return t("agoHours", { count: h });
+    return t("agoDays", { count: Math.floor(h / 24) });
+  }
 
   // Poll the unread count so the badge stays live (no socket yet).
   useEffect(() => {
@@ -77,7 +82,7 @@ export function NotificationBell({
       <button
         type="button"
         onClick={toggle}
-        aria-label="Notifications"
+        aria-label={t("bellLabel")}
         style={{ position: "relative", display: "flex", alignItems: "center" }}
       >
         <Bell size={14} strokeWidth={1.6} style={{ color: "var(--c-fg-3)" }} />
@@ -123,7 +128,7 @@ export function NotificationBell({
             className="flex items-center gap-2 px-3 py-2"
             style={{ borderBottom: "0.5px solid var(--c-line-2)" }}
           >
-            <span className="cmc-label">Notifications</span>
+            <span className="cmc-label">{t("title")}</span>
             <div className="flex-1" />
             {count > 0 && (
               <button
@@ -132,7 +137,7 @@ export function NotificationBell({
                 style={{ color: "var(--c-accent)" }}
                 onClick={onMarkAll}
               >
-                Mark all read
+                {t("markAllRead")}
               </button>
             )}
           </div>
@@ -143,7 +148,7 @@ export function NotificationBell({
                 className="px-3 py-5 text-center text-[11.5px]"
                 style={{ color: "var(--c-fg-4)" }}
               >
-                {"You're all caught up."}
+                {t("allCaughtUp")}
               </div>
             ) : (
               items.map((n) => (
@@ -199,7 +204,7 @@ export function NotificationBell({
             }}
             onClick={() => setOpen(false)}
           >
-            See all
+            {t("seeAll")}
           </Link>
         </div>
       )}

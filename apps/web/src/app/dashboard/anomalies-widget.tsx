@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import type { AnomaliesResponse } from "@cmc/contracts";
 import { fetchAnomaliesAction } from "./actions";
 
@@ -14,6 +15,7 @@ export function AnomaliesWidget({
 }: {
   initial: AnomaliesResponse | null;
 }) {
+  const t = useTranslations("dashboard");
   const [data, setData] = useState<AnomaliesResponse | null>(initial);
 
   useEffect(() => {
@@ -31,20 +33,22 @@ export function AnomaliesWidget({
   return (
     <div className="cmc-card">
       <div className="cmc-card-header">
-        <span className="cmc-label">Anomalies · realtime</span>
+        <span className="cmc-label">{t("anomaliesTitle")}</span>
         <div className="flex-1" />
         <span className="cmc-mono text-[10.5px]" style={{ color: "var(--c-fg-3)" }}>
-          {available ? `${anomalies.length} flagged` : "analytics unavailable"}
+          {available
+            ? t("anomaliesFlagged", { count: anomalies.length })
+            : t("analyticsUnavailable")}
         </span>
       </div>
       <div className="flex flex-col gap-1.5 p-3">
         {!available ? (
           <div className="text-[11.5px]" style={{ color: "var(--c-fg-4)" }}>
-            Anomaly analytics unavailable.
+            {t("anomaliesUnavailable")}
           </div>
         ) : anomalies.length === 0 ? (
           <div className="text-[11.5px]" style={{ color: "var(--c-fg-4)" }}>
-            No anomalies in the recent window.
+            {t("anomaliesNone")}
           </div>
         ) : (
           anomalies
@@ -64,10 +68,13 @@ export function AnomaliesWidget({
                         : "var(--c-info)",
                   }}
                 >
-                  {a.direction === "spike" ? "▲" : "▼"} {a.direction}
+                  {a.direction === "spike" ? "▲" : "▼"}{" "}
+                  {a.direction === "spike" ? t("spike") : t("dip")}
                 </span>
                 <span style={{ color: "var(--c-fg-1)" }}>{a.count}</span>
-                <span style={{ color: "var(--c-fg-4)" }}>vs ~{a.mean}</span>
+                <span style={{ color: "var(--c-fg-4)" }}>
+                  {t("anomalyVs", { mean: a.mean })}
+                </span>
                 <div className="flex-1" />
                 <span className="cmc-mono" style={{ color: "var(--c-fg-3)" }}>
                   z={a.z} · {a.day}

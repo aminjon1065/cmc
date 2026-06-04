@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import type { MonitoringEvent } from "@cmc/contracts";
 import { getMonitoringReplayAction } from "./actions";
 
@@ -17,6 +18,7 @@ function toLocalInput(d: Date): string {
  * step through events as they happened. Pure client over the polled-data BFF.
  */
 export function ReplayPanel() {
+  const t = useTranslations("monitoring");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [events, setEvents] = useState<MonitoringEvent[]>([]);
@@ -68,7 +70,7 @@ export function ReplayPanel() {
   return (
     <div className="cmc-card flex flex-col">
       <div className="cmc-card-header flex items-center gap-2">
-        <span className="cmc-label">Time replay</span>
+        <span className="cmc-label">{t("timeReplay")}</span>
         <div className="flex-1" />
         <input
           type="datetime-local"
@@ -88,7 +90,7 @@ export function ReplayPanel() {
           onChange={(e) => setTo(e.target.value)}
         />
         <button className="cmc-btn" disabled={loading} onClick={() => void load()}>
-          {loading ? "…" : "Load"}
+          {loading ? "…" : t("load")}
         </button>
       </div>
 
@@ -101,7 +103,7 @@ export function ReplayPanel() {
 
         {events.length === 0 ? (
           <div className="text-[11px]" style={{ color: "var(--c-fg-3)" }}>
-            {loading ? "Loading…" : "Load a window to replay its timeline."}
+            {loading ? t("loading") : t("loadWindow")}
           </div>
         ) : (
           <>
@@ -114,7 +116,7 @@ export function ReplayPanel() {
                   setPlaying((p) => !p);
                 }}
               >
-                {playing ? "❚❚ Pause" : "▶ Play"}
+                {playing ? t("pause") : t("play")}
               </button>
               <input
                 type="range"
@@ -140,7 +142,7 @@ export function ReplayPanel() {
             >
               {current
                 ? new Date(current.occurredAt).toLocaleString()
-                : "— start —"}
+                : t("start")}
             </div>
             <div
               className="flex flex-col overflow-auto"

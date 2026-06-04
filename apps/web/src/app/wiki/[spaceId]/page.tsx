@@ -12,9 +12,13 @@ import { AppShell } from "@/components/cmc/app-shell";
 import { getBranding } from "@/lib/branding";
 import { getMyAccess, hasPermission } from "@/lib/access";
 import { authedApiFetch, ApiError } from "@/lib/server-api";
+import { getTranslations } from "next-intl/server";
 import { WikiWorkspace } from "./wiki-workspace";
 
-export const metadata: Metadata = { title: "Knowledge Base" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("wiki");
+  return { title: t("metaTitle") };
+}
 
 async function fetchSpace(id: string): Promise<WikiSpace | null> {
   try {
@@ -46,6 +50,8 @@ export default async function WikiSpacePage({
   const { page: initialPageId } = await searchParams;
   const session = await auth();
   const { copy } = await getBranding();
+  const t = await getTranslations("wiki");
+  const tc = await getTranslations("common");
   const access = await getMyAccess();
   const space = await fetchSpace(spaceId);
   if (!space) notFound();
@@ -54,10 +60,10 @@ export default async function WikiSpacePage({
   return (
     <AppShell
       active="wiki"
-      crumbs={["Knowledge", "Knowledge Base", space.name]}
+      crumbs={[t("crumbKnowledge"), t("crumbWikiBase"), space.name]}
       tenant={session?.tenantSlug}
       branding={{ orgName: copy.orgName, orgShort: copy.orgShort }}
-      user={{ name: session?.user?.name, role: "Operations" }}
+      user={{ name: session?.user?.name, role: tc("roleOps") }}
     >
       <div
         className="flex items-center gap-3 px-5 py-3"
@@ -68,7 +74,7 @@ export default async function WikiSpacePage({
           className="text-[12px] hover:underline"
           style={{ color: "var(--c-fg-3)" }}
         >
-          ← Spaces
+          {t("backToSpaces")}
         </Link>
         <span className="text-[12px]" style={{ color: "var(--c-fg-4)" }}>
           /

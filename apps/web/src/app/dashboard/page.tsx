@@ -20,10 +20,12 @@ import { PercentBar } from "@/components/cmc/percent-bar";
 import { TrendChart } from "@/components/cmc/trend-chart";
 import { SeverityBadge } from "@/components/cmc/incident-badges";
 import { AnomaliesWidget } from "./anomalies-widget";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = {
-  title: "Dashboard",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("dashboard");
+  return { title: t("metaTitle") };
+}
 
 const BAR_COLORS = [
   "var(--c-sev-1)",
@@ -89,6 +91,8 @@ async function fetchAnomalies(): Promise<AnomaliesResponse | null> {
 export default async function DashboardPage() {
   const session = await auth();
   const { copy } = await getBranding();
+  const t = await getTranslations("dashboard");
+  const tc = await getTranslations("common");
   const [stats, priority, trend, anomalies] = await Promise.all([
     fetchStats(),
     fetchPriority(),
@@ -105,16 +109,20 @@ export default async function DashboardPage() {
   const apiOk = stats !== null;
 
   const alertLabel =
-    sev(1) > 0 ? "CRITICAL" : sev(2) > 0 ? "ELEVATED ALERT" : "NOMINAL";
+    sev(1) > 0
+      ? t("statusCritical")
+      : sev(2) > 0
+        ? t("statusElevated")
+        : t("statusNominal");
   const alertChip = sev(1) > 0 ? 1 : sev(2) > 0 ? 2 : 3;
 
   return (
     <AppShell
       active="dashboard"
-      crumbs={["Dashboard", "National Overview"]}
+      crumbs={[t("crumbTitle"), t("crumbOverview")]}
       tenant={session?.tenantSlug}
       branding={{ orgName: copy.orgName, orgShort: copy.orgShort }}
-      user={{ name: session?.user?.name, role: "Operations Lead" }}
+      user={{ name: session?.user?.name, role: tc("roleOpsLead") }}
     >
       {/* Hero alert ribbon — real active-incident counts */}
       <div
@@ -135,44 +143,50 @@ export default async function DashboardPage() {
             </span>
           </div>
           <div className="mt-1 text-[11.5px]" style={{ color: "var(--c-fg-3)" }}>
-            {activeTotal} active incident{activeTotal === 1 ? "" : "s"} ·{" "}
-            {sev(1)} SEV-1 · {sev(2)} SEV-2 · {byRegion.length} region(s) affected
-            {!apiOk && " · (incident data unavailable)"}
+            {t("summary", {
+              active: activeTotal,
+              sev1: sev(1),
+              sev2: sev(2),
+              regions: byRegion.length,
+            })}
+            {!apiOk && ` · (${t("dataUnavailable")})`}
           </div>
         </div>
         <div className="flex-1" />
         <div className="flex gap-2">
           <button className="cmc-btn">
-            All Regions
+            {t("allRegions")}
             <ChevronDown size={11} strokeWidth={1.6} />
           </button>
           <Link href="/incidents" className="cmc-btn cmc-btn-primary">
-            View incidents
+            {t("viewIncidents")}
           </Link>
         </div>
       </div>
 
       {/* KPI strip — derived from /incidents/stats */}
       <div className="grid grid-cols-2 gap-2.5 px-5 pb-1.5 pt-3.5 md:grid-cols-3 lg:grid-cols-6">
-        <KPI label="Active Incidents" value={String(activeTotal)} accent="var(--c-sev-2)" />
-        <KPI label="SEV-1 Open" value={String(sev(1))} accent="var(--c-sev-1)" />
-        <KPI label="SEV-2 Open" value={String(sev(2))} accent="var(--c-sev-2)" />
-        <KPI label="SEV-3 Open" value={String(sev(3))} accent="var(--c-sev-3)" />
-        <KPI label="Regions Affected" value={String(byRegion.length)} accent="var(--c-info)" />
-        <KPI label="Incident Types" value={String(byType.length)} accent="var(--c-ok)" />
+        <KPI label={t("kpiActive")} value={String(activeTotal)} accent="var(--c-sev-2)" />
+        <KPI label={t("kpiSev1")} value={String(sev(1))} accent="var(--c-sev-1)" />
+        <KPI label={t("kpiSev2")} value={String(sev(2))} accent="var(--c-sev-2)" />
+        <KPI label={t("kpiSev3")} value={String(sev(3))} accent="var(--c-sev-3)" />
+        <KPI label={t("kpiRegions")} value={String(byRegion.length)} accent="var(--c-info)" />
+        <KPI label={t("kpiTypes")} value={String(byType.length)} accent="var(--c-ok)" />
       </div>
 
       {/* Incident trend — ClickHouse-backed historical series (P2.6 / ADR-0036) */}
       <div className="px-5 pt-2.5">
         <div className="cmc-card">
           <div className="cmc-card-header">
-            <span className="cmc-label">Incident Trend · 14d</span>
+            <span className="cmc-label">{t("trendTitle")}</span>
             <div className="flex-1" />
             <span
               className="cmc-mono text-[10.5px]"
               style={{ color: "var(--c-fg-3)" }}
             >
-              {trendOk ? `${trendTotal} reported` : "analytics unavailable"}
+              {trendOk
+                ? t("trendReported", { count: trendTotal })
+                : t("analyticsUnavailable")}
             </span>
           </div>
           <div className="p-3">
@@ -180,7 +194,7 @@ export default async function DashboardPage() {
               <TrendChart data={trend!.incidentTrend} />
             ) : (
               <div className="text-[11.5px]" style={{ color: "var(--c-fg-4)" }}>
-                Trend analytics unavailable.
+                {t("trendUnavailable")}
               </div>
             )}
           </div>
@@ -197,12 +211,12 @@ export default async function DashboardPage() {
         {/* Incidents by region */}
         <div className="cmc-card">
           <div className="cmc-card-header">
-            <span className="cmc-label">Active by Region</span>
+            <span className="cmc-label">{t("byRegion")}</span>
           </div>
           <div className="flex flex-col gap-2 p-3">
             {byRegion.length === 0 ? (
               <div className="text-[11.5px]" style={{ color: "var(--c-fg-4)" }}>
-                No active incidents.
+                {t("noActive")}
               </div>
             ) : (
               byRegion.map((r, i) => {
@@ -231,11 +245,11 @@ export default async function DashboardPage() {
         {/* Incidents by type */}
         <div className="cmc-card">
           <div className="cmc-card-header">
-            <span className="cmc-label">Active by Type</span>
+            <span className="cmc-label">{t("byType")}</span>
           </div>
           <div className="flex flex-col gap-1.5 p-3 text-[11px]">
             {byType.length === 0 ? (
-              <div style={{ color: "var(--c-fg-4)" }}>No active incidents.</div>
+              <div style={{ color: "var(--c-fg-4)" }}>{t("noActive")}</div>
             ) : (
               byType.map((t, i) => (
                 <div key={t.type} className="flex items-center gap-2">
@@ -256,16 +270,16 @@ export default async function DashboardPage() {
         {/* Priority incidents — real, most-severe-first */}
         <div className="cmc-card">
           <div className="cmc-card-header">
-            <span className="cmc-label">Priority Incidents</span>
+            <span className="cmc-label">{t("priority")}</span>
             <div className="flex-1" />
             <Link href="/incidents" className="cmc-btn cmc-btn-ghost text-[10.5px]">
-              All →
+              {t("all")}
             </Link>
           </div>
           <div className="flex flex-col">
             {priority.length === 0 ? (
               <div className="p-3 text-[11.5px]" style={{ color: "var(--c-fg-4)" }}>
-                No active incidents.
+                {t("noActive")}
               </div>
             ) : (
               priority.map((p, i) => (

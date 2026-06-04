@@ -36,6 +36,14 @@ export const users = pgTable(
     regionId: uuid("region_id").references(() => regions.id, {
       onDelete: "set null",
     }),
+    /**
+     * Persisted UI preferences (ADR-0078) so the choice follows the user across
+     * browsers/devices. NULL = no explicit choice (web falls back to light + RU).
+     * `ui_theme` ∈ light|dark|system; `ui_locale` ∈ ru|tg. The web seeds its
+     * cookies from these on login and PATCHes them on toggle.
+     */
+    uiTheme: varchar("ui_theme", { length: 8 }),
+    uiLocale: varchar("ui_locale", { length: 8 }),
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

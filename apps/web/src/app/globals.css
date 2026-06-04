@@ -9,8 +9,79 @@
    ============================================================ */
 
 @layer base {
+  /* ===== LIGHT THEME (default) — design tokens (hex), used via var(--c-*) ===== */
   :root {
-    /* Design tokens (hex) — used directly in `var(--c-*)`. */
+    color-scheme: light;
+
+    --c-bg-0: #f0f3f7;   /* page background */
+    --c-bg-1: #ffffff;   /* sidebar / topbar chrome */
+    --c-bg-2: #ffffff;   /* cards / inputs */
+    --c-bg-3: #e9edf3;   /* chips / buttons / active nav */
+    --c-bg-4: #dde3ec;   /* hover */
+
+    --c-line-1: #e4e8ef;
+    --c-line-2: #d6dce6;
+    --c-line-3: #c2cad8;
+
+    --c-fg-1: #0f1722;   /* primary text */
+    --c-fg-2: #3f4a5a;   /* secondary */
+    --c-fg-3: #697483;   /* muted */
+    --c-fg-4: #97a1b0;   /* faint / placeholder */
+
+    --c-accent: #2f6fe0;
+    --c-accent-2: #2457c4;
+    --c-accent-soft: rgba(47, 111, 224, 0.1);
+    --c-accent-line: rgba(47, 111, 224, 0.38);
+
+    --c-sev-1: #d92d4e;
+    --c-sev-1-soft: rgba(217, 45, 78, 0.1);
+    --c-sev-2: #d97706;
+    --c-sev-2-soft: rgba(217, 119, 6, 0.12);
+    --c-sev-3: #b88407;
+    --c-sev-3-soft: rgba(184, 132, 7, 0.13);
+    --c-ok: #0f9d77;
+    --c-ok-soft: rgba(15, 157, 119, 0.12);
+    --c-info: #0a91d4;
+    --c-info-soft: rgba(10, 145, 212, 0.12);
+    --c-violet: #7c5cf0;
+    --c-violet-soft: rgba(124, 92, 240, 0.12);
+
+    --c-chart-1: #2f6fe0;
+    --c-chart-2: #0f9d77;
+    --c-chart-3: #d97706;
+    --c-chart-4: #7c5cf0;
+    --c-chart-5: #e0428a;
+    --c-chart-6: #0a91d4;
+    --c-chart-7: #5a9e16;
+    --c-chart-8: #e0455f;
+
+    /* shadcn/ui HSL tokens — light */
+    --background: 215 33% 96%;
+    --foreground: 213 40% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 213 40% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 213 40% 10%;
+    --primary: 218 75% 53%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 217 25% 93%;
+    --secondary-foreground: 213 40% 10%;
+    --muted: 217 22% 90%;
+    --muted-foreground: 215 14% 45%;
+    --accent: 217 25% 93%;
+    --accent-foreground: 213 40% 10%;
+    --destructive: 348 68% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 217 20% 86%;
+    --input: 217 20% 86%;
+    --ring: 218 75% 53%;
+    --radius: 0.5rem;
+  }
+
+  /* ===== DARK THEME — original dark-first palette (toggle adds `.dark`) ===== */
+  .dark {
+    color-scheme: dark;
+
     --c-bg-0: #07090d;
     --c-bg-1: #0b0e14;
     --c-bg-2: #0f131b;
@@ -53,28 +124,26 @@
     --c-chart-7: #84cc16;
     --c-chart-8: #fb7185;
 
-    /* shadcn/ui HSL tokens — mapped to the design palette so existing
-       shadcn-styled components ride the same system. Dark by default. */
-    --background: 222 28% 5%;          /* ≈ --c-bg-0 */
-    --foreground: 217 25% 93%;         /* ≈ --c-fg-1 */
-    --card: 220 28% 8%;                /* ≈ --c-bg-2 */
+    /* shadcn/ui HSL tokens — dark */
+    --background: 222 28% 5%;
+    --foreground: 217 25% 93%;
+    --card: 220 28% 8%;
     --card-foreground: 217 25% 93%;
     --popover: 220 28% 8%;
     --popover-foreground: 217 25% 93%;
-    --primary: 220 82% 65%;            /* ≈ --c-accent */
+    --primary: 220 82% 65%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 220 25% 11%;          /* ≈ --c-bg-3 */
+    --secondary: 220 25% 11%;
     --secondary-foreground: 217 25% 93%;
-    --muted: 222 28% 15%;              /* ≈ --c-bg-4 */
-    --muted-foreground: 217 11% 49%;   /* ≈ --c-fg-3 */
+    --muted: 222 28% 15%;
+    --muted-foreground: 217 11% 49%;
     --accent: 222 28% 15%;
     --accent-foreground: 217 25% 93%;
-    --destructive: 351 86% 58%;        /* ≈ --c-sev-1 */
+    --destructive: 351 86% 58%;
     --destructive-foreground: 0 0% 100%;
-    --border: 220 26% 15%;             /* ≈ --c-line-1 */
+    --border: 220 26% 15%;
     --input: 220 28% 15%;
     --ring: 220 82% 65%;
-    --radius: 0.5rem;
   }
 
   * {
@@ -180,7 +249,7 @@
     background: var(--c-accent);
     color: #fff;
     border-color: var(--c-accent-2);
-    box-shadow: 0 1px 0 rgba(255,255,255,0.18) inset, 0 1px 2px rgba(0,0,0,0.5);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.15) inset, 0 1px 2px rgba(15,23,42,0.2);
   }
   .cmc-btn-primary:hover { background: var(--c-accent-2); }
   .cmc-btn-ghost {

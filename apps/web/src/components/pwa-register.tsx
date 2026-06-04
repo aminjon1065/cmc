@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { createIncidentAction } from "@/app/incidents/actions";
 import {
   countQueuedIncidents,
@@ -18,6 +19,7 @@ export const QUEUE_EVENT = "cmc:queue-changed";
  * `createIncidentAction` server action. Mounted once in the root layout.
  */
 export function PwaRegister() {
+  const t = useTranslations("pwa");
   const [online, setOnline] = useState(true);
   const [pending, setPending] = useState(0);
 
@@ -81,17 +83,22 @@ export function PwaRegister() {
 
   const message = !online
     ? pending > 0
-      ? `Офлайн — ${pending} отчёт(ов) в очереди`
-      : "Офлайн — приложение доступно"
-    : `Синхронизация… ${pending} в очереди`;
+      ? t("offlineQueued", { count: pending })
+      : t("offlineAvailable")
+    : t("syncing", { count: pending });
 
   return (
     <div
       className="fixed bottom-3 left-1/2 z-50 -translate-x-1/2 rounded-full px-3 py-1.5 text-xs shadow-lg"
-      style={{
-        background: online ? "#1b2430" : "#b45309",
-        color: "#e5edf7",
-      }}
+      style={
+        online
+          ? {
+              background: "var(--c-bg-2)",
+              color: "var(--c-fg-1)",
+              border: "0.5px solid var(--c-line-2)",
+            }
+          : { background: "var(--c-sev-2)", color: "#1f1300" }
+      }
       role="status"
       aria-live="polite"
     >

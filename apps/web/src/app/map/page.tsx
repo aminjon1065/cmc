@@ -8,10 +8,12 @@ import {
 import { AppShell } from "@/components/cmc/app-shell";
 import { getBranding } from "@/lib/branding";
 import { MapView } from "@/components/cmc/map-view";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = {
-  title: "GIS Map",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("map");
+  return { title: t("metaTitle") };
+}
 
 async function fetchLayers(): Promise<GisLayerResponse[]> {
   try {
@@ -26,15 +28,17 @@ async function fetchLayers(): Promise<GisLayerResponse[]> {
 export default async function MapPage() {
   const session = await auth();
   const { copy } = await getBranding();
+  const t = await getTranslations("map");
+  const tc = await getTranslations("common");
   const layers = await fetchLayers();
 
   return (
     <AppShell
       active="gis"
-      crumbs={["GIS", "Map"]}
+      crumbs={[t("crumbGis"), t("crumbMap")]}
       tenant={session?.tenantSlug}
       branding={{ orgName: copy.orgName, orgShort: copy.orgShort }}
-      user={{ name: session?.user?.name, role: "Operations Lead" }}
+      user={{ name: session?.user?.name, role: tc("roleOpsLead") }}
     >
       <MapView layers={layers} />
     </AppShell>

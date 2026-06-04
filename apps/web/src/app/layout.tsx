@@ -2,10 +2,23 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Onest, JetBrains_Mono } from "next/font/google";
 import { getPublicBranding } from "@/lib/branding";
 import { PwaRegister } from "@/components/pwa-register";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getMessages } from "next-intl/server";
+import { cookies } from "next/headers";
+import { THEME_COOKIE, explicitDark } from "@/lib/theme";
 import "./globals.css";
 
-/** PWA theme color (P4.4 / ADR-0075). */
-export const viewport: Viewport = { themeColor: "#0b0f14" };
+/** Browser UI theme color — light is the default theme (ADR-0077). */
+export const viewport: Viewport = { themeColor: "#f0f3f7" };
+
+/**
+ * Pre-paint theme script (ADR-0078): applies the `.dark` class from the `theme`
+ * cookie before first paint, resolving `system` via `matchMedia` so there's no
+ * flash for system/dark users. The server also sets the class for an explicit
+ * `dark` cookie below (zero-flash for that common case); this reconciles the
+ * rest.
+ */
+const THEME_INIT_SCRIPT = `(function(){try{var m=document.cookie.match(/(?:^|; )theme=([^;]+)/);var t=m?decodeURIComponent(m[1]):'light';var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',d);}catch(e){}})();`;
 
 const display = Geist({
   subsets: ["latin", "cyrillic"],
@@ -41,16 +54,21 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const { localeDefault } = await getPublicBranding();
+  const locale = await getLocale();
+  const messages = await getMessages();
+  const dark = explicitDark((await cookies()).get(THEME_COOKIE)?.value);
   return (
     <html
-      lang={localeDefault}
-      className={`dark ${display.variable} ${ui.variable} ${mono.variable}`}
+      lang={locale}
+      className={`${dark ? "dark " : ""}${display.variable} ${ui.variable} ${mono.variable}`}
       suppressHydrationWarning
     >
       <body className="min-h-screen antialiased">
-        {children}
-        <PwaRegister />
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          {children}
+          <PwaRegister />
+        </NextIntlClientProvider>
       </body>
     </html>
   );

@@ -12,11 +12,15 @@ import { getBranding } from "@/lib/branding";
 import { getMyAccess, hasPermission } from "@/lib/access";
 import { authedApiFetch, ApiError } from "@/lib/server-api";
 import { fetchRegions, regionNameMap } from "@/lib/regions";
+import { getTranslations } from "next-intl/server";
 import { SeverityBadge, StatusBadge } from "@/components/cmc/incident-badges";
 import { IncidentActions } from "./incident-actions";
 import { IncidentVideo } from "./incident-video";
 
-export const metadata: Metadata = { title: "Incident" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("incidents");
+  return { title: t("metaDetail") };
+}
 
 function fmt(ts: string | null): string {
   return ts ? new Date(ts).toISOString().slice(0, 16).replace("T", " ") : "—";
@@ -43,6 +47,7 @@ export default async function IncidentDetailPage({
   const { id } = await params;
   const session = await auth();
   const { copy } = await getBranding();
+  const t = await getTranslations("incidents");
   const access = await getMyAccess();
 
   let detail;
@@ -79,17 +84,17 @@ export default async function IncidentDetailPage({
   return (
     <AppShell
       active="cases"
-      crumbs={["Operations", "Incidents", detail.summary]}
+      crumbs={[t("crumbOps"), t("crumbIncidents"), detail.summary]}
       tenant={session?.tenantSlug}
       branding={{ orgName: copy.orgName, orgShort: copy.orgShort }}
-      user={{ name: session?.user?.name, role: "Operations" }}
+      user={{ name: session?.user?.name, role: t("crumbOps") }}
     >
       <div
         className="flex items-center gap-3 px-5 py-4"
         style={{ borderBottom: "0.5px solid var(--c-line-2)" }}
       >
         <Link href="/incidents" className="cmc-btn cmc-btn-ghost">
-          ← All
+          {t("detailBack")}
         </Link>
         <SeverityBadge severity={detail.severity} />
         <StatusBadge status={detail.status} />
@@ -113,32 +118,32 @@ export default async function IncidentDetailPage({
         {/* Details */}
         <div className="cmc-card lg:col-span-2">
           <div className="cmc-card-header">
-            <span className="cmc-label">Details</span>
+            <span className="cmc-label">{t("detailDetails")}</span>
           </div>
           <div className="flex flex-col p-4">
-            <Row k="Type" v={detail.type} />
-            <Row k="Region" v={detail.region} />
+            <Row k={t("dType")} v={detail.type} />
+            <Row k={t("dRegion")} v={detail.region} />
             <Row
-              k="Zone"
+              k={t("dZone")}
               v={
                 detail.regionId ? (regionName.get(detail.regionId) ?? "—") : "—"
               }
             />
-            <Row k="Source" v={detail.source ?? "—"} />
-            <Row k="Occurred at" v={fmt(detail.occurredAt)} />
+            <Row k={t("dSource")} v={detail.source ?? "—"} />
+            <Row k={t("dOccurred")} v={fmt(detail.occurredAt)} />
             <Row
-              k="Location"
+              k={t("dLocation")}
               v={
                 detail.latitude != null && detail.longitude != null
                   ? `${detail.latitude}, ${detail.longitude}`
                   : "—"
               }
             />
-            <Row k="Reported by" v={detail.reportedBy?.name ?? "—"} />
-            <Row k="Assigned to" v={detail.assignedTo?.name ?? "Unassigned"} />
-            <Row k="Resolved at" v={fmt(detail.resolvedAt)} />
+            <Row k={t("dReportedBy")} v={detail.reportedBy?.name ?? "—"} />
+            <Row k={t("dAssignedTo")} v={detail.assignedTo?.name ?? t("dUnassigned")} />
+            <Row k={t("dResolvedAt")} v={fmt(detail.resolvedAt)} />
             <Row
-              k="Description"
+              k={t("dDescription")}
               v={
                 detail.description ? (
                   <span style={{ whiteSpace: "pre-wrap" }}>
@@ -155,7 +160,7 @@ export default async function IncidentDetailPage({
         {/* Actions */}
         <div className="cmc-card">
           <div className="cmc-card-header">
-            <span className="cmc-label">Actions</span>
+            <span className="cmc-label">{t("detailActions")}</span>
           </div>
           <div className="p-4">
             <IncidentActions
@@ -173,7 +178,7 @@ export default async function IncidentDetailPage({
         {canVideo && (
           <div className="cmc-card lg:col-span-3">
             <div className="cmc-card-header">
-              <span className="cmc-label">Video</span>
+              <span className="cmc-label">{t("detailVideo")}</span>
             </div>
             <div className="p-4">
               <IncidentVideo

@@ -306,6 +306,29 @@ export const SYSTEM_ROLES: readonly SystemRoleDef[] = [
     ],
   },
   {
+    slug: "analyst",
+    name: "Analyst",
+    description:
+      "Read-only analytics & intelligence: incidents, cases, GIS, monitoring, search, and AI assistance.",
+    permissions: [
+      "document:read",
+      "session:read",
+      "incident:read",
+      "case:read",
+      "gis_layer:read",
+      "folder:read",
+      "workflow:read",
+      "wiki:read",
+      "import:read",
+      "chat:read",
+      "video:read",
+      "monitoring:read",
+      "media:read",
+      "region:read",
+      "llm:use",
+    ],
+  },
+  {
     slug: "hq",
     name: "Head Office",
     description:

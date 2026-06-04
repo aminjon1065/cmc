@@ -7,11 +7,15 @@ import {
 import { AppShell } from "@/components/cmc/app-shell";
 import { getBranding } from "@/lib/branding";
 import { authedApiFetch } from "@/lib/server-api";
+import { getTranslations } from "next-intl/server";
 import { getPreferencesAction } from "./actions";
 import { NotificationsView } from "./notifications-view";
 import { NotificationPreferences } from "./notification-preferences";
 
-export const metadata: Metadata = { title: "Notifications" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("notifications");
+  return { title: t("metaTitle") };
+}
 
 async function fetchNotifications(): Promise<NotificationSummary[]> {
   try {

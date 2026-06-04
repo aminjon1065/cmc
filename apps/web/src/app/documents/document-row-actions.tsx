@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { deleteDocumentAction, getDownloadUrlAction } from "./actions";
 
 export function DocumentRowActions({
@@ -12,6 +13,7 @@ export function DocumentRowActions({
   documentName: string;
 }) {
   const router = useRouter();
+  const t = useTranslations("documents");
   const [busy, setBusy] = useState<"download" | "delete" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,7 +32,7 @@ export function DocumentRowActions({
   }
 
   async function onDelete() {
-    if (!confirm(`Delete "${documentName}"? This cannot be undone.`)) return;
+    if (!confirm(t("confirmDelete", { name: documentName }))) return;
     setBusy("delete");
     setError(null);
     const res = await deleteDocumentAction(documentId);
@@ -50,7 +52,7 @@ export function DocumentRowActions({
         disabled={busy !== null}
         className="rounded-md border border-input bg-background px-2.5 py-1 text-xs font-medium hover:bg-accent disabled:opacity-50"
       >
-        {busy === "download" ? "…" : "Download"}
+        {busy === "download" ? "…" : t("download")}
       </button>
       <button
         type="button"
@@ -58,7 +60,7 @@ export function DocumentRowActions({
         disabled={busy !== null}
         className="rounded-md border border-destructive/30 bg-destructive/5 px-2.5 py-1 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50"
       >
-        {busy === "delete" ? "…" : "Delete"}
+        {busy === "delete" ? "…" : t("delete")}
       </button>
       {error && (
         <span className="text-xs text-destructive" role="alert">

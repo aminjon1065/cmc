@@ -3,13 +3,14 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { INCIDENT_STATUSES, type Region } from "@cmc/contracts";
-import { STATUS_LABEL } from "@/components/cmc/incident-badges";
+import { useTranslations } from "next-intl";
 
 const KEYS = ["status", "severity", "region", "regionId", "type", "q"];
 
 export function IncidentFilters({ regions }: { regions: Region[] }) {
   const router = useRouter();
   const sp = useSearchParams();
+  const t = useTranslations("incidents");
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -27,30 +28,30 @@ export function IncidentFilters({ regions }: { regions: Region[] }) {
   return (
     <form onSubmit={onSubmit} className="flex flex-wrap items-end gap-2">
       <label className="flex flex-col gap-1">
-        <span className="cmc-label">Status</span>
+        <span className="cmc-label">{t("filterStatus")}</span>
         <select
           name="status"
           className="cmc-input"
           style={{ width: 130 }}
           defaultValue={sp.get("status") ?? ""}
         >
-          <option value="">All</option>
+          <option value="">{t("filterAll")}</option>
           {INCIDENT_STATUSES.map((s) => (
             <option key={s} value={s}>
-              {STATUS_LABEL[s]}
+              {t(`status.${s}`)}
             </option>
           ))}
         </select>
       </label>
       <label className="flex flex-col gap-1">
-        <span className="cmc-label">Severity</span>
+        <span className="cmc-label">{t("filterSeverity")}</span>
         <select
           name="severity"
           className="cmc-input"
           style={{ width: 90 }}
           defaultValue={sp.get("severity") ?? ""}
         >
-          <option value="">All</option>
+          <option value="">{t("filterAll")}</option>
           {[1, 2, 3, 4, 5].map((s) => (
             <option key={s} value={s}>
               SEV-{s}
@@ -59,7 +60,7 @@ export function IncidentFilters({ regions }: { regions: Region[] }) {
         </select>
       </label>
       <label className="flex flex-col gap-1">
-        <span className="cmc-label">Region</span>
+        <span className="cmc-label">{t("filterRegion")}</span>
         <input
           name="region"
           className="cmc-input"
@@ -69,14 +70,14 @@ export function IncidentFilters({ regions }: { regions: Region[] }) {
       </label>
       {regions.length > 0 && (
         <label className="flex flex-col gap-1">
-          <span className="cmc-label">Zone</span>
+          <span className="cmc-label">{t("filterZone")}</span>
           <select
             name="regionId"
             className="cmc-input"
             style={{ width: 150 }}
             defaultValue={sp.get("regionId") ?? ""}
           >
-            <option value="">All zones</option>
+            <option value="">{t("filterAllZones")}</option>
             {regions.map((r) => (
               <option key={r.id} value={r.id}>
                 {r.name}
@@ -86,7 +87,7 @@ export function IncidentFilters({ regions }: { regions: Region[] }) {
         </label>
       )}
       <label className="flex flex-col gap-1">
-        <span className="cmc-label">Type</span>
+        <span className="cmc-label">{t("filterType")}</span>
         <input
           name="type"
           className="cmc-input"
@@ -95,20 +96,20 @@ export function IncidentFilters({ regions }: { regions: Region[] }) {
         />
       </label>
       <label className="flex flex-1 flex-col gap-1" style={{ minWidth: 160 }}>
-        <span className="cmc-label">Search summary</span>
+        <span className="cmc-label">{t("filterSearch")}</span>
         <input
           name="q"
           className="cmc-input"
           defaultValue={sp.get("q") ?? ""}
-          placeholder="keyword…"
+          placeholder={t("filterKeyword")}
         />
       </label>
       <button type="submit" className="cmc-btn">
-        Filter
+        {t("filterApply")}
       </button>
       {hasFilters && (
         <Link href="/incidents" className="cmc-btn">
-          Clear
+          {t("filterClear")}
         </Link>
       )}
     </form>

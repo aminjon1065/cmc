@@ -8,44 +8,52 @@ import { AppShell } from "@/components/cmc/app-shell";
 import { getBranding } from "@/lib/branding";
 import { getMyAccess, hasPermission } from "@/lib/access";
 import { authedApiFetch, ApiError } from "@/lib/server-api";
+import { getTranslations } from "next-intl/server";
 import { MediaWorkspace } from "./media-workspace";
 
-export const metadata: Metadata = { title: "Media" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("media");
+  return { title: t("metaTitle") };
+}
+
+type AssetsFetchError = {
+  ok: false;
+  errorKey: "errShape" | "errApi" | "errForbidden" | "errLoad";
+  status?: number;
+};
 
 async function fetchAssets(): Promise<
-  { ok: true; assets: MediaAsset[] } | { ok: false; error: string }
+  { ok: true; assets: MediaAsset[] } | AssetsFetchError
 > {
   try {
     const raw = await authedApiFetch<unknown>("/media/assets");
     const parsed = MediaAssetsListResponseSchema.safeParse(raw);
-    if (!parsed.success) return { ok: false, error: "Unexpected API shape." };
+    if (!parsed.success) return { ok: false, errorKey: "errShape" };
     return { ok: true, assets: parsed.data.assets };
   } catch (err) {
     if (err instanceof ApiError) {
-      return {
-        ok: false,
-        error:
-          err.status === 403
-            ? "You don't have permission to view media."
-            : `API ${err.status}`,
-      };
+      return err.status === 403
+        ? { ok: false, errorKey: "errForbidden" }
+        : { ok: false, errorKey: "errApi", status: err.status };
     }
-    return { ok: false, error: "Failed to load media." };
+    return { ok: false, errorKey: "errLoad" };
   }
 }
 
 export default async function MediaPage() {
   const session = await auth();
   const { copy } = await getBranding();
+  const t = await getTranslations("media");
+  const tc = await getTranslations("common");
   const [result, access] = await Promise.all([fetchAssets(), getMyAccess()]);
 
   return (
     <AppShell
       active="media"
-      crumbs={["Knowledge", "Media"]}
+      crumbs={[t("crumbKnowledge"), t("crumbMedia")]}
       tenant={session?.tenantSlug}
       branding={{ orgName: copy.orgName, orgShort: copy.orgShort }}
-      user={{ name: session?.user?.name, role: "Operations" }}
+      user={{ name: session?.user?.name, role: tc("roleOps") }}
     >
       {!result.ok ? (
         <div className="p-5">
@@ -59,7 +67,9 @@ export default async function MediaPage() {
                   "0.5px solid color-mix(in srgb, var(--c-sev-1) 30%, transparent)",
               }}
             >
-              {result.error}
+              {result.errorKey === "errApi"
+                ? t("errApi", { status: result.status ?? 0 })
+                : t(result.errorKey)}
             </div>
           </div>
         </div>

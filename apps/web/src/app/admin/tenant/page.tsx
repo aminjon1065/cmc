@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getTranslations } from "next-intl/server";
 import { auth } from "@/auth";
 import {
   TenantSettingsResponseSchema,
@@ -10,49 +11,61 @@ import { authedApiFetch, ApiError } from "@/lib/server-api";
 import { TenantIdentityForm } from "./tenant-identity-form";
 import { BrandingForm } from "./branding-form";
 
-export const metadata: Metadata = { title: "Tenant · Administration" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("admin");
+  return { title: t("tenant.metaTitle") };
+}
+
+type TenantFetchError = {
+  ok: false;
+  errorKey: "errShape" | "errApi" | "errLoad";
+  status?: number;
+};
 
 async function fetchTenant(): Promise<
-  { ok: true; tenant: TenantSettingsResponse } | { ok: false; error: string }
+  { ok: true; tenant: TenantSettingsResponse } | TenantFetchError
 > {
   try {
     const raw = await authedApiFetch<unknown>("/tenant");
     const parsed = TenantSettingsResponseSchema.safeParse(raw);
-    if (!parsed.success) return { ok: false, error: "Unexpected API shape." };
+    if (!parsed.success) return { ok: false, errorKey: "errShape" };
     return { ok: true, tenant: parsed.data };
   } catch (err) {
-    if (err instanceof ApiError) return { ok: false, error: `API ${err.status}` };
-    return { ok: false, error: "Failed to load tenant." };
+    if (err instanceof ApiError)
+      return { ok: false, errorKey: "errApi", status: err.status };
+    return { ok: false, errorKey: "errLoad" };
   }
 }
 
 export default async function AdminTenantPage() {
   const session = await auth();
   const branding = await getBranding();
+  const t = await getTranslations("admin");
+  const tc = await getTranslations("common");
   const result = await fetchTenant();
 
   return (
     <AppShell
       active="admin"
-      crumbs={["Administration", "Tenant"]}
+      crumbs={[t("crumbAdministration"), t("crumbTenant")]}
       tenant={session?.tenantSlug}
       branding={{ orgName: branding.copy.orgName, orgShort: branding.copy.orgShort }}
-      user={{ name: session?.user?.name, role: "Administrator" }}
+      user={{ name: session?.user?.name, role: tc("roleAdmin") }}
     >
       <div
         className="flex items-center gap-5 px-5 py-4"
         style={{ borderBottom: "0.5px solid var(--c-line-2)" }}
       >
         <div>
-          <div className="cmc-label mb-1">Administration · Tenant</div>
+          <div className="cmc-label mb-1">{t("tenant.kicker")}</div>
           <div
             className="cmc-display text-[22px] font-semibold"
             style={{ letterSpacing: "-0.01em" }}
           >
-            Tenant Settings
+            {t("tenant.title")}
           </div>
           <div className="mt-1 text-[11.5px]" style={{ color: "var(--c-fg-3)" }}>
-            Identity and branding for this tenant.
+            {t("tenant.subtitle")}
           </div>
         </div>
       </div>
@@ -61,7 +74,7 @@ export default async function AdminTenantPage() {
         {/* Identity */}
         <div className="cmc-card">
           <div className="cmc-card-header">
-            <span className="cmc-label">Identity</span>
+            <span className="cmc-label">{t("tenant.identitySection")}</span>
           </div>
           <div className="p-4">
             {result.ok ? (
@@ -79,7 +92,9 @@ export default async function AdminTenantPage() {
                     "0.5px solid color-mix(in srgb, var(--c-sev-1) 30%, transparent)",
                 }}
               >
-                {result.error}
+                {result.errorKey === "errApi"
+                  ? t("tenant.errApi", { status: result.status ?? 0 })
+                  : t(`tenant.${result.errorKey}`)}
               </div>
             )}
           </div>
@@ -88,7 +103,7 @@ export default async function AdminTenantPage() {
         {/* Branding */}
         <div className="cmc-card">
           <div className="cmc-card-header">
-            <span className="cmc-label">Branding</span>
+            <span className="cmc-label">{t("tenant.brandingSection")}</span>
           </div>
           <div className="p-4">
             <BrandingForm

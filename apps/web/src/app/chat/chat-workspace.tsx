@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import type { ChatChannel, ChatMessage } from "@cmc/contracts";
 import {
   createChannelAction,
@@ -26,6 +27,7 @@ export function ChatWorkspace({
   canManage: boolean;
   currentUserId: string | null;
 }) {
+  const t = useTranslations("chat");
   const [channels, setChannels] = useState<ChatChannel[]>(initialChannels);
   const [active, setActive] = useState<string | null>(
     initialChannels[0]?.id ?? null,
@@ -83,7 +85,7 @@ export function ChatWorkspace({
   }
 
   async function del(id: string) {
-    if (!confirm("Delete this message?")) return;
+    if (!confirm(t("confirmDeleteMessage"))) return;
     const res = await deleteMessageAction(id);
     if (!res.ok) return setMsg({ kind: "err", text: res.error });
     if (active) void loadMessages(active);
@@ -125,8 +127,8 @@ export function ChatWorkspace({
     return canManage || (!!currentUserId && m.authorId === currentUserId);
   }
   function who(authorId: string | null): string {
-    if (authorId && authorId === currentUserId) return "You";
-    if (authorId) return `User ${authorId.slice(0, 8)}`;
+    if (authorId && authorId === currentUserId) return t("you");
+    if (authorId) return t("userPrefix", { id: authorId.slice(0, 8) });
     return "—";
   }
 
@@ -143,7 +145,7 @@ export function ChatWorkspace({
           className="flex items-center gap-2 px-3 py-2.5"
           style={{ borderBottom: "0.5px solid var(--c-line-2)" }}
         >
-          <span className="cmc-label">Channels</span>
+          <span className="cmc-label">{t("channels")}</span>
           <div className="flex-1" />
           {canManage && (
             <button
@@ -161,20 +163,20 @@ export function ChatWorkspace({
               className="cmc-input"
               style={{ flex: 1, padding: "2px 6px", fontSize: 12 }}
               autoFocus
-              placeholder="channel name"
+              placeholder={t("channelNamePlaceholder")}
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && createChannel()}
             />
             <button className="cmc-btn" style={{ padding: "1px 8px" }} onClick={createChannel}>
-              Add
+              {t("add")}
             </button>
           </div>
         )}
         <div className="flex-1 overflow-auto py-1">
           {channels.length === 0 ? (
             <div className="px-3 py-3 text-[11px]" style={{ color: "var(--c-fg-3)" }}>
-              No channels yet.
+              {t("noChannels")}
             </div>
           ) : (
             channels.map((c) => (
@@ -205,7 +207,7 @@ export function ChatWorkspace({
           style={{ borderBottom: "0.5px solid var(--c-line-2)" }}
         >
           <span className="cmc-display text-[14px] font-semibold" style={{ color: "var(--c-fg-1)" }}>
-            {activeChannel ? `# ${activeChannel.name}` : "Select a channel"}
+            {activeChannel ? `# ${activeChannel.name}` : t("selectChannel")}
           </span>
         </div>
 
@@ -229,7 +231,7 @@ export function ChatWorkspace({
           <div className="flex flex-col gap-2.5">
             {messages.length === 0 ? (
               <div className="text-[12px]" style={{ color: "var(--c-fg-3)" }}>
-                {activeChannel ? "No messages yet." : ""}
+                {activeChannel ? t("noMessages") : ""}
               </div>
             ) : (
               messages.map((m) => (
@@ -256,7 +258,7 @@ export function ChatWorkspace({
             <textarea
               className="cmc-input"
               style={{ flex: 1, minHeight: 38, padding: "8px 10px" }}
-              placeholder={`Message # ${activeChannel.name}`}
+              placeholder={t("messagePlaceholder", { channel: activeChannel.name })}
               value={body}
               onChange={(e) => setBody(e.target.value)}
               onKeyDown={(e) => {
@@ -267,7 +269,7 @@ export function ChatWorkspace({
               }}
             />
             <button className="cmc-btn" onClick={send} disabled={busy || !body.trim()}>
-              Send
+              {t("send")}
             </button>
           </div>
         )}
@@ -283,7 +285,7 @@ export function ChatWorkspace({
             className="flex items-center gap-2 px-3 py-2.5"
             style={{ borderBottom: "0.5px solid var(--c-line-2)" }}
           >
-            <span className="cmc-label">Thread</span>
+            <span className="cmc-label">{t("thread")}</span>
             <div className="flex-1" />
             <button
               className="text-[12px]"
@@ -296,7 +298,7 @@ export function ChatWorkspace({
           <div className="flex-1 overflow-auto px-3 py-2">
             {replies.length === 0 ? (
               <div className="text-[11px]" style={{ color: "var(--c-fg-3)" }}>
-                No replies yet.
+                {t("noReplies")}
               </div>
             ) : (
               <div className="flex flex-col gap-2">
@@ -318,13 +320,13 @@ export function ChatWorkspace({
               <input
                 className="cmc-input"
                 style={{ flex: 1, padding: "4px 8px", fontSize: 12 }}
-                placeholder="Reply…"
+                placeholder={t("replyPlaceholder")}
                 value={replyBody}
                 onChange={(e) => setReplyBody(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && sendReply()}
               />
               <button className="cmc-btn" style={{ padding: "2px 8px" }} onClick={sendReply} disabled={busy}>
-                Send
+                {t("send")}
               </button>
             </div>
           )}
@@ -351,6 +353,7 @@ function MessageRow({
   onThread: () => void;
   onDelete: () => void;
 }) {
+  const t = useTranslations("chat");
   const [showPicker, setShowPicker] = useState(false);
   return (
     <div className="group flex flex-col gap-1">
@@ -363,7 +366,7 @@ function MessageRow({
         </span>
         {m.edited && (
           <span className="text-[9.5px]" style={{ color: "var(--c-fg-4)" }}>
-            (edited)
+            {t("edited")}
           </span>
         )}
         <div className="flex-1" />
@@ -372,7 +375,7 @@ function MessageRow({
             className="text-[11px] opacity-0 group-hover:opacity-100"
             style={{ color: "var(--c-fg-3)" }}
             onClick={() => setShowPicker((s) => !s)}
-            title="React"
+            title={t("react")}
           >
             ☺+
           </button>
@@ -382,7 +385,7 @@ function MessageRow({
             className="text-[11px] opacity-0 group-hover:opacity-100"
             style={{ color: "var(--c-fg-4)" }}
             onClick={onDelete}
-            title="Delete"
+            title={t("delete")}
           >
             ✕
           </button>
@@ -434,7 +437,10 @@ function MessageRow({
             style={{ color: "var(--c-accent)" }}
             onClick={onThread}
           >
-            💬 {m.replyCount} {m.replyCount === 1 ? "reply" : "replies"}
+            💬{" "}
+            {m.replyCount === 1
+              ? t("replyCountOne", { count: m.replyCount })
+              : t("replyCountOther", { count: m.replyCount })}
           </button>
         ) : (
           canWrite && (
@@ -443,7 +449,7 @@ function MessageRow({
               style={{ color: "var(--c-fg-3)" }}
               onClick={onThread}
             >
-              Reply in thread
+              {t("replyInThread")}
             </button>
           )
         )}

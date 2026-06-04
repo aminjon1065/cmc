@@ -9,60 +9,68 @@ import { AppShell } from "@/components/cmc/app-shell";
 import { getBranding } from "@/lib/branding";
 import { getMyAccess, hasPermission } from "@/lib/access";
 import { authedApiFetch, ApiError } from "@/lib/server-api";
+import { getTranslations } from "next-intl/server";
 import { NewSpaceButton } from "./new-space-button";
 
-export const metadata: Metadata = { title: "Knowledge Base" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("wiki");
+  return { title: t("metaTitle") };
+}
+
+type SpacesFetchError = {
+  ok: false;
+  errorKey: "errShape" | "errApi" | "errForbidden" | "errLoad";
+  status?: number;
+};
 
 async function fetchSpaces(): Promise<
-  { ok: true; spaces: WikiSpace[] } | { ok: false; error: string }
+  { ok: true; spaces: WikiSpace[] } | SpacesFetchError
 > {
   try {
     const raw = await authedApiFetch<unknown>("/wiki/spaces");
     const parsed = WikiSpacesListResponseSchema.safeParse(raw);
-    if (!parsed.success) return { ok: false, error: "Unexpected API shape." };
+    if (!parsed.success) return { ok: false, errorKey: "errShape" };
     return { ok: true, spaces: parsed.data.spaces };
   } catch (err) {
     if (err instanceof ApiError) {
-      return {
-        ok: false,
-        error:
-          err.status === 403
-            ? "You don't have permission to view the knowledge base."
-            : `API ${err.status}`,
-      };
+      return err.status === 403
+        ? { ok: false, errorKey: "errForbidden" }
+        : { ok: false, errorKey: "errApi", status: err.status };
     }
-    return { ok: false, error: "Failed to load spaces." };
+    return { ok: false, errorKey: "errLoad" };
   }
 }
 
 export default async function WikiPage() {
   const session = await auth();
   const { copy } = await getBranding();
+  const t = await getTranslations("wiki");
+  const tc = await getTranslations("common");
   const [result, access] = await Promise.all([fetchSpaces(), getMyAccess()]);
   const canManage = hasPermission(access, "wiki:manage");
 
   return (
     <AppShell
       active="wiki"
-      crumbs={["Knowledge", "Knowledge Base"]}
+      crumbs={[t("crumbKnowledge"), t("crumbWikiBase")]}
       tenant={session?.tenantSlug}
       branding={{ orgName: copy.orgName, orgShort: copy.orgShort }}
-      user={{ name: session?.user?.name, role: "Operations" }}
+      user={{ name: session?.user?.name, role: tc("roleOps") }}
     >
       <div
         className="flex items-center gap-5 px-5 py-4"
         style={{ borderBottom: "0.5px solid var(--c-line-2)" }}
       >
         <div>
-          <div className="cmc-label mb-1">Knowledge · Wiki</div>
+          <div className="cmc-label mb-1">{t("kicker")}</div>
           <div
             className="cmc-display text-[22px] font-semibold"
             style={{ letterSpacing: "-0.01em" }}
           >
-            Knowledge Base
+            {t("title")}
           </div>
           <div className="mt-1 text-[11.5px]" style={{ color: "var(--c-fg-3)" }}>
-            Spaces hold a tree of pages — rich text, versioned on every save.
+            {t("subtitle")}
           </div>
         </div>
         <div className="flex-1" />
@@ -81,7 +89,9 @@ export default async function WikiPage() {
                   "0.5px solid color-mix(in srgb, var(--c-sev-1) 30%, transparent)",
               }}
             >
-              {result.error}
+              {result.errorKey === "errApi"
+                ? t("errApi", { status: result.status ?? 0 })
+                : t(result.errorKey)}
             </div>
           </div>
         ) : result.spaces.length === 0 ? (
@@ -90,10 +100,8 @@ export default async function WikiPage() {
               className="p-6 text-center text-[12px]"
               style={{ color: "var(--c-fg-3)" }}
             >
-              No spaces yet.
-              {canManage
-                ? " Create one to start writing."
-                : " Ask an administrator to create one."}
+              {t("noSpaces")}
+              {canManage ? t("createOneToStart") : t("askAdmin")}
             </div>
           </div>
         ) : (
@@ -110,13 +118,13 @@ export default async function WikiPage() {
                   className="mt-1 line-clamp-2 text-[11.5px]"
                   style={{ color: "var(--c-fg-3)", minHeight: 30 }}
                 >
-                  {s.description || "No description."}
+                  {s.description || t("noDescription")}
                 </div>
                 <div
                   className="cmc-mono mt-2 text-[10px]"
                   style={{ color: "var(--c-fg-4)" }}
                 >
-                  updated {new Date(s.updatedAt).toLocaleDateString()}
+                  {t("updatedAt", { date: new Date(s.updatedAt).toLocaleDateString() })}
                 </div>
               </Link>
             ))}

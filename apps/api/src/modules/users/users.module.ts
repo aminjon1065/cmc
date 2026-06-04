@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { UsersService } from "./users.service";
 import { UsersController } from "./users.controller";
+import { PreferencesController } from "./preferences.controller";
 import { SessionsModule } from "../auth/sessions.module";
 
 /**
@@ -12,7 +13,7 @@ import { SessionsModule } from "../auth/sessions.module";
 @Module({
   imports: [SessionsModule],
   providers: [UsersService],
-  controllers: [UsersController],
+  controllers: [UsersController, PreferencesController],
   exports: [UsersService],
 })
 export class UsersModule {}

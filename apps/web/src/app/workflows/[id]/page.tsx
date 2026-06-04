@@ -6,9 +6,13 @@ import { WorkflowResponseSchema, type Workflow } from "@cmc/contracts";
 import { AppShell } from "@/components/cmc/app-shell";
 import { getBranding } from "@/lib/branding";
 import { authedApiFetch, ApiError } from "@/lib/server-api";
+import { getTranslations } from "next-intl/server";
 import { WorkflowEditor } from "./workflow-editor";
 
-export const metadata: Metadata = { title: "Workflow editor" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("workflows");
+  return { title: t("metaTitleEditor") };
+}
 
 async function fetchWorkflow(id: string): Promise<Workflow | null> {
   try {
@@ -29,16 +33,18 @@ export default async function WorkflowEditorPage({
   const { id } = await params;
   const session = await auth();
   const { copy } = await getBranding();
+  const t = await getTranslations("workflows");
+  const tc = await getTranslations("common");
   const workflow = await fetchWorkflow(id);
   if (!workflow) notFound();
 
   return (
     <AppShell
       active="workflow"
-      crumbs={["Work", "Workflows", workflow.name]}
+      crumbs={[t("crumbWork"), t("crumbWorkflows"), workflow.name]}
       tenant={session?.tenantSlug}
       branding={{ orgName: copy.orgName, orgShort: copy.orgShort }}
-      user={{ name: session?.user?.name, role: "Operations" }}
+      user={{ name: session?.user?.name, role: tc("roleOps") }}
     >
       <div
         className="flex items-center gap-3 px-5 py-3"
@@ -49,7 +55,7 @@ export default async function WorkflowEditorPage({
           className="text-[12px] hover:underline"
           style={{ color: "var(--c-fg-3)" }}
         >
-          ← Workflows
+          {t("backToWorkflows")}
         </Link>
         <span className="text-[12px]" style={{ color: "var(--c-fg-4)" }}>
           /

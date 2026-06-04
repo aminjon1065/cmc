@@ -8,36 +8,44 @@ import { AppShell } from "@/components/cmc/app-shell";
 import { getBranding } from "@/lib/branding";
 import { getMyAccess, hasPermission } from "@/lib/access";
 import { authedApiFetch, ApiError } from "@/lib/server-api";
+import { getTranslations } from "next-intl/server";
 import { ImportsManager } from "./imports-manager";
 import { listGisLayersAction } from "./actions";
 
-export const metadata: Metadata = { title: "Data Import" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("imports");
+  return { title: t("metaTitle") };
+}
+
+type JobsFetchError = {
+  ok: false;
+  errorKey: "errShape" | "errApi" | "errForbidden" | "errLoad";
+  status?: number;
+};
 
 async function fetchJobs(): Promise<
-  { ok: true; jobs: ImportJob[] } | { ok: false; error: string }
+  { ok: true; jobs: ImportJob[] } | JobsFetchError
 > {
   try {
     const raw = await authedApiFetch<unknown>("/imports");
     const parsed = ImportJobsListResponseSchema.safeParse(raw);
-    if (!parsed.success) return { ok: false, error: "Unexpected API shape." };
+    if (!parsed.success) return { ok: false, errorKey: "errShape" };
     return { ok: true, jobs: parsed.data.jobs };
   } catch (err) {
     if (err instanceof ApiError) {
-      return {
-        ok: false,
-        error:
-          err.status === 403
-            ? "You don't have permission to view imports."
-            : `API ${err.status}`,
-      };
+      return err.status === 403
+        ? { ok: false, errorKey: "errForbidden" }
+        : { ok: false, errorKey: "errApi", status: err.status };
     }
-    return { ok: false, error: "Failed to load imports." };
+    return { ok: false, errorKey: "errLoad" };
   }
 }
 
 export default async function ImportsPage() {
   const session = await auth();
   const { copy } = await getBranding();
+  const t = await getTranslations("imports");
+  const tc = await getTranslations("common");
   const [result, access, layersRes] = await Promise.all([
     fetchJobs(),
     getMyAccess(),
@@ -49,26 +57,25 @@ export default async function ImportsPage() {
   return (
     <AppShell
       active="imports"
-      crumbs={["Work", "Data Import"]}
+      crumbs={[t("crumbWork"), t("crumbDataImport")]}
       tenant={session?.tenantSlug}
       branding={{ orgName: copy.orgName, orgShort: copy.orgShort }}
-      user={{ name: session?.user?.name, role: "Operations" }}
+      user={{ name: session?.user?.name, role: tc("roleOps") }}
     >
       <div
         className="flex items-center gap-5 px-5 py-4"
         style={{ borderBottom: "0.5px solid var(--c-line-2)" }}
       >
         <div>
-          <div className="cmc-label mb-1">Work · Import</div>
+          <div className="cmc-label mb-1">{t("kicker")}</div>
           <div
             className="cmc-display text-[22px] font-semibold"
             style={{ letterSpacing: "-0.01em" }}
           >
-            Data Import
+            {t("title")}
           </div>
           <div className="mt-1 text-[11.5px]" style={{ color: "var(--c-fg-3)" }}>
-            Bulk-load CSV / Excel → incidents and GeoJSON / Shapefile → GIS.
-            Invalid rows are quarantined, not dropped.
+            {t("subtitle")}
           </div>
         </div>
       </div>
@@ -85,7 +92,9 @@ export default async function ImportsPage() {
                   "0.5px solid color-mix(in srgb, var(--c-sev-1) 30%, transparent)",
               }}
             >
-              {result.error}
+              {result.errorKey === "errApi"
+                ? t("errApi", { status: result.status ?? 0 })
+                : t(result.errorKey)}
             </div>
           </div>
         ) : (

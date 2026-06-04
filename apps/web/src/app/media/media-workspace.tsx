@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
+import { useTranslations } from "next-intl";
 import type { MediaAsset } from "@cmc/contracts";
 import { listAssetsAction, requestTranscodeAction } from "./actions";
 
@@ -26,6 +27,7 @@ export function MediaWorkspace({
   initialAssets: MediaAsset[];
   canWrite: boolean;
 }) {
+  const t = useTranslations("media");
   const [assets, setAssets] = useState<MediaAsset[]>(initialAssets);
   const [docId, setDocId] = useState("");
   const [watermark, setWatermark] = useState("");
@@ -59,7 +61,7 @@ export function MediaWorkspace({
     }
     setDocId("");
     setWatermark("");
-    setMsg({ kind: "ok", text: "Transcode queued." });
+    setMsg({ kind: "ok", text: t("transcodeQueued") });
     await refresh();
   }
 
@@ -85,7 +87,7 @@ export function MediaWorkspace({
           <input
             className="cmc-input"
             style={{ flex: 1 }}
-            placeholder="Document ID to make streamable (a video/audio document)…"
+            placeholder={t("docIdPlaceholder")}
             value={docId}
             onChange={(e) => setDocId(e.target.value)}
             onKeyDown={(e) => {
@@ -95,7 +97,7 @@ export function MediaWorkspace({
           <input
             className="cmc-input"
             style={{ width: 180 }}
-            placeholder="Watermark (optional)"
+            placeholder={t("watermarkPlaceholder")}
             value={watermark}
             onChange={(e) => setWatermark(e.target.value)}
           />
@@ -104,7 +106,7 @@ export function MediaWorkspace({
             disabled={busy || !docId.trim()}
             onClick={() => void transcode()}
           >
-            {busy ? "…" : "Make streamable"}
+            {busy ? "…" : t("makeStreamable")}
           </button>
         </div>
       )}
@@ -112,10 +114,10 @@ export function MediaWorkspace({
       {playing && (
         <div className="cmc-card flex flex-col">
           <div className="cmc-card-header flex items-center gap-2">
-            <span className="cmc-label">Now playing</span>
+            <span className="cmc-label">{t("nowPlaying")}</span>
             <div className="flex-1" />
             <button className="cmc-btn" onClick={() => setPlaying(null)}>
-              Close
+              {t("close")}
             </button>
           </div>
           <div className="p-3">
@@ -129,12 +131,12 @@ export function MediaWorkspace({
           className="px-3 py-2"
           style={{ borderBottom: "0.5px solid var(--c-line-2)" }}
         >
-          <span className="cmc-label">Media assets</span>
+          <span className="cmc-label">{t("mediaAssets")}</span>
         </div>
         <div className="flex flex-col">
           {assets.length === 0 ? (
             <div className="px-3 py-4 text-[12px]" style={{ color: "var(--c-fg-3)" }}>
-              No media assets yet.
+              {t("noAssets")}
             </div>
           ) : (
             assets.map((a) => (
@@ -161,7 +163,7 @@ export function MediaWorkspace({
                 </div>
                 {a.status === "ready" && (
                   <button className="cmc-btn" onClick={() => setPlaying(a.id)}>
-                    ▶ Play
+                    {t("play")}
                   </button>
                 )}
               </div>

@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { createWorkflowAction } from "./actions";
 
 /** Create a draft workflow, then jump straight into its editor. */
 export function NewWorkflowButton() {
   const router = useRouter();
+  const t = useTranslations("workflows");
   const [name, setName] = useState("");
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -27,7 +29,7 @@ export function NewWorkflowButton() {
   if (!open) {
     return (
       <button className="cmc-btn" onClick={() => setOpen(true)}>
-        + New workflow
+        {t("newWorkflow")}
       </button>
     );
   }
@@ -36,17 +38,17 @@ export function NewWorkflowButton() {
       <input
         className="cmc-input"
         style={{ width: 200 }}
-        placeholder="Workflow name"
+        placeholder={t("workflowNamePlaceholder")}
         value={name}
         autoFocus
         onChange={(e) => setName(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && create()}
       />
       <button className="cmc-btn" onClick={create} disabled={busy}>
-        {busy ? "Creating…" : "Create"}
+        {busy ? t("creating") : t("create")}
       </button>
       <button className="cmc-btn" onClick={() => setOpen(false)} disabled={busy}>
-        Cancel
+        {t("cancel")}
       </button>
       {error && (
         <span className="text-[11px]" style={{ color: "var(--c-sev-1)" }}>

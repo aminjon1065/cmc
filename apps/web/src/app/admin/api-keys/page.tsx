@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getTranslations } from "next-intl/server";
 import { auth } from "@/auth";
 import { ApiKeysListResponseSchema, type ApiKey } from "@cmc/contracts";
 import { AppShell } from "@/components/cmc/app-shell";
@@ -7,33 +8,40 @@ import { getMyAccess } from "@/lib/access";
 import { authedApiFetch, ApiError } from "@/lib/server-api";
 import { ApiKeysManager } from "./api-keys-manager";
 
-export const metadata: Metadata = { title: "API Keys" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("admin");
+  return { title: t("apiKeys.metaTitle") };
+}
+
+type KeysFetchError = {
+  ok: false;
+  errorKey: "errShape" | "errApi" | "errForbidden" | "errLoad";
+  status?: number;
+};
 
 async function fetchKeys(): Promise<
-  { ok: true; keys: ApiKey[] } | { ok: false; error: string }
+  { ok: true; keys: ApiKey[] } | KeysFetchError
 > {
   try {
     const raw = await authedApiFetch<unknown>("/api-keys");
     const parsed = ApiKeysListResponseSchema.safeParse(raw);
-    if (!parsed.success) return { ok: false, error: "Unexpected API shape." };
+    if (!parsed.success) return { ok: false, errorKey: "errShape" };
     return { ok: true, keys: parsed.data.apiKeys };
   } catch (err) {
     if (err instanceof ApiError) {
-      return {
-        ok: false,
-        error:
-          err.status === 403
-            ? "You don't have permission to manage API keys."
-            : `API ${err.status}`,
-      };
+      return err.status === 403
+        ? { ok: false, errorKey: "errForbidden" }
+        : { ok: false, errorKey: "errApi", status: err.status };
     }
-    return { ok: false, error: "Failed to load API keys." };
+    return { ok: false, errorKey: "errLoad" };
   }
 }
 
 export default async function ApiKeysPage() {
   const session = await auth();
   const { copy } = await getBranding();
+  const t = await getTranslations("admin");
+  const tc = await getTranslations("common");
   const [result, access] = await Promise.all([fetchKeys(), getMyAccess()]);
   // A key's scopes must be ⊆ the creator's permissions — offer exactly those.
   const availableScopes = [...(access?.permissions ?? [])].sort();
@@ -41,26 +49,29 @@ export default async function ApiKeysPage() {
   return (
     <AppShell
       active="admin"
-      crumbs={["Administration", "API Keys"]}
+      crumbs={[t("crumbAdministration"), t("crumbApiKeys")]}
       tenant={session?.tenantSlug}
       branding={{ orgName: copy.orgName, orgShort: copy.orgShort }}
-      user={{ name: session?.user?.name, role: "Administrator" }}
+      user={{ name: session?.user?.name, role: tc("roleAdmin") }}
     >
       <div
         className="flex items-center gap-5 px-5 py-4"
         style={{ borderBottom: "0.5px solid var(--c-line-2)" }}
       >
         <div>
-          <div className="cmc-label mb-1">Administration · API Keys</div>
+          <div className="cmc-label mb-1">{t("apiKeys.kicker")}</div>
           <div
             className="cmc-display text-[22px] font-semibold"
             style={{ letterSpacing: "-0.01em" }}
           >
-            API Keys
+            {t("apiKeys.title")}
           </div>
           <div className="mt-1 text-[11.5px]" style={{ color: "var(--c-fg-3)" }}>
-            Scoped keys for programmatic access to <code className="cmc-mono">/v1</code>.
-            Send as <code className="cmc-mono">X-API-Key</code> or{" "}
+            {t("apiKeys.subtitlePre")}{" "}
+            <code className="cmc-mono">/v1</code>
+            {t("apiKeys.subtitleSendAs")}{" "}
+            <code className="cmc-mono">X-API-Key</code>{" "}
+            {t("apiKeys.subtitleOr")}{" "}
             <code className="cmc-mono">Authorization: Bearer</code>.
           </div>
         </div>
@@ -77,7 +88,9 @@ export default async function ApiKeysPage() {
                 "0.5px solid color-mix(in srgb, var(--c-sev-1) 30%, transparent)",
             }}
           >
-            {result.error}
+            {result.errorKey === "errApi"
+              ? t("apiKeys.errApi", { status: result.status ?? 0 })
+              : t(`apiKeys.${result.errorKey}`)}
           </div>
         ) : (
           <ApiKeysManager keys={result.keys} availableScopes={availableScopes} />

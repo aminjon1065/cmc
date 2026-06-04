@@ -8,44 +8,52 @@ import { AppShell } from "@/components/cmc/app-shell";
 import { getBranding } from "@/lib/branding";
 import { getMyAccess, hasPermission } from "@/lib/access";
 import { authedApiFetch, ApiError } from "@/lib/server-api";
+import { getTranslations } from "next-intl/server";
 import { ChatWorkspace } from "./chat-workspace";
 
-export const metadata: Metadata = { title: "Chat" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("chat");
+  return { title: t("metaTitle") };
+}
+
+type ChatFetchError = {
+  ok: false;
+  errorKey: "errShape" | "errApi" | "errForbidden" | "errLoad";
+  status?: number;
+};
 
 async function fetchChannels(): Promise<
-  { ok: true; channels: ChatChannel[] } | { ok: false; error: string }
+  { ok: true; channels: ChatChannel[] } | ChatFetchError
 > {
   try {
     const raw = await authedApiFetch<unknown>("/chat/channels");
     const parsed = ChatChannelsListResponseSchema.safeParse(raw);
-    if (!parsed.success) return { ok: false, error: "Unexpected API shape." };
+    if (!parsed.success) return { ok: false, errorKey: "errShape" };
     return { ok: true, channels: parsed.data.channels };
   } catch (err) {
     if (err instanceof ApiError) {
-      return {
-        ok: false,
-        error:
-          err.status === 403
-            ? "You don't have permission to view chat."
-            : `API ${err.status}`,
-      };
+      return err.status === 403
+        ? { ok: false, errorKey: "errForbidden" }
+        : { ok: false, errorKey: "errApi", status: err.status };
     }
-    return { ok: false, error: "Failed to load chat." };
+    return { ok: false, errorKey: "errLoad" };
   }
 }
 
 export default async function ChatPage() {
   const session = await auth();
   const { copy } = await getBranding();
+  const t = await getTranslations("chat");
+  const tc = await getTranslations("common");
   const [result, access] = await Promise.all([fetchChannels(), getMyAccess()]);
 
   return (
     <AppShell
       active="chat"
-      crumbs={["Communication", "Chat"]}
+      crumbs={[t("crumbComms"), t("crumbChat")]}
       tenant={session?.tenantSlug}
       branding={{ orgName: copy.orgName, orgShort: copy.orgShort }}
-      user={{ name: session?.user?.name, role: "Operations" }}
+      user={{ name: session?.user?.name, role: tc("roleOps") }}
     >
       {!result.ok ? (
         <div className="p-5">
@@ -59,7 +67,9 @@ export default async function ChatPage() {
                   "0.5px solid color-mix(in srgb, var(--c-sev-1) 30%, transparent)",
               }}
             >
-              {result.error}
+              {result.errorKey === "errApi"
+                ? t("errApi", { status: result.status ?? 0 })
+                : t(result.errorKey)}
             </div>
           </div>
         </div>

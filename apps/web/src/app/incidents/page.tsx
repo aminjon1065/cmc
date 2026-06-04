@@ -10,11 +10,21 @@ import { getBranding } from "@/lib/branding";
 import { getMyAccess, hasPermission } from "@/lib/access";
 import { authedApiFetch, ApiError } from "@/lib/server-api";
 import { fetchRegions, regionNameMap } from "@/lib/regions";
+import { getTranslations } from "next-intl/server";
 import { SeverityBadge, StatusBadge } from "@/components/cmc/incident-badges";
 import { CreateIncidentForm } from "./create-incident-form";
 import { IncidentFilters } from "./incident-filters";
 
-export const metadata: Metadata = { title: "Incidents" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("incidents");
+  return { title: t("metaList") };
+}
+
+type FetchError = {
+  ok: false;
+  errorKey: "errShape" | "errForbidden" | "errApi" | "errLoad";
+  status?: number;
+};
 
 const FILTER_KEYS = [
   "status",
@@ -36,24 +46,20 @@ async function fetchIncidents(
   qs: string,
 ): Promise<
   | { ok: true; data: ReturnType<typeof IncidentsListResponseSchema.parse> }
-  | { ok: false; error: string }
+  | FetchError
 > {
   try {
     const raw = await authedApiFetch<unknown>(`/incidents?${qs}`);
     const parsed = IncidentsListResponseSchema.safeParse(raw);
-    if (!parsed.success) return { ok: false, error: "Unexpected API shape." };
+    if (!parsed.success) return { ok: false, errorKey: "errShape" };
     return { ok: true, data: parsed.data };
   } catch (err) {
     if (err instanceof ApiError) {
-      return {
-        ok: false,
-        error:
-          err.status === 403
-            ? "You don't have permission to view incidents."
-            : `API ${err.status}`,
-      };
+      return err.status === 403
+        ? { ok: false, errorKey: "errForbidden" }
+        : { ok: false, errorKey: "errApi", status: err.status };
     }
-    return { ok: false, error: "Failed to load incidents." };
+    return { ok: false, errorKey: "errLoad" };
   }
 }
 
@@ -65,6 +71,7 @@ export default async function IncidentsPage({
   const sp = await searchParams;
   const session = await auth();
   const { copy } = await getBranding();
+  const t = await getTranslations("incidents");
   const access = await getMyAccess();
   const canCreate = hasPermission(access, "incident:create");
   const regions = await fetchRegions();
@@ -94,26 +101,26 @@ export default async function IncidentsPage({
   return (
     <AppShell
       active="cases"
-      crumbs={["Operations", "Incidents"]}
+      crumbs={[t("crumbOps"), t("crumbIncidents")]}
       tenant={session?.tenantSlug}
       branding={{ orgName: copy.orgName, orgShort: copy.orgShort }}
-      user={{ name: session?.user?.name, role: "Operations" }}
+      user={{ name: session?.user?.name, role: t("crumbOps") }}
     >
       <div
         className="flex items-center gap-5 px-5 py-4"
         style={{ borderBottom: "0.5px solid var(--c-line-2)" }}
       >
         <div>
-          <div className="cmc-label mb-1">Operations · Incidents</div>
+          <div className="cmc-label mb-1">{t("headerKicker")}</div>
           <div
             className="cmc-display text-[22px] font-semibold"
             style={{ letterSpacing: "-0.01em" }}
           >
-            Incidents
+            {t("headerTitle")}
           </div>
           <div className="mt-1 text-[11.5px]" style={{ color: "var(--c-fg-3)" }}>
-            {result.ok ? `${result.data.total} matching` : "—"} · report, triage,
-            assign, and resolve.
+            {result.ok ? t("matching", { count: result.data.total }) : "—"} ·{" "}
+            {t("headerTail")}
           </div>
         </div>
         <div className="flex-1" />
@@ -138,11 +145,13 @@ export default async function IncidentsPage({
                   "0.5px solid color-mix(in srgb, var(--c-sev-1) 30%, transparent)",
               }}
             >
-              {result.error}
+              {result.errorKey === "errApi"
+                ? t("errApi", { status: result.status ?? 0 })
+                : t(result.errorKey)}
             </div>
           ) : result.data.incidents.length === 0 ? (
             <div className="p-6 text-center text-[12px]" style={{ color: "var(--c-fg-3)" }}>
-              No incidents match.
+              {t("noMatch")}
             </div>
           ) : (
             <>
@@ -156,13 +165,13 @@ export default async function IncidentsPage({
                         borderBottom: "0.5px solid var(--c-line-2)",
                       }}
                     >
-                      <th className="px-4 py-2 font-medium">Sev</th>
-                      <th className="px-4 py-2 font-medium">Status</th>
-                      <th className="px-4 py-2 font-medium">Summary</th>
-                      <th className="px-4 py-2 font-medium">Region</th>
-                      <th className="px-4 py-2 font-medium">Type</th>
-                      <th className="px-4 py-2 font-medium">Assignee</th>
-                      <th className="px-4 py-2 font-medium">Occurred</th>
+                      <th className="px-4 py-2 font-medium">{t("thSev")}</th>
+                      <th className="px-4 py-2 font-medium">{t("thStatus")}</th>
+                      <th className="px-4 py-2 font-medium">{t("thSummary")}</th>
+                      <th className="px-4 py-2 font-medium">{t("thRegion")}</th>
+                      <th className="px-4 py-2 font-medium">{t("thType")}</th>
+                      <th className="px-4 py-2 font-medium">{t("thAssignee")}</th>
+                      <th className="px-4 py-2 font-medium">{t("thOccurred")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -192,7 +201,7 @@ export default async function IncidentsPage({
                             <span
                               className="cmc-chip ml-1.5"
                               style={{ color: "var(--c-fg-3)" }}
-                              title="Region (zone)"
+                              title={t("zoneTitle")}
                             >
                               {regionName.get(i.regionId)}
                             </span>
@@ -224,8 +233,11 @@ export default async function IncidentsPage({
                 }}
               >
                 <span>
-                  {offset + 1}–{offset + result.data.incidents.length} of{" "}
-                  {result.data.total}
+                  {t("pageOf", {
+                    from: offset + 1,
+                    to: offset + result.data.incidents.length,
+                    total: result.data.total,
+                  })}
                 </span>
                 <div className="flex-1" />
                 {offset > 0 && (
@@ -233,12 +245,12 @@ export default async function IncidentsPage({
                     href={pageUrl(Math.max(offset - PAGE_SIZE, 0))}
                     className="cmc-btn"
                   >
-                    ← Prev
+                    {t("prev")}
                   </Link>
                 )}
                 {offset + PAGE_SIZE < result.data.total && (
                   <Link href={pageUrl(offset + PAGE_SIZE)} className="cmc-btn">
-                    Next →
+                    {t("next")}
                   </Link>
                 )}
               </div>

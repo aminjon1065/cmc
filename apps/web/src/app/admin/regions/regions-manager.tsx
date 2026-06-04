@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import type { Region } from "@cmc/contracts";
 import {
   createRegionAction,
@@ -19,6 +20,7 @@ export function RegionsManager({
   canManage: boolean;
 }) {
   const router = useRouter();
+  const t = useTranslations("admin");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [code, setCode] = useState("");
@@ -53,7 +55,7 @@ export function RegionsManager({
       {canManage && (
         <div className="flex flex-wrap items-end gap-2">
           <label className="flex flex-col gap-1">
-            <span className="cmc-label">Code</span>
+            <span className="cmc-label">{t("regions.fCode")}</span>
             <input
               className="cmc-input"
               style={{ width: 150 }}
@@ -63,10 +65,10 @@ export function RegionsManager({
             />
           </label>
           <label className="flex flex-1 flex-col gap-1" style={{ minWidth: 200 }}>
-            <span className="cmc-label">Name</span>
+            <span className="cmc-label">{t("regions.fName")}</span>
             <input
               className="cmc-input"
-              placeholder="Согдийская область"
+              placeholder={t("regions.fNamePlaceholder")}
               value={name}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => {
@@ -80,7 +82,7 @@ export function RegionsManager({
             disabled={busy || !code.trim() || !name.trim()}
             onClick={() => void onCreate()}
           >
-            Add region
+            {t("regions.addRegion")}
           </button>
         </div>
       )}
@@ -94,7 +96,7 @@ export function RegionsManager({
       <div className="flex flex-col">
         {regions.length === 0 ? (
           <div className="text-[11.5px]" style={{ color: "var(--c-fg-4)" }}>
-            No regions yet.
+            {t("regions.noRegions")}
           </div>
         ) : (
           regions.map((r) => (
@@ -123,6 +125,7 @@ function RegionRow({
   busy: boolean;
   run: <T>(p: Promise<Res<T>>) => Promise<boolean>;
 }) {
+  const t = useTranslations("admin");
   const [name, setName] = useState(region.name);
   const dirty = name.trim() !== region.name && name.trim().length > 0;
 
@@ -157,7 +160,7 @@ function RegionRow({
                 void run(updateRegionAction(region.id, { name: name.trim() }))
               }
             >
-              Save
+              {t("regions.save")}
             </button>
           )}
           <button
@@ -165,11 +168,11 @@ function RegionRow({
             disabled={busy}
             style={{ color: "var(--c-sev-1)" }}
             onClick={() => {
-              if (confirm(`Delete region "${region.name}"?`))
+              if (confirm(t("regions.confirmDelete", { name: region.name })))
                 void run(deleteRegionAction(region.id));
             }}
           >
-            Delete
+            {t("regions.delete")}
           </button>
         </>
       )}

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
+import { useTranslations } from "next-intl";
 import type { VideoRecording, VideoRoom } from "@cmc/contracts";
 import {
   closeRoomAction,
@@ -13,16 +14,22 @@ import {
   stopRecordingAction,
 } from "./actions";
 
+/** Loading fallback for the lazily-loaded conference surface. */
+function ConferenceLoading() {
+  const t = useTranslations("video");
+  return (
+    <div className="p-4 text-[12px]" style={{ color: "var(--c-fg-3)" }}>
+      {t("loadingConference")}
+    </div>
+  );
+}
+
 // livekit-client touches browser-only APIs — load the live surface client-only.
 const RoomStage = dynamic(
   () => import("./room-stage").then((m) => m.RoomStage),
   {
     ssr: false,
-    loading: () => (
-      <div className="p-4 text-[12px]" style={{ color: "var(--c-fg-3)" }}>
-        Loading conference…
-      </div>
-    ),
+    loading: () => <ConferenceLoading />,
   },
 );
 
@@ -47,6 +54,7 @@ export function VideoWorkspace({
   currentUserId: string | null;
   initialJoinRoomId?: string;
 }) {
+  const t = useTranslations("video");
   const [rooms, setRooms] = useState<VideoRoom[]>(initialRooms);
   const [joined, setJoined] = useState<Joined | null>(null);
   const [newName, setNewName] = useState("");
@@ -77,7 +85,7 @@ export function VideoWorkspace({
   }
 
   async function close(id: string) {
-    if (!confirm("Close this room? Active participants are disconnected.")) return;
+    if (!confirm(t("confirmClose"))) return;
     setBusy(true);
     setMsg(null);
     const r = await closeRoomAction(id);
@@ -112,30 +120,35 @@ export function VideoWorkspace({
           kind: "err",
           text:
             res.status === 403
-              ? "You don't have permission to join."
+              ? t("joinForbidden")
               : res.status === 409
-                ? "This room is closed."
-                : "Failed to get a join token.",
+                ? t("roomClosed")
+                : t("joinTokenFailed"),
         });
         return;
       }
-      const t = (await res.json()) as {
+      const tok = (await res.json()) as {
         token: string;
         url: string;
         roomName: string;
         enabled: boolean;
       };
-      if (!t.enabled) {
+      if (!tok.enabled) {
         setMsg({
           kind: "err",
-          text: "Video conferencing is not enabled on this server.",
+          text: t("notEnabled"),
         });
         return;
       }
-      setJoined({ token: t.token, serverUrl: t.url, roomName: t.roomName, roomId });
+      setJoined({
+        token: tok.token,
+        serverUrl: tok.url,
+        roomName: tok.roomName,
+        roomId,
+      });
       void refreshRecordings(roomId);
     } catch {
-      setMsg({ kind: "err", text: "Network error joining the room." });
+      setMsg({ kind: "err", text: t("networkError") });
     } finally {
       setBusy(false);
     }
@@ -190,13 +203,13 @@ export function VideoWorkspace({
       <div className="flex flex-col gap-2 p-3" style={{ height: "calc(100vh - 116px)" }}>
         <div className="flex items-center gap-2">
           <span className="cmc-display text-[14px] font-semibold" style={{ color: "var(--c-fg-1)" }}>
-            In call
+            {t("inCall")}
           </span>
           {activeRecId && (
             <span
               className="flex items-center gap-1 text-[10px]"
               style={{ color: "var(--c-sev-1)" }}
-              title="Recording in progress"
+              title={t("recordingInProgress")}
             >
               <span style={{ fontSize: 8 }}>●</span> REC
             </span>
@@ -210,24 +223,24 @@ export function VideoWorkspace({
           {canManage &&
             (activeRecId ? (
               <button className="cmc-btn" onClick={() => void stopRec()}>
-                Stop recording
+                {t("stopRecording")}
               </button>
             ) : (
               <button className="cmc-btn" onClick={() => void startRec()}>
-                Record
+                {t("record")}
               </button>
             ))}
           {completed.length > 0 && (
             <button
               className="cmc-btn"
-              title="Download latest recording"
+              title={t("downloadLatest")}
               onClick={() => void download(completed[0]!.id)}
             >
-              ⬇ Recording
+              ⬇ {t("recording")}
             </button>
           )}
           <button className="cmc-btn" onClick={leave}>
-            Leave
+            {t("leave")}
           </button>
         </div>
         <div className="min-h-0 flex-1">
@@ -262,7 +275,7 @@ export function VideoWorkspace({
           <input
             className="cmc-input"
             style={{ flex: 1 }}
-            placeholder="New room name…"
+            placeholder={t("newRoomPlaceholder")}
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => {
@@ -274,7 +287,7 @@ export function VideoWorkspace({
             disabled={busy || !newName.trim()}
             onClick={() => void create()}
           >
-            {busy ? "…" : "Create room"}
+            {busy ? "…" : t("createRoom")}
           </button>
         </div>
       )}
@@ -284,12 +297,12 @@ export function VideoWorkspace({
           className="px-3 py-2"
           style={{ borderBottom: "0.5px solid var(--c-line-2)" }}
         >
-          <span className="cmc-label">Rooms</span>
+          <span className="cmc-label">{t("rooms")}</span>
         </div>
         <div className="flex flex-col">
           {openRooms.length === 0 && (
             <div className="px-3 py-4 text-[12px]" style={{ color: "var(--c-fg-3)" }}>
-              No open rooms{canWrite ? " — create one above." : "."}
+              {canWrite ? t("noOpenRoomsCreate") : t("noOpenRooms")}
             </div>
           )}
           {openRooms.map((room) => (
@@ -311,7 +324,7 @@ export function VideoWorkspace({
                 disabled={busy}
                 onClick={() => void join(room.id)}
               >
-                Join
+                {t("join")}
               </button>
               {(canManage || room.createdBy === currentUserId) && (
                 <button
@@ -320,7 +333,7 @@ export function VideoWorkspace({
                   disabled={busy}
                   onClick={() => void close(room.id)}
                 >
-                  Close
+                  {t("close")}
                 </button>
               )}
             </div>
@@ -328,7 +341,7 @@ export function VideoWorkspace({
         </div>
         {closedRooms.length > 0 && (
           <div className="px-3 py-2">
-            <div className="cmc-label mb-1">Closed</div>
+            <div className="cmc-label mb-1">{t("closed")}</div>
             {closedRooms.slice(0, 10).map((room) => (
               <div
                 key={room.id}

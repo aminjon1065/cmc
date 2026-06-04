@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { initUploadAction, finalizeUploadAction } from "./actions";
 
 type UploadState =
@@ -13,6 +14,7 @@ type UploadState =
 
 export function UploadForm() {
   const router = useRouter();
+  const t = useTranslations("documents");
   const inputRef = useRef<HTMLInputElement>(null);
   const [state, setState] = useState<UploadState>({ phase: "idle" });
 
@@ -41,7 +43,7 @@ export function UploadForm() {
     } catch (err) {
       setState({
         phase: "error",
-        message: err instanceof Error ? err.message : "Upload failed",
+        message: err instanceof Error ? err.message : t("uploadFailed"),
       });
       return;
     }
@@ -69,7 +71,7 @@ export function UploadForm() {
   return (
     <div className="flex flex-col gap-3">
       <label className="inline-flex w-fit cursor-pointer items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90">
-        {busy ? "Uploading…" : "Upload file"}
+        {busy ? t("uploading") : t("uploadFile")}
         <input
           ref={inputRef}
           type="file"
@@ -81,14 +83,14 @@ export function UploadForm() {
 
       {state.phase === "initializing" && (
         <p className="text-sm text-muted-foreground">
-          Preparing <span className="font-mono">{state.name}</span>…
+          {t("preparing")} <span className="font-mono">{state.name}</span>…
         </p>
       )}
       {state.phase === "uploading" && (
         <div className="flex flex-col gap-1 text-sm text-muted-foreground">
           <span>
-            Uploading <span className="font-mono">{state.name}</span> —{" "}
-            {state.progress}%
+            {t("uploadingName")} <span className="font-mono">{state.name}</span>{" "}
+            — {state.progress}%
           </span>
           <div className="h-1.5 w-64 overflow-hidden rounded-full bg-muted">
             <div
@@ -100,7 +102,7 @@ export function UploadForm() {
       )}
       {state.phase === "finalizing" && (
         <p className="text-sm text-muted-foreground">
-          Finalizing <span className="font-mono">{state.name}</span>…
+          {t("finalizing")} <span className="font-mono">{state.name}</span>…
         </p>
       )}
       {state.phase === "error" && (

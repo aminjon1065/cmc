@@ -5,29 +5,35 @@ import { AppShell } from "@/components/cmc/app-shell";
 import { getBranding } from "@/lib/branding";
 import { getMyAccess, hasPermission } from "@/lib/access";
 import { authedApiFetch, ApiError } from "@/lib/server-api";
+import { getTranslations } from "next-intl/server";
 import { VideoWorkspace } from "./video-workspace";
 
-export const metadata: Metadata = { title: "Video" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("video");
+  return { title: t("metaTitle") };
+}
+
+type RoomsFetchError = {
+  ok: false;
+  errorKey: "errShape" | "errApi" | "errForbidden" | "errLoad";
+  status?: number;
+};
 
 async function fetchRooms(): Promise<
-  { ok: true; rooms: VideoRoom[] } | { ok: false; error: string }
+  { ok: true; rooms: VideoRoom[] } | RoomsFetchError
 > {
   try {
     const raw = await authedApiFetch<unknown>("/video/rooms");
     const parsed = VideoRoomsListResponseSchema.safeParse(raw);
-    if (!parsed.success) return { ok: false, error: "Unexpected API shape." };
+    if (!parsed.success) return { ok: false, errorKey: "errShape" };
     return { ok: true, rooms: parsed.data.rooms };
   } catch (err) {
     if (err instanceof ApiError) {
-      return {
-        ok: false,
-        error:
-          err.status === 403
-            ? "You don't have permission to view video rooms."
-            : `API ${err.status}`,
-      };
+      return err.status === 403
+        ? { ok: false, errorKey: "errForbidden" }
+        : { ok: false, errorKey: "errApi", status: err.status };
     }
-    return { ok: false, error: "Failed to load video rooms." };
+    return { ok: false, errorKey: "errLoad" };
   }
 }
 
@@ -38,6 +44,8 @@ export default async function VideoPage({
 }) {
   const session = await auth();
   const { copy } = await getBranding();
+  const t = await getTranslations("video");
+  const tc = await getTranslations("common");
   const [result, access, sp] = await Promise.all([
     fetchRooms(),
     getMyAccess(),
@@ -48,10 +56,10 @@ export default async function VideoPage({
   return (
     <AppShell
       active="video"
-      crumbs={["Communication", "Video"]}
+      crumbs={[t("crumbComms"), t("crumbVideo")]}
       tenant={session?.tenantSlug}
       branding={{ orgName: copy.orgName, orgShort: copy.orgShort }}
-      user={{ name: session?.user?.name, role: "Operations" }}
+      user={{ name: session?.user?.name, role: tc("roleOps") }}
     >
       {!result.ok ? (
         <div className="p-5">
@@ -65,7 +73,9 @@ export default async function VideoPage({
                   "0.5px solid color-mix(in srgb, var(--c-sev-1) 30%, transparent)",
               }}
             >
-              {result.error}
+              {result.errorKey === "errApi"
+                ? t("errApi", { status: result.status ?? 0 })
+                : t(result.errorKey)}
             </div>
           </div>
         </div>

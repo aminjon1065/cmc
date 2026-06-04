@@ -2,11 +2,13 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 /** Query input for the global search page — pushes `/search?q=…`. */
 export function SearchBox() {
   const router = useRouter();
   const sp = useSearchParams();
+  const t = useTranslations("search");
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -28,13 +30,13 @@ export function SearchBox() {
           name="q"
           autoFocus
           defaultValue={sp.get("q") ?? ""}
-          placeholder="Search incidents, cases, and documents…"
+          placeholder={t("boxPlaceholder")}
           className="cmc-input w-full"
           style={{ paddingLeft: 30 }}
         />
       </div>
       <button type="submit" className="cmc-btn">
-        Search
+        {t("boxSubmit")}
       </button>
     </form>
   );

@@ -1,8 +1,13 @@
 import type { NextConfig } from "next";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
+import createNextIntlPlugin from "next-intl/plugin";
 
 const here = dirname(fileURLToPath(import.meta.url));
+
+// i18n (RU default + TG), no-routing setup — the active locale lives in a
+// cookie read by ./src/i18n/request.ts, so routes/middleware stay untouched.
+const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
@@ -25,4 +30,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withNextIntl(nextConfig);

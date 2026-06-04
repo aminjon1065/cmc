@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { useTranslations } from "next-intl";
 import {
   useEditor,
   EditorContent,
@@ -28,6 +29,7 @@ export function PageEditor({
   editable: boolean;
   onChange: (doc: ProseMirrorDoc) => void;
 }) {
+  const t = useTranslations("wiki");
   const editor = useEditor({
     extensions: [StarterKit],
     content: content as JSONContent,
@@ -46,7 +48,7 @@ export function PageEditor({
   if (!editor) {
     return (
       <div className="p-4 text-[12px]" style={{ color: "var(--c-fg-3)" }}>
-        Loading editor…
+        {t("loadingEditor")}
       </div>
     );
   }

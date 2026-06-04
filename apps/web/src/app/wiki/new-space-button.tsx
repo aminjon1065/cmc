@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { createSpaceAction } from "./actions";
 
 /** Create a wiki space, then jump straight into it. Gated server-side on
  *  `wiki:manage` — non-managers get a friendly 403 message here. */
 export function NewSpaceButton() {
   const router = useRouter();
+  const t = useTranslations("wiki");
   const [name, setName] = useState("");
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -28,7 +30,7 @@ export function NewSpaceButton() {
   if (!open) {
     return (
       <button className="cmc-btn" onClick={() => setOpen(true)}>
-        + New space
+        {t("newSpace")}
       </button>
     );
   }
@@ -37,17 +39,17 @@ export function NewSpaceButton() {
       <input
         className="cmc-input"
         style={{ width: 200 }}
-        placeholder="Space name"
+        placeholder={t("spaceNamePlaceholder")}
         value={name}
         autoFocus
         onChange={(e) => setName(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && create()}
       />
       <button className="cmc-btn" onClick={create} disabled={busy}>
-        {busy ? "Creating…" : "Create"}
+        {busy ? t("creating") : t("create")}
       </button>
       <button className="cmc-btn" onClick={() => setOpen(false)} disabled={busy}>
-        Cancel
+        {t("cancel")}
       </button>
       {error && (
         <span className="text-[11px]" style={{ color: "var(--c-sev-1)" }}>

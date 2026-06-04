@@ -1,24 +1,22 @@
 import type { Metadata } from "next";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = { title: "Offline" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("offline");
+  return { title: t("metaTitle") };
+}
 
 /**
  * Offline fallback (P4.4 / ADR-0075). Served by the service worker when a
- * navigation fails with no connectivity. Static (no data deps) so it's safely
- * precacheable. Queued incident reports sync automatically on reconnect.
+ * navigation fails with no connectivity. Localized (RU/TG) via the i18n
+ * catalog (ADR-0076). Queued incident reports sync automatically on reconnect.
  */
-export default function OfflinePage() {
+export default async function OfflinePage() {
+  const t = await getTranslations("offline");
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-3 p-6 text-center">
-      <div className="text-2xl font-semibold">Вы офлайн</div>
-      <p className="max-w-sm text-sm opacity-70">
-        Нет связи с сервером. Установленное приложение остаётся доступным.
-        Созданные офлайн отчёты об инцидентах сохраняются на устройстве и
-        отправятся автоматически при восстановлении связи.
-      </p>
-      <p className="max-w-sm text-xs opacity-50">
-        You are offline — queued incident reports will sync on reconnect.
-      </p>
+      <div className="text-2xl font-semibold">{t("title")}</div>
+      <p className="max-w-sm text-sm opacity-70">{t("body")}</p>
     </main>
   );
 }

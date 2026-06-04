@@ -2,27 +2,31 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import type { BrandingCopy } from "@cmc/contracts";
 import { updateBrandingAction } from "./actions";
 
-/** Copy fields, with labels + which render as a textarea. */
+/**
+ * Copy fields, with label catalog keys + which render as a textarea.
+ * `labelKey` indexes into the `admin.tenant` namespace.
+ */
 const COPY_FIELDS: {
   key: keyof BrandingCopy;
-  label: string;
+  labelKey: string;
   multiline?: boolean;
 }[] = [
-  { key: "orgName", label: "Organisation name" },
-  { key: "orgShort", label: "Short qualifier" },
-  { key: "country", label: "Country / jurisdiction" },
-  { key: "statusLocation", label: "Status location label" },
-  { key: "dataCenter", label: "Data-center line" },
-  { key: "muralKicker", label: "Login mural kicker" },
-  { key: "muralHeadline", label: "Login mural headline", multiline: true },
-  { key: "muralSubcopy", label: "Login mural sub-copy", multiline: true },
-  { key: "buildLabel", label: "Build label" },
-  { key: "complianceLine", label: "Compliance line" },
-  { key: "metaTitle", label: "Meta title" },
-  { key: "metaDescription", label: "Meta description", multiline: true },
+  { key: "orgName", labelKey: "copyOrgName" },
+  { key: "orgShort", labelKey: "copyOrgShort" },
+  { key: "country", labelKey: "copyCountry" },
+  { key: "statusLocation", labelKey: "copyStatusLocation" },
+  { key: "dataCenter", labelKey: "copyDataCenter" },
+  { key: "muralKicker", labelKey: "copyMuralKicker" },
+  { key: "muralHeadline", labelKey: "copyMuralHeadline", multiline: true },
+  { key: "muralSubcopy", labelKey: "copyMuralSubcopy", multiline: true },
+  { key: "buildLabel", labelKey: "copyBuildLabel" },
+  { key: "complianceLine", labelKey: "copyComplianceLine" },
+  { key: "metaTitle", labelKey: "copyMetaTitle" },
+  { key: "metaDescription", labelKey: "copyMetaDescription", multiline: true },
 ];
 
 export function BrandingForm({
@@ -35,6 +39,7 @@ export function BrandingForm({
   initialCopy: BrandingCopy;
 }) {
   const router = useRouter();
+  const t = useTranslations("admin");
   const [locale, setLocale] = useState(initialLocale);
   const [logoUrl, setLogoUrl] = useState(initialLogoUrl ?? "");
   const [copy, setCopy] = useState<BrandingCopy>(initialCopy);
@@ -59,7 +64,7 @@ export function BrandingForm({
       setMsg({ ok: false, text: res.error });
       return;
     }
-    setMsg({ ok: true, text: "Branding saved." });
+    setMsg({ ok: true, text: t("tenant.brandingSaved") });
     router.refresh();
   }
 
@@ -67,7 +72,7 @@ export function BrandingForm({
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1">
-          <span className="cmc-label">Default locale</span>
+          <span className="cmc-label">{t("tenant.fDefaultLocale")}</span>
           <input
             className="cmc-input"
             style={{ width: 90 }}
@@ -78,7 +83,7 @@ export function BrandingForm({
           />
         </label>
         <label className="flex flex-1 flex-col gap-1" style={{ minWidth: 260 }}>
-          <span className="cmc-label">Logo URL (blank = built-in emblem)</span>
+          <span className="cmc-label">{t("tenant.fLogoUrl")}</span>
           <input
             className="cmc-input"
             type="url"
@@ -93,7 +98,7 @@ export function BrandingForm({
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {COPY_FIELDS.map((f) => (
           <label key={f.key} className="flex flex-col gap-1">
-            <span className="cmc-label">{f.label}</span>
+            <span className="cmc-label">{t(`tenant.${f.labelKey}`)}</span>
             {f.multiline ? (
               <textarea
                 className="cmc-input"
@@ -114,7 +119,7 @@ export function BrandingForm({
 
       <div className="flex items-center gap-3">
         <button type="submit" className="cmc-btn cmc-btn-primary" disabled={busy}>
-          {busy ? "Saving…" : "Save branding"}
+          {busy ? t("tenant.saving") : t("tenant.saveBranding")}
         </button>
         {msg && (
           <span

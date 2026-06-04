@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import type { CreateIncidentRequest } from "@cmc/contracts";
 import {
   REGION_SUGGESTIONS,
@@ -33,6 +34,7 @@ function Datalist({ id, options }: { id: string; options: readonly string[] }) {
 
 export function CreateIncidentForm() {
   const router = useRouter();
+  const t = useTranslations("incidents");
   const [open, setOpen] = useState(false);
   const [severity, setSeverity] = useState(3);
   const [type, setType] = useState("");
@@ -112,7 +114,7 @@ export function CreateIncidentForm() {
         className="cmc-btn cmc-btn-primary"
         onClick={() => setOpen(true)}
       >
-        + Report incident
+        {t("createOpen")}
       </button>
     );
   }
@@ -121,7 +123,7 @@ export function CreateIncidentForm() {
     <form onSubmit={onSubmit} className="flex flex-col gap-3">
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1">
-          <span className="cmc-label">Severity</span>
+          <span className="cmc-label">{t("fSeverity")}</span>
           <select
             className="cmc-input"
             style={{ width: 90 }}
@@ -136,7 +138,7 @@ export function CreateIncidentForm() {
           </select>
         </label>
         <label className="flex flex-col gap-1">
-          <span className="cmc-label">Type</span>
+          <span className="cmc-label">{t("fType")}</span>
           <input
             className="cmc-input"
             style={{ width: 160 }}
@@ -149,7 +151,7 @@ export function CreateIncidentForm() {
           <Datalist id="incident-types" options={TYPE_SUGGESTIONS} />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="cmc-label">Region</span>
+          <span className="cmc-label">{t("fRegion")}</span>
           <input
             className="cmc-input"
             style={{ width: 160 }}
@@ -162,7 +164,7 @@ export function CreateIncidentForm() {
           <Datalist id="incident-regions" options={REGION_SUGGESTIONS} />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="cmc-label">Source</span>
+          <span className="cmc-label">{t("fSource")}</span>
           <input
             className="cmc-input"
             style={{ width: 130 }}
@@ -174,7 +176,7 @@ export function CreateIncidentForm() {
           <Datalist id="incident-sources" options={SOURCE_SUGGESTIONS} />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="cmc-label">Occurred at</span>
+          <span className="cmc-label">{t("fOccurred")}</span>
           <input
             className="cmc-input"
             type="datetime-local"
@@ -186,19 +188,19 @@ export function CreateIncidentForm() {
       </div>
 
       <label className="flex flex-col gap-1">
-        <span className="cmc-label">Summary</span>
+        <span className="cmc-label">{t("fSummary")}</span>
         <input
           className="cmc-input"
           value={summary}
           onChange={(e) => setSummary(e.target.value)}
-          placeholder="Short headline"
+          placeholder={t("fSummaryPlaceholder")}
           maxLength={300}
           required
         />
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="cmc-label">Description</span>
+        <span className="cmc-label">{t("fDescription")}</span>
         <textarea
           className="cmc-input"
           style={{ height: 64, paddingTop: 6 }}
@@ -210,7 +212,7 @@ export function CreateIncidentForm() {
 
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1">
-          <span className="cmc-label">Latitude (optional)</span>
+          <span className="cmc-label">{t("fLat")}</span>
           <input
             className="cmc-input"
             style={{ width: 130 }}
@@ -221,7 +223,7 @@ export function CreateIncidentForm() {
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="cmc-label">Longitude (optional)</span>
+          <span className="cmc-label">{t("fLng")}</span>
           <input
             className="cmc-input"
             style={{ width: 130 }}
@@ -241,7 +243,7 @@ export function CreateIncidentForm() {
 
       <div className="flex items-center gap-2">
         <button type="submit" className="cmc-btn cmc-btn-primary" disabled={busy}>
-          {busy ? "Reporting…" : "Report incident"}
+          {busy ? t("submitting") : t("submit")}
         </button>
         <button
           type="button"
@@ -252,7 +254,7 @@ export function CreateIncidentForm() {
           }}
           disabled={busy}
         >
-          Cancel
+          {t("cancel")}
         </button>
       </div>
     </form>

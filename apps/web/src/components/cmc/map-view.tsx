@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { X } from "lucide-react";
+import { useTranslations } from "next-intl";
 import type {
   FilterSpecification,
   Map as MlMap,
@@ -20,17 +21,31 @@ const SOURCE_LAYER = "features";
  * fully self-contained style (no external calls) — GIS layers render on top.
  */
 const STYLE_URL = process.env.NEXT_PUBLIC_MAP_STYLE_URL;
-const MINIMAL_STYLE: StyleSpecification = {
-  version: 8,
-  sources: {},
-  layers: [
-    {
-      id: "background",
-      type: "background",
-      paint: { "background-color": "#0b0f14" },
-    },
-  ],
-};
+const MAP_BG_DARK = "#0b0f14";
+const MAP_BG_LIGHT = "#e6ebf2";
+
+function isDarkNow(): boolean {
+  return (
+    typeof document !== "undefined" &&
+    document.documentElement.classList.contains("dark")
+  );
+}
+
+/** Minimal self-contained basemap whose backdrop follows the app theme
+ *  (ADR-0077), so the default map isn't a dark slab on the light theme. */
+function minimalStyle(dark: boolean): StyleSpecification {
+  return {
+    version: 8,
+    sources: {},
+    layers: [
+      {
+        id: "background",
+        type: "background",
+        paint: { "background-color": dark ? MAP_BG_DARK : MAP_BG_LIGHT },
+      },
+    ],
+  };
+}
 
 const PALETTE = [
   "#3b82f6",
@@ -57,6 +72,7 @@ type Selected = {
  * visibility; clicking a feature opens a property inspector.
  */
 export function MapView({ layers }: { layers: GisLayerResponse[] }) {
+  const t = useTranslations("map");
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
   const [visible, setVisible] = useState<Record<string, boolean>>(() =>
@@ -67,6 +83,7 @@ export function MapView({ layers }: { layers: GisLayerResponse[] }) {
   useEffect(() => {
     let cancelled = false;
     let map: MlMap | undefined;
+    let themeObserver: MutationObserver | undefined;
     const nameOf = new Map(layers.map((l) => [l.id, l.name]));
     const renderLayerIds = layers.flatMap((l) =>
       SUFFIXES.map((s) => `gis-${l.id}-${s}`),
@@ -78,13 +95,30 @@ export function MapView({ layers }: { layers: GisLayerResponse[] }) {
 
       map = new maplibregl.Map({
         container: containerRef.current,
-        style: STYLE_URL || MINIMAL_STYLE,
+        style: STYLE_URL || minimalStyle(isDarkNow()),
         center: [71, 38.8], // Tajikistan
         zoom: 6,
         attributionControl: false,
       });
       mapRef.current = map;
       map.addControl(new maplibregl.NavigationControl({}), "top-right");
+
+      // Keep the minimal basemap backdrop in sync with the light/dark toggle
+      // (which flips the `dark` class on <html> without a reload) — ADR-0077.
+      themeObserver = new MutationObserver(() => {
+        const m = mapRef.current;
+        if (m && m.getLayer("background")) {
+          m.setPaintProperty(
+            "background",
+            "background-color",
+            isDarkNow() ? MAP_BG_DARK : MAP_BG_LIGHT,
+          );
+        }
+      });
+      themeObserver.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ["class"],
+      });
 
       map.on("load", () => {
         if (!map) return;
@@ -170,6 +204,7 @@ export function MapView({ layers }: { layers: GisLayerResponse[] }) {
 
     return () => {
       cancelled = true;
+      themeObserver?.disconnect();
       map?.remove();
       mapRef.current = null;
     };
@@ -197,7 +232,7 @@ export function MapView({ layers }: { layers: GisLayerResponse[] }) {
           className="cmc-card absolute left-3 top-3 z-10 w-56 p-2"
           style={{ background: "var(--c-bg-2)" }}
         >
-          <div className="cmc-label mb-1.5 px-1">Layers</div>
+          <div className="cmc-label mb-1.5 px-1">{t("layers")}</div>
           <div className="flex flex-col gap-1">
             {layers.map((l, i) => (
               <label
@@ -226,7 +261,7 @@ export function MapView({ layers }: { layers: GisLayerResponse[] }) {
           className="absolute left-3 top-3 z-10 rounded-md px-3 py-2 text-[11.5px]"
           style={{ background: "var(--c-bg-2)", color: "var(--c-fg-3)" }}
         >
-          No GIS layers yet — create one via the API (`POST /v1/gis/layers`).
+          {t("noLayers")}
         </div>
       )}
 
@@ -241,7 +276,7 @@ export function MapView({ layers }: { layers: GisLayerResponse[] }) {
             <div className="flex-1" />
             <button
               type="button"
-              aria-label="Close"
+              aria-label={t("close")}
               onClick={() => setSelected(null)}
               style={{ color: "var(--c-fg-3)" }}
             >
@@ -250,7 +285,7 @@ export function MapView({ layers }: { layers: GisLayerResponse[] }) {
           </div>
           <div className="flex flex-col gap-1 p-3 text-[11px]">
             <div className="flex justify-between gap-2">
-              <span style={{ color: "var(--c-fg-3)" }}>geometry</span>
+              <span style={{ color: "var(--c-fg-3)" }}>{t("geometry")}</span>
               <span className="cmc-mono">{selected.geometryType}</span>
             </div>
             {Object.entries(selected.properties).map(([k, v]) => (
@@ -262,7 +297,7 @@ export function MapView({ layers }: { layers: GisLayerResponse[] }) {
               </div>
             ))}
             {Object.keys(selected.properties).length === 0 && (
-              <div style={{ color: "var(--c-fg-4)" }}>No properties</div>
+              <div style={{ color: "var(--c-fg-4)" }}>{t("noProperties")}</div>
             )}
           </div>
         </div>

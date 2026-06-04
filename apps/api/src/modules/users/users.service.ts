@@ -6,7 +6,14 @@ import {
 } from "@nestjs/common";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { schema } from "@cmc/db";
-import type { UserRoleRef, UserSummary } from "@cmc/contracts";
+import type {
+  UserRoleRef,
+  UserSummary,
+  UserPreferencesResponse,
+  UpdateUserPreferencesRequest,
+  UiTheme,
+  UiLocale,
+} from "@cmc/contracts";
 import { TenantDatabaseService } from "../database/tenant-database.service";
 import { SessionsService } from "../auth/sessions.service";
 import { AuditService } from "../audit/audit.service";
@@ -315,6 +322,43 @@ export class UsersService {
       ip: actor.ip ?? null,
       userAgent: actor.userAgent ?? null,
     });
+  }
+
+  // ---------- Self-service UI preferences (ADR-0078) ----------
+
+  /** The caller's persisted theme + locale (null = no explicit choice). */
+  async getMyPreferences(userId: string): Promise<UserPreferencesResponse> {
+    const rows = await this.tenantDb.run((tx) =>
+      tx
+        .select({ theme: schema.users.uiTheme, locale: schema.users.uiLocale })
+        .from(schema.users)
+        .where(and(eq(schema.users.id, userId), isNull(schema.users.deletedAt)))
+        .limit(1),
+    );
+    const row = rows[0];
+    return {
+      theme: (row?.theme as UiTheme | null) ?? null,
+      locale: (row?.locale as UiLocale | null) ?? null,
+    };
+  }
+
+  /** Patch the caller's theme and/or locale; `null` clears a preference. */
+  async updateMyPreferences(
+    userId: string,
+    dto: UpdateUserPreferencesRequest,
+  ): Promise<UserPreferencesResponse> {
+    const patch: Partial<typeof schema.users.$inferInsert> = {
+      updatedAt: new Date(),
+    };
+    if (dto.theme !== undefined) patch.uiTheme = dto.theme;
+    if (dto.locale !== undefined) patch.uiLocale = dto.locale;
+    await this.tenantDb.run((tx) =>
+      tx
+        .update(schema.users)
+        .set(patch)
+        .where(and(eq(schema.users.id, userId), isNull(schema.users.deletedAt))),
+    );
+    return this.getMyPreferences(userId);
   }
 
   private toSummary(

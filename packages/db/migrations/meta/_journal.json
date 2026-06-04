@@ -302,6 +302,13 @@
       "when": 1780542056061,
       "tag": "0042_uneven_next_avengers",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1780597177941,
+      "tag": "0043_lowly_king_cobra",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 
 // Pinned swagger-ui-dist served from a CDN. The sensitive artifact — the spec —
 // is fetched server-side through the gated BFF; only the open-source renderer
@@ -32,6 +33,7 @@ function loadScript(src: string, id: string): Promise<void> {
  * Authorize dialog.
  */
 export function SwaggerUiClient({ spec }: { spec: unknown }) {
+  const t = useTranslations("admin");
   const ref = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,7 +55,7 @@ export function SwaggerUiClient({ spec }: { spec: unknown }) {
           window as unknown as { SwaggerUIBundle?: SwaggerUIBundleFn }
         ).SwaggerUIBundle;
         if (!bundle) {
-          setError("Swagger UI failed to initialise.");
+          setError(t("apiDocs.swaggerInitFailed"));
           return;
         }
         bundle({
@@ -66,19 +68,19 @@ export function SwaggerUiClient({ spec }: { spec: unknown }) {
           tryItOutEnabled: true,
         });
       })
-      .catch((e: unknown) => {
-        setError(e instanceof Error ? e.message : "Failed to load Swagger UI.");
+      .catch(() => {
+        setError(t("apiDocs.swaggerLoadFailed"));
       });
 
     return () => {
       cancelled = true;
     };
-  }, [spec]);
+  }, [spec, t]);
 
   if (error) {
     return (
       <div className="cmc-card p-4 text-[12px]" style={{ color: "var(--c-sev1)" }}>
-        {error} — the renderer is loaded from a CDN; check connectivity.
+        {t("apiDocs.swaggerCdnHint", { error })}
       </div>
     );
   }

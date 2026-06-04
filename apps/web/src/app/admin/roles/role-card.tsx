@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import type { PermissionCatalogEntry } from "@cmc/contracts";
 import { deleteRoleAction, updateRoleAction } from "./actions";
 import { PermissionPicker } from "./permission-picker";
@@ -23,6 +24,7 @@ export function RoleCard({
   catalog: PermissionCatalogEntry[];
 }) {
   const router = useRouter();
+  const t = useTranslations("admin");
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(role.name);
   const [description, setDescription] = useState(role.description ?? "");
@@ -67,7 +69,7 @@ export function RoleCard({
   }
 
   async function onDelete() {
-    if (!confirm(`Delete role "${role.name}"? Users lose it immediately.`)) return;
+    if (!confirm(t("roles.confirmDelete", { name: role.name }))) return;
     setBusy(true);
     setError(null);
     const res = await deleteRoleAction(role.id);
@@ -89,10 +91,10 @@ export function RoleCard({
         <div className="flex-1" />
         {role.isSystem ? (
           <span className="cmc-chip" style={{ color: "var(--c-fg-3)" }}>
-            System
+            {t("roles.system")}
           </span>
         ) : (
-          <span className="cmc-chip cmc-chip-accent">Custom</span>
+          <span className="cmc-chip cmc-chip-accent">{t("roles.custom")}</span>
         )}
       </div>
 
@@ -106,7 +108,9 @@ export function RoleCard({
             )}
             <div className="flex flex-wrap gap-1">
               {role.permissions.length === 0 ? (
-                <span style={{ color: "var(--c-fg-4)" }}>no permissions</span>
+                <span style={{ color: "var(--c-fg-4)" }}>
+                  {t("roles.noPermissions")}
+                </span>
               ) : (
                 role.permissions.map((p) => (
                   <span key={p} className="cmc-chip cmc-mono text-[10px]">
@@ -122,7 +126,7 @@ export function RoleCard({
                   className="cmc-btn"
                   onClick={() => setEditing(true)}
                 >
-                  Edit
+                  {t("roles.edit")}
                 </button>
                 <button
                   type="button"
@@ -131,7 +135,7 @@ export function RoleCard({
                   disabled={busy}
                   style={{ color: "var(--c-sev-1)" }}
                 >
-                  Delete
+                  {t("roles.delete")}
                 </button>
               </div>
             )}
@@ -140,7 +144,7 @@ export function RoleCard({
           <>
             <div className="flex flex-wrap items-end gap-3">
               <label className="flex flex-col gap-1">
-                <span className="cmc-label">Name</span>
+                <span className="cmc-label">{t("roles.fName")}</span>
                 <input
                   className="cmc-input"
                   style={{ width: 220 }}
@@ -150,7 +154,7 @@ export function RoleCard({
                 />
               </label>
               <label className="flex flex-1 flex-col gap-1" style={{ minWidth: 200 }}>
-                <span className="cmc-label">Description</span>
+                <span className="cmc-label">{t("roles.fDescription")}</span>
                 <input
                   className="cmc-input"
                   value={description}
@@ -160,7 +164,7 @@ export function RoleCard({
               </label>
             </div>
             <div>
-              <div className="cmc-label mb-1.5">Permissions</div>
+              <div className="cmc-label mb-1.5">{t("roles.permissions")}</div>
               <PermissionPicker
                 catalog={catalog}
                 selected={selected}
@@ -175,7 +179,7 @@ export function RoleCard({
                 onClick={onSave}
                 disabled={busy}
               >
-                {busy ? "Saving…" : "Save"}
+                {busy ? t("roles.saving") : t("roles.save")}
               </button>
               <button
                 type="button"
@@ -183,7 +187,7 @@ export function RoleCard({
                 onClick={cancel}
                 disabled={busy}
               >
-                Cancel
+                {t("roles.cancel")}
               </button>
             </div>
           </>

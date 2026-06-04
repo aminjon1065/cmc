@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   ReactFlow,
   Background,
@@ -104,6 +105,7 @@ function nodeStyle(t: string): React.CSSProperties {
 }
 
 export function WorkflowEditor({ initial }: { initial: Workflow }) {
+  const t = useTranslations("workflows");
   const [nodes, setNodes] = useState<Node[]>(() => toRfNodes(initial.definition));
   const [edges, setEdges] = useState<Edge[]>(() => toRfEdges(initial.definition));
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -259,7 +261,7 @@ export function WorkflowEditor({ initial }: { initial: Workflow }) {
     if (!res.ok) return setMsg({ kind: "err", text: res.error });
     setMsg(
       res.data.valid
-        ? { kind: "ok", text: "Valid — ready to run." }
+        ? { kind: "ok", text: t("validValid") }
         : { kind: "err", text: res.data.errors.join("; ") },
     );
   }
@@ -276,7 +278,7 @@ export function WorkflowEditor({ initial }: { initial: Workflow }) {
     setBusy(false);
     setMsg(
       res.ok
-        ? { kind: "ok", text: `Saved (v${res.data.version}).` }
+        ? { kind: "ok", text: t("saved", { version: res.data.version }) }
         : { kind: "err", text: res.error },
     );
   }
@@ -287,7 +289,7 @@ export function WorkflowEditor({ initial }: { initial: Workflow }) {
     const res = await runWorkflowAction(initial.id);
     setBusy(false);
     if (!res.ok) return setMsg({ kind: "err", text: res.error });
-    setMsg({ kind: "ok", text: `Run started (${res.data.status}).` });
+    setMsg({ kind: "ok", text: t("runStarted", { status: res.data.status }) });
     void refreshRuns();
   }
 
@@ -316,7 +318,7 @@ export function WorkflowEditor({ initial }: { initial: Workflow }) {
             checked={enabled}
             onChange={(e) => setEnabled(e.target.checked)}
           />
-          Enabled
+          {t("enabled")}
         </label>
         <select
           className="cmc-input"
@@ -324,8 +326,8 @@ export function WorkflowEditor({ initial }: { initial: Workflow }) {
           value={triggerType}
           onChange={(e) => setTriggerType(e.target.value as "manual" | "event")}
         >
-          <option value="manual">manual</option>
-          <option value="event">event</option>
+          <option value="manual">{t("triggerManualOption")}</option>
+          <option value="event">{t("triggerEventOption")}</option>
         </select>
         {triggerType === "event" && (
           <input
@@ -338,13 +340,13 @@ export function WorkflowEditor({ initial }: { initial: Workflow }) {
         )}
         <div className="flex-1" />
         <button className="cmc-btn" onClick={onValidate} disabled={busy}>
-          Validate
+          {t("validate")}
         </button>
         <button className="cmc-btn" onClick={onSave} disabled={busy}>
-          Save
+          {t("save")}
         </button>
         <button className="cmc-btn" onClick={onRun} disabled={busy}>
-          Run
+          {t("run")}
         </button>
       </div>
 
@@ -366,7 +368,7 @@ export function WorkflowEditor({ initial }: { initial: Workflow }) {
       <div className="flex gap-3" style={{ minHeight: 520 }}>
         {/* Palette */}
         <div className="cmc-card flex flex-col gap-1.5 p-3" style={{ width: 150 }}>
-          <div className="cmc-label mb-1">Add node</div>
+          <div className="cmc-label mb-1">{t("addNode")}</div>
           {NODE_TYPES.map((t) => (
             <button
               key={t}
@@ -403,7 +405,7 @@ export function WorkflowEditor({ initial }: { initial: Workflow }) {
         <div className="flex flex-col gap-3" style={{ width: 240 }}>
           <div className="cmc-card p-3">
             <div className="cmc-label mb-2">
-              {selData ? `Node · ${selData.nodeType}` : "No node selected"}
+              {selData ? t("nodeSelected", { type: selData.nodeType }) : t("noNodeSelected")}
             </div>
             {selData && (
               <div className="flex flex-col gap-2">
@@ -417,20 +419,20 @@ export function WorkflowEditor({ initial }: { initial: Workflow }) {
                   onClick={deleteSelected}
                   style={{ color: "var(--c-sev-1)" }}
                 >
-                  Delete node
+                  {t("deleteNode")}
                 </button>
               </div>
             )}
             {!selData && (
               <div className="text-[11px]" style={{ color: "var(--c-fg-3)" }}>
-                Click a node to edit it. Drag from a node handle to connect.
+                {t("clickNodeHint")}
               </div>
             )}
           </div>
 
           <div className="cmc-card p-3">
             <div className="mb-2 flex items-center gap-2">
-              <span className="cmc-label">Recent runs</span>
+              <span className="cmc-label">{t("recentRuns")}</span>
               <div className="flex-1" />
               <button className="cmc-btn" onClick={refreshRuns}>
                 ↻
@@ -438,7 +440,7 @@ export function WorkflowEditor({ initial }: { initial: Workflow }) {
             </div>
             {runs.length === 0 ? (
               <div className="text-[11px]" style={{ color: "var(--c-fg-3)" }}>
-                No runs loaded.
+                {t("noRuns")}
               </div>
             ) : (
               <ul className="flex flex-col gap-1">
@@ -482,6 +484,7 @@ function ConfigFields({
   config: Cfg;
   onChange: (key: string, value: unknown) => void;
 }) {
+  const t = useTranslations("workflows");
   const field = (
     key: string,
     label: string,
@@ -504,33 +507,33 @@ function ConfigFields({
     case "notify":
       return (
         <>
-          {field("title", "Title")}
-          {field("body", "Body")}
-          {field("toUserId", "To user id (optional)")}
+          {field("title", t("fieldTitle"))}
+          {field("body", t("fieldBody"))}
+          {field("toUserId", t("fieldToUserId"))}
         </>
       );
     case "delay":
-      return <>{field("seconds", "Seconds", "number")}</>;
+      return <>{field("seconds", t("fieldSeconds"), "number")}</>;
     case "condition":
       return (
         <>
-          {field("path", "Input key")}
-          {field("equals", "Equals")}
+          {field("path", t("fieldInputKey"))}
+          {field("equals", t("fieldEquals"))}
         </>
       );
     case "create_incident":
       return (
         <>
-          {field("severity", "Severity (1-5)", "number")}
-          {field("type", "Type")}
-          {field("region", "Region")}
-          {field("summary", "Summary")}
+          {field("severity", t("fieldSeverity"), "number")}
+          {field("type", t("fieldType"))}
+          {field("region", t("fieldRegion"))}
+          {field("summary", t("fieldSummary"))}
         </>
       );
     default:
       return (
         <div className="text-[11px]" style={{ color: "var(--c-fg-3)" }}>
-          No configuration.
+          {t("noConfiguration")}
         </div>
       );
   }

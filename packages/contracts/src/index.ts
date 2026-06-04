@@ -40,3 +40,4 @@ export * from "./rag";
 export * from "./copilot";
 export * from "./document-text";
 export * from "./backup";
+export * from "./preferences";

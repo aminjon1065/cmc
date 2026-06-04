@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getTranslations } from "next-intl/server";
 import { auth } from "@/auth";
 import {
   UsersListResponseSchema,
@@ -13,23 +14,32 @@ import { fetchRegions } from "@/lib/regions";
 import { CreateUserForm } from "./create-user-form";
 import { UserRow } from "./user-row";
 
-export const metadata: Metadata = { title: "Users · Administration" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("admin");
+  return { title: t("users.metaTitle") };
+}
 
 type RoleRef = { id: string; slug: string; name: string; isSystem: boolean };
 
+type UsersFetchError = {
+  ok: false;
+  errorKey: "errShape" | "errApi" | "errLoad";
+  status?: number;
+};
+
 async function fetchUsers(): Promise<
-  { ok: true; users: UserSummary[] } | { ok: false; error: string }
+  { ok: true; users: UserSummary[] } | UsersFetchError
 > {
   try {
     const raw = await authedApiFetch<unknown>("/users");
     const parsed = UsersListResponseSchema.safeParse(raw);
-    if (!parsed.success) return { ok: false, error: "Unexpected API shape." };
+    if (!parsed.success) return { ok: false, errorKey: "errShape" };
     return { ok: true, users: parsed.data.users };
   } catch (err) {
     if (err instanceof ApiError) {
-      return { ok: false, error: `API ${err.status}` };
+      return { ok: false, errorKey: "errApi", status: err.status };
     }
-    return { ok: false, error: "Failed to load users." };
+    return { ok: false, errorKey: "errLoad" };
   }
 }
 
@@ -52,6 +62,8 @@ async function fetchRoles(): Promise<RoleRef[]> {
 export default async function AdminUsersPage() {
   const session = await auth();
   const { copy } = await getBranding();
+  const t = await getTranslations("admin");
+  const tc = await getTranslations("common");
   const access = await getMyAccess();
   const [result, roles, regions] = await Promise.all([
     fetchUsers(),
@@ -62,26 +74,27 @@ export default async function AdminUsersPage() {
   return (
     <AppShell
       active="admin"
-      crumbs={["Administration", "Users"]}
+      crumbs={[t("crumbAdministration"), t("crumbUsers")]}
       tenant={session?.tenantSlug}
       branding={{ orgName: copy.orgName, orgShort: copy.orgShort }}
-      user={{ name: session?.user?.name, role: "Administrator" }}
+      user={{ name: session?.user?.name, role: tc("roleAdmin") }}
     >
       <div
         className="flex items-center gap-5 px-5 py-4"
         style={{ borderBottom: "0.5px solid var(--c-line-2)" }}
       >
         <div>
-          <div className="cmc-label mb-1">Administration · Users</div>
+          <div className="cmc-label mb-1">{t("users.kicker")}</div>
           <div
             className="cmc-display text-[22px] font-semibold"
             style={{ letterSpacing: "-0.01em" }}
           >
-            Users
+            {t("users.title")}
           </div>
           <div className="mt-1 text-[11.5px]" style={{ color: "var(--c-fg-3)" }}>
-            {result.ok ? `${result.users.length} user(s)` : "—"} ·{" "}
-            invite, deactivate, and assign roles.
+            {result.ok
+              ? t("users.subtitle", { count: result.users.length })
+              : tc("dash")}
           </div>
         </div>
       </div>
@@ -90,13 +103,12 @@ export default async function AdminUsersPage() {
         {/* Create */}
         <div className="cmc-card">
           <div className="cmc-card-header">
-            <span className="cmc-label">Invite a user</span>
+            <span className="cmc-label">{t("users.inviteSection")}</span>
           </div>
           <div className="p-4">
             <CreateUserForm roles={roles} />
             <p className="mt-2 text-[11px]" style={{ color: "var(--c-fg-4)" }}>
-              New users have no password until you send a reset link (no email
-              channel yet — you relay the token).
+              {t("users.inviteHint")}
             </p>
           </div>
         </div>
@@ -104,7 +116,7 @@ export default async function AdminUsersPage() {
         {/* List */}
         <div className="cmc-card">
           <div className="cmc-card-header">
-            <span className="cmc-label">All users</span>
+            <span className="cmc-label">{t("users.allUsers")}</span>
           </div>
           {!result.ok ? (
             <div
@@ -116,7 +128,9 @@ export default async function AdminUsersPage() {
                   "0.5px solid color-mix(in srgb, var(--c-sev-1) 30%, transparent)",
               }}
             >
-              {result.error}
+              {result.errorKey === "errApi"
+                ? t("users.errApi", { status: result.status ?? 0 })
+                : t(`users.${result.errorKey}`)}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -129,12 +143,16 @@ export default async function AdminUsersPage() {
                       borderBottom: "0.5px solid var(--c-line-2)",
                     }}
                   >
-                    <th className="px-4 py-2 font-medium">User</th>
-                    <th className="px-4 py-2 font-medium">Roles</th>
-                    <th className="px-4 py-2 font-medium">Region</th>
-                    <th className="px-4 py-2 font-medium">Status</th>
-                    <th className="px-4 py-2 font-medium">Last login</th>
-                    <th className="px-4 py-2 font-medium">Actions</th>
+                    <th className="px-4 py-2 font-medium">{t("users.thUser")}</th>
+                    <th className="px-4 py-2 font-medium">{t("users.thRoles")}</th>
+                    <th className="px-4 py-2 font-medium">{t("users.thRegion")}</th>
+                    <th className="px-4 py-2 font-medium">{t("users.thStatus")}</th>
+                    <th className="px-4 py-2 font-medium">
+                      {t("users.thLastLogin")}
+                    </th>
+                    <th className="px-4 py-2 font-medium">
+                      {t("users.thActions")}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>

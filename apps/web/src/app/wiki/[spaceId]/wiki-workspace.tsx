@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import type {
   ProseMirrorDoc,
   WikiComment,
@@ -41,6 +42,7 @@ export function WikiWorkspace({
   canManage: boolean;
   currentUserId: string | null;
 }) {
+  const t = useTranslations("wiki");
   const [pages, setPages] = useState<WikiPageSummary[]>(initialPages);
   const [selectedId, setSelectedId] = useState<string | null>(
     initialPageId ?? initialPages[0]?.id ?? null,
@@ -123,7 +125,7 @@ export function WikiWorkspace({
     setBusy(true);
     setMsg(null);
     const res = await savePageAction(selectedId, {
-      title: title.trim() || "Untitled",
+      title: title.trim() || t("untitled"),
       content: contentRef.current,
     });
     setBusy(false);
@@ -145,13 +147,16 @@ export function WikiWorkspace({
           : p,
       ),
     );
-    setMsg({ kind: "ok", text: `Saved (v${res.data.currentVersionNo}).` });
+    setMsg({
+      kind: "ok",
+      text: t("saved", { version: res.data.currentVersionNo }),
+    });
     void refreshSide(res.data.id);
   }
 
   async function remove() {
     if (!selectedId) return;
-    if (!confirm("Delete this page and all its sub-pages?")) return;
+    if (!confirm(t("confirmDeletePage"))) return;
     setBusy(true);
     setMsg(null);
     const res = await deletePageAction(spaceId, selectedId);
@@ -169,8 +174,7 @@ export function WikiWorkspace({
 
   async function restore(versionNo: number) {
     if (!selectedId) return;
-    if (!confirm(`Restore version v${versionNo}? This appends a new version.`))
-      return;
+    if (!confirm(t("confirmRestore", { versionNo }))) return;
     setBusy(true);
     setMsg(null);
     const res = await restoreVersionAction(selectedId, versionNo);
@@ -183,7 +187,10 @@ export function WikiWorkspace({
     setTitle(res.data.title);
     contentRef.current = res.data.content;
     setLoadKey((k) => k + 1);
-    setMsg({ kind: "ok", text: `Restored → v${res.data.currentVersionNo}.` });
+    setMsg({
+      kind: "ok",
+      text: t("restored", { version: res.data.currentVersionNo }),
+    });
     void refreshSide(res.data.id);
   }
 
@@ -211,7 +218,7 @@ export function WikiWorkspace({
   // leaves the collaborative content untouched.
   async function doneEditing() {
     if (!selectedId || !page) return;
-    const newTitle = title.trim() || "Untitled";
+    const newTitle = title.trim() || t("untitled");
     if (newTitle !== page.title) {
       setBusy(true);
       const res = await savePageAction(selectedId, { title: newTitle });
@@ -268,7 +275,7 @@ export function WikiWorkspace({
           className="flex items-center gap-2 px-3 py-2"
           style={{ borderBottom: "0.5px solid var(--c-line-2)" }}
         >
-          <span className="cmc-label">Pages</span>
+          <span className="cmc-label">{t("pages")}</span>
           <div className="flex-1" />
           {canWrite && (
             <button
@@ -279,7 +286,7 @@ export function WikiWorkspace({
                 setNewTitle("");
               }}
             >
-              + Page
+              {t("newPage")}
             </button>
           )}
         </div>
@@ -298,7 +305,7 @@ export function WikiWorkspace({
               className="px-3 py-3 text-[11px]"
               style={{ color: "var(--c-fg-3)" }}
             >
-              No pages yet.
+              {t("noPages")}
             </div>
           ) : (
             pages.map((p) => (
@@ -330,7 +337,7 @@ export function WikiWorkspace({
                     <button
                       className="opacity-0 group-hover:opacity-100"
                       style={{ color: "var(--c-fg-3)", fontSize: 13 }}
-                      title="Add sub-page"
+                      title={t("addSubPage")}
                       onClick={() => {
                         setNewChildOf(p.id);
                         setNewTitle("");
@@ -375,7 +382,7 @@ export function WikiWorkspace({
         {!selectedId || !page ? (
           <div className="cmc-card flex flex-1 items-center justify-center">
             <span className="text-[12px]" style={{ color: "var(--c-fg-3)" }}>
-              {busy ? "Loading…" : "Select a page, or create one to begin."}
+              {busy ? t("loading") : t("selectOrCreate")}
             </span>
           </div>
         ) : (
@@ -390,7 +397,7 @@ export function WikiWorkspace({
                   style={{ flex: 1, fontWeight: 600 }}
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Page title"
+                  placeholder={t("pageTitlePlaceholder")}
                 />
               ) : (
                 <span
@@ -417,7 +424,7 @@ export function WikiWorkspace({
                       onClick={doneEditing}
                       disabled={busy}
                     >
-                      {busy ? "…" : "Done"}
+                      {busy ? "…" : t("done")}
                     </button>
                   ) : (
                     <>
@@ -426,21 +433,21 @@ export function WikiWorkspace({
                         onClick={save}
                         disabled={busy}
                       >
-                        {busy ? "Saving…" : "Save"}
+                        {busy ? t("saving") : t("save")}
                       </button>
                       <button
                         className="cmc-btn"
                         disabled={busy}
                         onClick={cancelEdit}
                       >
-                        Cancel
+                        {t("cancel")}
                       </button>
                     </>
                   )
                 ) : (
                   <>
                     <button className="cmc-btn" onClick={startEdit}>
-                      Edit
+                      {t("edit")}
                     </button>
                     <button
                       className="cmc-btn"
@@ -448,7 +455,7 @@ export function WikiWorkspace({
                       onClick={remove}
                       disabled={busy}
                     >
-                      Delete
+                      {t("delete")}
                     </button>
                   </>
                 ))}
@@ -489,16 +496,16 @@ export function WikiWorkspace({
           style={{ borderBottom: "0.5px solid var(--c-line-2)" }}
         >
           <TabBtn active={tab === "comments"} onClick={() => setTab("comments")}>
-            Comments
+            {t("comments")}
           </TabBtn>
           <TabBtn active={tab === "versions"} onClick={() => setTab("versions")}>
-            History
+            {t("history")}
           </TabBtn>
         </div>
         <div className="flex-1 overflow-auto p-3">
           {!selectedId ? (
             <div className="text-[11px]" style={{ color: "var(--c-fg-3)" }}>
-              No page selected.
+              {t("noPageSelected")}
             </div>
           ) : tab === "versions" ? (
             <VersionList
@@ -531,10 +538,11 @@ function CollabBadge({
   status: CollabStatus | null;
   peers: number;
 }) {
+  const t = useTranslations("wiki");
   if (status === "connecting") {
     return (
       <span className="text-[10px]" style={{ color: "var(--c-fg-4)" }}>
-        Connecting…
+        {t("connecting")}
       </span>
     );
   }
@@ -543,10 +551,10 @@ function CollabBadge({
       <span
         className="flex items-center gap-1 text-[10px]"
         style={{ color: "var(--c-accent)" }}
-        title="Live collaboration — changes save automatically"
+        title={t("liveTooltip")}
       >
         <span style={{ fontSize: 8 }}>●</span>
-        Live{peers > 1 ? ` · ${peers} editing` : ""}
+        {peers > 1 ? t("liveEditing", { count: peers }) : t("live")}
       </span>
     );
   }
@@ -590,6 +598,7 @@ function NewRow({
   onCancel: () => void;
   indent: number;
 }) {
+  const t = useTranslations("wiki");
   return (
     <div
       className="flex items-center gap-1 py-1 pr-2"
@@ -599,7 +608,7 @@ function NewRow({
         className="cmc-input"
         style={{ flex: 1, padding: "1px 6px", fontSize: 12 }}
         autoFocus
-        placeholder="Page title"
+        placeholder={t("pageTitlePlaceholder")}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {
@@ -634,10 +643,11 @@ function VersionList({
   canWrite: boolean;
   onRestore: (v: number) => void;
 }) {
+  const t = useTranslations("wiki");
   if (versions.length === 0) {
     return (
       <div className="text-[11px]" style={{ color: "var(--c-fg-3)" }}>
-        No versions.
+        {t("noVersions")}
       </div>
     );
   }
@@ -665,7 +675,7 @@ function VersionList({
           </div>
           {v.isCurrent ? (
             <span className="text-[10px]" style={{ color: "var(--c-fg-4)" }}>
-              current
+              {t("current")}
             </span>
           ) : (
             canWrite && (
@@ -674,7 +684,7 @@ function VersionList({
                 style={{ color: "var(--c-accent)" }}
                 onClick={() => onRestore(v.versionNo)}
               >
-                Restore
+                {t("restore")}
               </button>
             )
           )}
@@ -703,6 +713,7 @@ function CommentPanel({
   onChanged: () => void;
   setMsg: (m: Msg) => void;
 }) {
+  const t = useTranslations("wiki");
   const [body, setBody] = useState("");
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [replyBody, setReplyBody] = useState("");
@@ -758,9 +769,9 @@ function CommentPanel({
   }
 
   function who(c: WikiComment): string {
-    if (c.authorId && c.authorId === currentUserId) return "You";
-    if (c.authorId) return `User ${c.authorId.slice(0, 8)}`;
-    return "Unknown";
+    if (c.authorId && c.authorId === currentUserId) return t("you");
+    if (c.authorId) return t("userPrefix", { id: c.authorId.slice(0, 8) });
+    return t("unknown");
   }
 
   function Item({ c, depth }: { c: WikiComment; depth: number }) {
@@ -821,7 +832,7 @@ function CommentPanel({
                 setReplyBody("");
               }}
             >
-              Reply
+              {t("reply")}
             </button>
           )}
         </div>
@@ -831,7 +842,7 @@ function CommentPanel({
               className="cmc-input"
               style={{ flex: 1, padding: "2px 6px", fontSize: 11 }}
               autoFocus
-              placeholder="Reply…"
+              placeholder={t("replyPlaceholder")}
               value={replyBody}
               onChange={(e) => setReplyBody(e.target.value)}
               onKeyDown={(e) =>
@@ -844,7 +855,7 @@ function CommentPanel({
               disabled={busy || !replyBody.trim()}
               onClick={() => add(replyBody, c.id)}
             >
-              Send
+              {t("send")}
             </button>
           </div>
         )}
@@ -866,7 +877,7 @@ function CommentPanel({
           <textarea
             className="cmc-input"
             style={{ minHeight: 52, padding: "6px 8px", fontSize: 11.5 }}
-            placeholder="Add a comment…"
+            placeholder={t("addComment")}
             value={body}
             onChange={(e) => setBody(e.target.value)}
           />
@@ -877,14 +888,14 @@ function CommentPanel({
               disabled={busy || !body.trim()}
               onClick={() => add(body, null)}
             >
-              Comment
+              {t("comment")}
             </button>
           </div>
         </div>
       )}
       {roots.length === 0 ? (
         <div className="text-[11px]" style={{ color: "var(--c-fg-3)" }}>
-          No comments yet.
+          {t("noComments")}
         </div>
       ) : (
         <div className="flex flex-col gap-1.5">

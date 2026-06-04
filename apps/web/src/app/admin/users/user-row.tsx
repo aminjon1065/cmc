@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import type { Region, UserSummary } from "@cmc/contracts";
 import {
   assignRoleAction,
@@ -30,6 +31,7 @@ export function UserRow({
   isSelf: boolean;
 }) {
   const router = useRouter();
+  const t = useTranslations("admin");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reset, setReset] = useState<{ token: string; expiresAt: string } | null>(
@@ -65,7 +67,7 @@ export function UserRow({
   }
 
   async function onDelete() {
-    if (!confirm(`Delete ${user.email}? This cannot be undone.`)) return;
+    if (!confirm(t("users.confirmDelete", { email: user.email }))) return;
     await run(deleteUserAction(user.id));
   }
 
@@ -81,7 +83,7 @@ export function UserRow({
         </div>
         {isSelf && (
           <span className="cmc-chip mt-1" style={{ color: "var(--c-fg-3)" }}>
-            you
+            {t("users.you")}
           </span>
         )}
       </td>
@@ -101,7 +103,7 @@ export function UserRow({
                 type="button"
                 onClick={() => run(removeRoleAction(user.id, r.id))}
                 disabled={busy}
-                title="Remove role"
+                title={t("users.removeRole")}
                 style={{ color: "var(--c-fg-4)", cursor: "pointer" }}
               >
                 ×
@@ -117,7 +119,7 @@ export function UserRow({
                 onChange={(e) => setAddRoleId(e.target.value)}
                 disabled={busy}
               >
-                <option value="">+ role</option>
+                <option value="">{t("users.addRolePlaceholder")}</option>
                 {assignable.map((r) => (
                   <option key={r.id} value={r.id}>
                     {r.name}
@@ -135,7 +137,7 @@ export function UserRow({
                   }}
                   disabled={busy}
                 >
-                  Add
+                  {t("users.add")}
                 </button>
               )}
             </span>
@@ -152,9 +154,9 @@ export function UserRow({
             run(updateUserAction(user.id, { regionId: e.target.value || null }))
           }
           disabled={busy}
-          title="Assign this user to a region"
+          title={t("users.assignRegionTitle")}
         >
-          <option value="">Unassigned</option>
+          <option value="">{t("users.unassigned")}</option>
           {regions.map((r) => (
             <option key={r.id} value={r.id}>
               {r.name}
@@ -165,16 +167,16 @@ export function UserRow({
 
       <td className="px-4 py-2.5 align-top">
         {user.isActive ? (
-          <span className="cmc-chip cmc-chip-ok">Active</span>
+          <span className="cmc-chip cmc-chip-ok">{t("users.active")}</span>
         ) : (
           <span className="cmc-chip" style={{ color: "var(--c-fg-3)" }}>
-            Inactive
+            {t("users.inactive")}
           </span>
         )}
         {!user.hasPassword && (
           <div className="mt-1">
             <span className="cmc-chip" style={{ color: "var(--c-sev-2)" }}>
-              No password
+              {t("users.noPassword")}
             </span>
           </div>
         )}
@@ -184,7 +186,7 @@ export function UserRow({
         className="cmc-mono px-4 py-2.5 align-top text-[10.5px]"
         style={{ color: "var(--c-fg-3)" }}
       >
-        {user.lastLoginAt ? fmt(user.lastLoginAt) : "never"}
+        {user.lastLoginAt ? fmt(user.lastLoginAt) : t("users.never")}
       </td>
 
       <td className="px-4 py-2.5 align-top">
@@ -194,9 +196,9 @@ export function UserRow({
             className="cmc-btn"
             onClick={() => run(updateUserAction(user.id, { isActive: !user.isActive }))}
             disabled={busy || isSelf}
-            title={isSelf ? "You can't deactivate yourself" : undefined}
+            title={isSelf ? t("users.cantDeactivateSelf") : undefined}
           >
-            {user.isActive ? "Deactivate" : "Activate"}
+            {user.isActive ? t("users.deactivate") : t("users.activate")}
           </button>
           <button
             type="button"
@@ -204,7 +206,7 @@ export function UserRow({
             onClick={onReset}
             disabled={busy}
           >
-            Reset password
+            {t("users.resetPassword")}
           </button>
           <button
             type="button"
@@ -213,7 +215,7 @@ export function UserRow({
             disabled={busy || isSelf}
             style={{ color: isSelf ? undefined : "var(--c-sev-1)" }}
           >
-            Delete
+            {t("users.delete")}
           </button>
         </div>
 
@@ -232,7 +234,7 @@ export function UserRow({
               maxWidth: 320,
             }}
           >
-            <div className="cmc-label mb-1">Reset token — relay to the user</div>
+            <div className="cmc-label mb-1">{t("users.resetTokenLabel")}</div>
             <div
               className="cmc-mono break-all text-[10.5px]"
               style={{ color: "var(--c-fg-2)" }}
@@ -240,7 +242,7 @@ export function UserRow({
               {reset.token}
             </div>
             <div className="mt-1 text-[10px]" style={{ color: "var(--c-fg-4)" }}>
-              Expires {fmt(reset.expiresAt)} UTC
+              {t("users.expires", { at: fmt(reset.expiresAt) })}
             </div>
           </div>
         )}

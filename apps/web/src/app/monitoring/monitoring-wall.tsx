@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import type { MonitoringSummary } from "@cmc/contracts";
 import { getMonitoringSummaryAction } from "./actions";
 
@@ -28,6 +29,7 @@ export function MonitoringWall({
 }: {
   initialSummary: MonitoringSummary;
 }) {
+  const t = useTranslations("monitoring");
   const [s, setS] = useState<MonitoringSummary>(initialSummary);
   const [stale, setStale] = useState(false);
 
@@ -59,34 +61,34 @@ export function MonitoringWall({
           className="cmc-display text-[18px] font-semibold"
           style={{ color: "var(--c-fg-1)" }}
         >
-          Command Center
+          {t("commandCenter")}
         </span>
         <div className="flex-1" />
         <span
           className="flex items-center gap-1 text-[10px]"
           style={{ color: stale ? "var(--c-sev-2)" : "var(--c-accent)" }}
-          title={stale ? "Reconnecting…" : "Live (4s polling)"}
+          title={stale ? t("reconnecting") : t("livePolling")}
         >
           <span style={{ fontSize: 8 }}>●</span>
-          {stale ? "stale" : "live"} · {timeOf(s.generatedAt)}
+          {stale ? t("stale") : t("live")} · {timeOf(s.generatedAt)}
         </span>
       </div>
 
       {/* KPI tiles */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi
-          label="Active incidents"
+          label={t("kpiActiveIncidents")}
           value={s.incidents.active}
           accent={s.incidents.active > 0 ? "var(--c-sev-1)" : "var(--c-fg-2)"}
         />
         <Kpi
-          label="SEV-1 (critical)"
+          label={t("kpiSev1")}
           value={s.incidents.bySeverity["1"] ?? 0}
           accent="var(--c-sev-1)"
         />
-        <Kpi label="Open calls" value={s.videoRoomsOpen} accent="var(--c-accent)" />
+        <Kpi label={t("kpiOpenCalls")} value={s.videoRoomsOpen} accent="var(--c-accent)" />
         <Kpi
-          label="Events (recent)"
+          label={t("kpiRecentEvents")}
           value={s.recentEvents.length}
           accent="var(--c-fg-2)"
         />
@@ -96,7 +98,7 @@ export function MonitoringWall({
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <div className="cmc-card">
           <div className="cmc-card-header">
-            <span className="cmc-label">By severity</span>
+            <span className="cmc-label">{t("bySeverity")}</span>
           </div>
           <div className="flex flex-col gap-2 p-4">
             {SEV.map((sev) => {
@@ -132,7 +134,7 @@ export function MonitoringWall({
 
         <div className="cmc-card">
           <div className="cmc-card-header">
-            <span className="cmc-label">By status</span>
+            <span className="cmc-label">{t("byStatus")}</span>
           </div>
           <div className="flex flex-wrap gap-2 p-4">
             {STATUSES.map((st) => (
@@ -160,12 +162,12 @@ export function MonitoringWall({
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <div className="cmc-card flex flex-col" style={{ maxHeight: 360 }}>
           <div className="cmc-card-header">
-            <span className="cmc-label">Recent incidents</span>
+            <span className="cmc-label">{t("recentIncidents")}</span>
           </div>
           <div className="flex-1 overflow-auto p-2">
             {s.recentIncidents.length === 0 ? (
               <div className="p-2 text-[11px]" style={{ color: "var(--c-fg-3)" }}>
-                No incidents.
+                {t("noIncidents")}
               </div>
             ) : (
               s.recentIncidents.map((i) => (
@@ -202,7 +204,7 @@ export function MonitoringWall({
 
         <div className="cmc-card flex flex-col" style={{ maxHeight: 360 }}>
           <div className="cmc-card-header">
-            <span className="cmc-label">Alert ticker</span>
+            <span className="cmc-label">{t("alertTicker")}</span>
           </div>
           <div className="flex-1 overflow-auto p-2">
             {s.recentEvents.map((e) => (

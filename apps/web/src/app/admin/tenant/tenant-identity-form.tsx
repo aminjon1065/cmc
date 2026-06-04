@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { updateTenantAction } from "./actions";
 
 export function TenantIdentityForm({
@@ -12,6 +13,7 @@ export function TenantIdentityForm({
   initialName: string;
 }) {
   const router = useRouter();
+  const t = useTranslations("admin");
   const [name, setName] = useState(initialName);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -26,7 +28,7 @@ export function TenantIdentityForm({
       setMsg({ ok: false, text: res.error });
       return;
     }
-    setMsg({ ok: true, text: "Saved." });
+    setMsg({ ok: true, text: t("tenant.saved") });
     router.refresh();
   }
 
@@ -34,7 +36,7 @@ export function TenantIdentityForm({
     <form onSubmit={onSubmit} className="flex flex-col gap-3">
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1">
-          <span className="cmc-label">Tenant name</span>
+          <span className="cmc-label">{t("tenant.fTenantName")}</span>
           <input
             className="cmc-input"
             style={{ width: 280 }}
@@ -45,7 +47,7 @@ export function TenantIdentityForm({
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="cmc-label">Slug (immutable)</span>
+          <span className="cmc-label">{t("tenant.fSlugImmutable")}</span>
           <input
             className="cmc-input cmc-mono"
             style={{ width: 180 }}
@@ -54,7 +56,7 @@ export function TenantIdentityForm({
           />
         </label>
         <button type="submit" className="cmc-btn cmc-btn-primary" disabled={busy}>
-          {busy ? "Saving…" : "Save name"}
+          {busy ? t("tenant.saving") : t("tenant.saveName")}
         </button>
       </div>
       {msg && (

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import type { VideoRoom } from "@cmc/contracts";
 import { createRoomAction, listLinkedRoomsAction } from "../../video/actions";
 
@@ -22,6 +23,7 @@ export function IncidentVideo({
   canStart: boolean;
 }) {
   const router = useRouter();
+  const t = useTranslations("incidents");
   const [rooms, setRooms] = useState<VideoRoom[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -39,7 +41,7 @@ export function IncidentVideo({
   async function start() {
     setBusy(true);
     setErr(null);
-    const r = await createRoomAction(`Incident: ${summary.slice(0, 60)}`, {
+    const r = await createRoomAction(`${t("videoIncidentPrefix")}${summary.slice(0, 60)}`, {
       linkedType: "incident",
       linkedId: incidentId,
     });
@@ -68,18 +70,18 @@ export function IncidentVideo({
               style={{ background: "var(--c-bg-2)", color: "var(--c-fg-1)" }}
             >
               <span className="truncate">{room.name}</span>
-              <span style={{ color: "var(--c-accent)" }}>Join →</span>
+              <span style={{ color: "var(--c-accent)" }}>{t("videoJoin")}</span>
             </Link>
           ))}
         </div>
       ) : (
         <div className="text-[11px]" style={{ color: "var(--c-fg-3)" }}>
-          No active call.
+          {t("videoNone")}
         </div>
       )}
       {canStart && (
         <button className="cmc-btn" disabled={busy} onClick={() => void start()}>
-          {busy ? "Starting…" : "Start video call"}
+          {busy ? t("videoStarting") : t("videoStart")}
         </button>
       )}
     </div>

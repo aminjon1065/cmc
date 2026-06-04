@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 import {
   Building2,
   FileJson2,
@@ -13,20 +14,23 @@ import { AppShell } from "@/components/cmc/app-shell";
 import { getBranding } from "@/lib/branding";
 import { getMyAccess } from "@/lib/access";
 
-export const metadata: Metadata = {
-  title: "Administration",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("admin");
+  return { title: t("overview.metaTitle") };
+}
 
 /**
  * Admin sections. `available` flips to true as each phase lands:
  *   Users → P1.4b · Roles → P1.4c · Tenant → P1.4d
  * Until then a section is a non-clickable placeholder so the overview never
  * links to a 404.
+ *
+ * `titleKey`/`descKey` index into the `admin.overview` catalog namespace.
  */
 const SECTIONS: {
   id: string;
-  title: string;
-  description: string;
+  titleKey: string;
+  descKey: string;
   href: string;
   icon: typeof Users;
   available: boolean;
@@ -34,8 +38,8 @@ const SECTIONS: {
 }[] = [
   {
     id: "users",
-    title: "Users",
-    description: "Invite, deactivate, and assign roles to people in this tenant.",
+    titleKey: "secUsersTitle",
+    descKey: "secUsersDesc",
     href: "/admin/users",
     icon: Users,
     available: true,
@@ -43,8 +47,8 @@ const SECTIONS: {
   },
   {
     id: "roles",
-    title: "Roles & Permissions",
-    description: "Review system roles and build custom roles from the catalog.",
+    titleKey: "secRolesTitle",
+    descKey: "secRolesDesc",
     href: "/admin/roles",
     icon: ShieldCheck,
     available: true,
@@ -52,9 +56,8 @@ const SECTIONS: {
   },
   {
     id: "regions",
-    title: "Regions",
-    description:
-      "Manage regions and the per-region visibility of users + operational data.",
+    titleKey: "secRegionsTitle",
+    descKey: "secRegionsDesc",
     href: "/admin/regions",
     icon: MapPin,
     available: true,
@@ -62,8 +65,8 @@ const SECTIONS: {
   },
   {
     id: "tenant",
-    title: "Tenant Settings",
-    description: "Edit this tenant's name and branding (logo, copy, theme).",
+    titleKey: "secTenantTitle",
+    descKey: "secTenantDesc",
     href: "/admin/tenant",
     icon: Building2,
     available: true,
@@ -71,9 +74,8 @@ const SECTIONS: {
   },
   {
     id: "api-docs",
-    title: "API Reference",
-    description:
-      "Browse the versioned REST API (/v1), generated from the live contracts.",
+    titleKey: "secApiDocsTitle",
+    descKey: "secApiDocsDesc",
     href: "/admin/api-docs",
     icon: FileJson2,
     available: true,
@@ -81,9 +83,8 @@ const SECTIONS: {
   },
   {
     id: "api-keys",
-    title: "API Keys",
-    description:
-      "Issue scoped API keys for programmatic access, set quotas, and revoke.",
+    titleKey: "secApiKeysTitle",
+    descKey: "secApiKeysDesc",
     href: "/admin/api-keys",
     icon: KeyRound,
     available: true,
@@ -95,31 +96,33 @@ export default async function AdminOverviewPage() {
   const session = await auth();
   const { copy } = await getBranding();
   const access = await getMyAccess();
+  const t = await getTranslations("admin");
+  const tc = await getTranslations("common");
 
   return (
     <AppShell
       active="admin"
-      crumbs={["Administration"]}
+      crumbs={[t("crumbAdministration")]}
       tenant={session?.tenantSlug}
       branding={{ orgName: copy.orgName, orgShort: copy.orgShort }}
-      user={{ name: session?.user?.name, role: "Administrator" }}
+      user={{ name: session?.user?.name, role: tc("roleAdmin") }}
     >
       <div
         className="flex items-center gap-5 px-5 py-4"
         style={{ borderBottom: "0.5px solid var(--c-line-2)" }}
       >
         <div>
-          <div className="cmc-label mb-1">Administration</div>
+          <div className="cmc-label mb-1">{t("overview.kicker")}</div>
           <div
             className="cmc-display text-[22px] font-semibold"
             style={{ letterSpacing: "-0.01em" }}
           >
-            Tenant Administration
+            {t("overview.title")}
           </div>
           <div className="mt-1 text-[11.5px]" style={{ color: "var(--c-fg-3)" }}>
-            Manage users, roles, and settings for{" "}
+            {t("overview.subtitle")}{" "}
             <span style={{ color: "var(--c-fg-2)" }}>
-              {session?.tenantSlug ?? "this tenant"}
+              {session?.tenantSlug ?? t("overview.thisTenant")}
             </span>
             .
           </div>
@@ -151,7 +154,7 @@ export default async function AdminOverviewPage() {
                     className="text-[13px] font-semibold"
                     style={{ color: "var(--c-fg-1)" }}
                   >
-                    {s.title}
+                    {t(`overview.${s.titleKey}`)}
                   </span>
                   <div className="flex-1" />
                   {!s.available && (
@@ -161,7 +164,7 @@ export default async function AdminOverviewPage() {
                   )}
                 </div>
                 <div className="text-[11.5px]" style={{ color: "var(--c-fg-3)" }}>
-                  {s.description}
+                  {t(`overview.${s.descKey}`)}
                 </div>
               </div>
             </div>
@@ -174,7 +177,7 @@ export default async function AdminOverviewPage() {
             <div
               key={s.id}
               aria-disabled
-              title="Coming soon"
+              title={tc("comingSoon")}
               className="cursor-not-allowed"
             >
               {body}
@@ -187,7 +190,7 @@ export default async function AdminOverviewPage() {
       <div className="px-5 pb-5">
         <div className="cmc-card">
           <div className="cmc-card-header">
-            <span className="cmc-label">Your access · /rbac/me</span>
+            <span className="cmc-label">{t("overview.yourAccess")}</span>
           </div>
           <div className="flex flex-col gap-3 p-4">
             <div>
@@ -195,7 +198,7 @@ export default async function AdminOverviewPage() {
                 className="mb-1.5 text-[10.5px] font-semibold uppercase"
                 style={{ color: "var(--c-fg-4)", letterSpacing: "0.06em" }}
               >
-                Roles
+                {t("overview.roles")}
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {access && access.roles.length > 0 ? (
@@ -206,7 +209,7 @@ export default async function AdminOverviewPage() {
                   ))
                 ) : (
                   <span className="text-[11.5px]" style={{ color: "var(--c-fg-3)" }}>
-                    none
+                    {t("overview.none")}
                   </span>
                 )}
               </div>
@@ -216,7 +219,7 @@ export default async function AdminOverviewPage() {
                 className="mb-1.5 text-[10.5px] font-semibold uppercase"
                 style={{ color: "var(--c-fg-4)", letterSpacing: "0.06em" }}
               >
-                Permissions ({access?.permissions.length ?? 0})
+                {t("overview.permissions", { count: access?.permissions.length ?? 0 })}
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {access?.permissions.map((p) => (

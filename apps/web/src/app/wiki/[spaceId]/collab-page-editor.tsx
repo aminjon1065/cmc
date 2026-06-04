@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Collaboration from "@tiptap/extension-collaboration";
@@ -70,6 +71,7 @@ export function CollabPageEditor({
   ) => void | Promise<void>;
   onActivateComment: (id: string) => void;
 }) {
+  const t = useTranslations("wiki");
   const [conn, setConn] = useState<Conn | null>(null);
   const [online, setOnline] = useState(true);
   const statusCb = useRef(onStatusChange);
@@ -172,7 +174,7 @@ export function CollabPageEditor({
   if (!conn) {
     return (
       <div className="p-4 text-[12px]" style={{ color: "var(--c-fg-3)" }}>
-        Connecting to live collaboration…
+        {t("connectingCollab")}
       </div>
     );
   }
@@ -205,6 +207,7 @@ function CollabEditorInner({
   ) => void | Promise<void>;
   onActivateComment: (id: string) => void;
 }) {
+  const t = useTranslations("wiki");
   const [bubble, setBubble] = useState<{ left: number; top: number } | null>(
     null,
   );
@@ -273,7 +276,7 @@ function CollabEditorInner({
   if (!editor) {
     return (
       <div className="p-4 text-[12px]" style={{ color: "var(--c-fg-3)" }}>
-        Loading editor…
+        {t("loadingEditor")}
       </div>
     );
   }
@@ -286,9 +289,9 @@ function CollabEditorInner({
             color: "var(--c-sev-2)",
             background: "var(--c-sev-2-soft, color-mix(in srgb, orange 12%, transparent))",
           }}
-          title="Disconnected — your edits are saved locally and will sync on reconnect"
+          title={t("offlineTooltip")}
         >
-          ● Offline — changes saved locally
+          {t("offlineBanner")}
         </div>
       )}
       <EditorToolbar editor={editor} />
@@ -308,7 +311,7 @@ function CollabEditorInner({
                 className="cmc-input"
                 style={{ padding: "2px 6px", fontSize: 12, width: 200 }}
                 autoFocus
-                placeholder="Comment on selection…"
+                placeholder={t("commentOnSelection")}
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => {
@@ -325,7 +328,7 @@ function CollabEditorInner({
                 disabled={!draft.trim()}
                 onClick={() => void submitComment()}
               >
-                Send
+                {t("send")}
               </button>
             </div>
           ) : (
@@ -335,7 +338,7 @@ function CollabEditorInner({
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => setComposing(true)}
             >
-              💬 Comment
+              💬 {t("comment")}
             </button>
           )}
         </div>

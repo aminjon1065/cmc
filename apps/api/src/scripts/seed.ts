@@ -147,6 +147,56 @@ async function main() {
       console.log(`✓ Granted tenant_admin to ${adminEmail}`);
     }
 
+    // 5. Demo accounts for local testing (idempotent). They share the admin
+    //    seed password for convenience — local dev only.
+    const demoUsers: { email: string; name: string; role: string }[] = [
+      { email: "analyst@cmc.local", name: "Demo Analyst", role: "analyst" },
+      { email: "operator@cmc.local", name: "Demo Operator", role: "operator" },
+      { email: "auditor@cmc.local", name: "Demo Auditor", role: "auditor" },
+    ];
+    const demoPassword = config.SEED_ADMIN_PASSWORD;
+    const demoHash = await AuthService.hashPassword(demoPassword);
+    for (const u of demoUsers) {
+      const email = u.email.toLowerCase();
+      let row = (
+        await db
+          .select({ id: schema.users.id })
+          .from(schema.users)
+          .where(eq(schema.users.email, email))
+          .limit(1)
+      )[0];
+      if (!row) {
+        const [created] = await db
+          .insert(schema.users)
+          .values({
+            tenantId: tenant.id,
+            email,
+            name: u.name,
+            passwordHash: demoHash,
+            isActive: true,
+          })
+          .returning({ id: schema.users.id });
+        row = created!;
+        console.log(`✓ Created ${u.role} user ${email}`);
+      } else {
+        console.log(`= User ${email} already exists`);
+      }
+      const roleId = roleIdBySlug.get(u.role);
+      if (row && roleId) {
+        await assignRoleToUser(db, {
+          userId: row.id,
+          roleId,
+          tenantId: tenant.id,
+        });
+        console.log(`✓ Granted ${u.role} to ${email}`);
+      }
+    }
+    console.log(
+      `  Demo logins (password=${demoPassword}): ${demoUsers
+        .map((u) => u.email)
+        .join(", ")}`,
+    );
+
     console.log("Seed complete.");
   } finally {
     await close();

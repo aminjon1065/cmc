@@ -1,15 +1,18 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { getTranslations } from "next-intl/server";
 import { LoginForm } from "@/components/login-form";
 import { Emblem } from "@/components/cmc/emblem";
 import { getPublicBranding } from "@/lib/branding";
 
-export const metadata: Metadata = {
-  title: "Sign in",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("login");
+  return { title: t("metaTitle") };
+}
 
 export default async function LoginPage() {
   const { copy } = await getPublicBranding();
+  const t = await getTranslations("login");
   // Split the headline on its newline so the mural keeps its two-line layout
   // regardless of which tenant's copy is in play.
   const [headlineL1, headlineL2] = copy.muralHeadline.split("\n");
@@ -86,7 +89,7 @@ export default async function LoginPage() {
             className="cmc-dot cmc-dot-pulse"
             style={{ background: "var(--c-ok)", color: "var(--c-ok)" }}
           />
-          ALL SYSTEMS OPERATIONAL
+          {t("allSystems")}
         </div>
 
         <div className="absolute inset-x-9 bottom-9">
@@ -135,12 +138,12 @@ export default async function LoginPage() {
         className="flex w-full flex-col px-12 py-16 lg:w-[440px] lg:border-l"
         style={{ borderColor: "var(--c-line-2)" }}
       >
-        <div className="cmc-label mb-1.5">Secure sign-in</div>
+        <div className="cmc-label mb-1.5">{t("secure")}</div>
         <h2
           className="cmc-display mb-8 text-[26px] font-semibold"
           style={{ letterSpacing: "-0.015em" }}
         >
-          Welcome back
+          {t("welcomeBack")}
         </h2>
 
         <Suspense fallback={<LoginFormSkeleton />}>
@@ -152,9 +155,7 @@ export default async function LoginPage() {
           className="mt-5 text-[10px] leading-relaxed"
           style={{ color: "var(--c-fg-4)" }}
         >
-          By signing in you accept the platform&apos;s Acceptable Use Policy.
-          All actions are logged in a tamper-evident audit trail under §3.15 of
-          the system specification.
+          {t("aup")}
         </p>
       </div>
     </div>

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import type { NotificationSummary } from "@cmc/contracts";
 import { markAllReadAction, markReadAction } from "./actions";
 
@@ -15,6 +16,7 @@ export function NotificationsView({
   initial: NotificationSummary[];
 }) {
   const router = useRouter();
+  const t = useTranslations("notifications");
   const [items, setItems] = useState(initial);
   const [busy, setBusy] = useState(false);
   const unread = items.filter((i) => !i.readAt).length;
@@ -44,7 +46,9 @@ export function NotificationsView({
     <div className="cmc-card">
       <div className="cmc-card-header">
         <span className="cmc-label">
-          All notifications {unread > 0 ? `· ${unread} unread` : ""}
+          {unread > 0
+            ? t("allNotificationsUnread", { count: unread })
+            : t("allNotifications")}
         </span>
         <div className="flex-1" />
         {unread > 0 && (
@@ -54,7 +58,7 @@ export function NotificationsView({
             onClick={onAll}
             disabled={busy}
           >
-            Mark all read
+            {t("markAllRead")}
           </button>
         )}
       </div>
@@ -64,7 +68,7 @@ export function NotificationsView({
           className="p-6 text-center text-[12px]"
           style={{ color: "var(--c-fg-3)" }}
         >
-          {"You're all caught up."}
+          {t("allCaughtUp")}
         </div>
       ) : (
         <div className="flex flex-col">

@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { createUserAction } from "./actions";
 
 type RoleRef = { id: string; slug: string; name: string; isSystem: boolean };
 
 export function CreateUserForm({ roles }: { roles: RoleRef[] }) {
   const router = useRouter();
+  const t = useTranslations("admin");
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [roleSlugs, setRoleSlugs] = useState<string[]>([]);
@@ -44,19 +46,19 @@ export function CreateUserForm({ roles }: { roles: RoleRef[] }) {
     <form onSubmit={onSubmit} className="flex flex-col gap-3">
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1">
-          <span className="cmc-label">Name</span>
+          <span className="cmc-label">{t("users.fName")}</span>
           <input
             className="cmc-input"
             style={{ width: 200 }}
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Jane Doe"
+            placeholder={t("users.fNamePlaceholder")}
             maxLength={200}
             required
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="cmc-label">Email</span>
+          <span className="cmc-label">{t("users.fEmail")}</span>
           <input
             className="cmc-input"
             style={{ width: 240 }}
@@ -73,13 +75,13 @@ export function CreateUserForm({ roles }: { roles: RoleRef[] }) {
           className="cmc-btn cmc-btn-primary"
           disabled={busy}
         >
-          {busy ? "Creating…" : "Create user"}
+          {busy ? t("users.creating") : t("users.createUser")}
         </button>
       </div>
 
       {roles.length > 0 && (
         <div className="flex flex-wrap items-center gap-3">
-          <span className="cmc-label">Initial roles</span>
+          <span className="cmc-label">{t("users.initialRoles")}</span>
           {roles.map((r) => (
             <label
               key={r.id}

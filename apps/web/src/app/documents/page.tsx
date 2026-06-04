@@ -7,12 +7,14 @@ import {
 } from "@cmc/contracts";
 import { AppShell } from "@/components/cmc/app-shell";
 import { getBranding } from "@/lib/branding";
+import { getTranslations } from "next-intl/server";
 import { UploadForm } from "./upload-form";
 import { DocumentRowActions } from "./document-row-actions";
 
-export const metadata: Metadata = {
-  title: "Documents",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("documents");
+  return { title: t("metaTitle") };
+}
 
 async function fetchDocuments(): Promise<
   { ok: true; data: ListDocumentsResponse } | { ok: false; error: string }
@@ -39,16 +41,18 @@ export default async function DocumentsPage() {
   const session = await auth();
   const result = await fetchDocuments();
   const { copy } = await getBranding();
+  const t = await getTranslations("documents");
+  const tc = await getTranslations("common");
 
   return (
     <AppShell
       active="docs"
-      crumbs={["Knowledge", "Documents"]}
+      crumbs={[t("crumbKnowledge"), t("crumbDocuments")]}
       tenant={session?.tenantSlug}
       branding={{ orgName: copy.orgName, orgShort: copy.orgShort }}
       user={{
         name: session?.user?.name ?? null,
-        role: "Operations Lead · L4",
+        role: tc("roleOpsLead"),
       }}
     >
       <div
@@ -56,26 +60,24 @@ export default async function DocumentsPage() {
         style={{ borderBottom: "0.5px solid var(--c-line-2)" }}
       >
         <div>
-          <div className="cmc-label mb-1">Document Management · EDMS</div>
+          <div className="cmc-label mb-1">{t("kicker")}</div>
           <div
             className="cmc-display text-[22px] font-semibold"
             style={{ letterSpacing: "-0.01em" }}
           >
-            Files in {session?.tenantSlug}
+            {t("filesIn", { tenant: session?.tenantSlug ?? "" })}
           </div>
           <div
             className="mt-1 text-[11.5px]"
             style={{ color: "var(--c-fg-3)" }}
           >
-            Tenant-scoped storage with retention, classification, and
-            tamper-evident audit trail.
+            {t("subtitle")}
           </div>
         </div>
         <div className="flex-1" />
         {result.ok && (
           <span className="cmc-chip cmc-chip-accent">
-            {result.data.total} document
-            {result.data.total === 1 ? "" : "s"}
+            {t("count", { count: result.data.total })}
           </span>
         )}
       </div>
@@ -83,7 +85,7 @@ export default async function DocumentsPage() {
       <div className="flex flex-col gap-3 p-5">
         <section className="cmc-card">
           <div className="cmc-card-header">
-            <span className="cmc-label">Upload</span>
+            <span className="cmc-label">{t("uploadSection")}</span>
           </div>
           <div className="p-4">
             <UploadForm />
@@ -92,13 +94,13 @@ export default async function DocumentsPage() {
 
         <section className="cmc-card">
           <div className="cmc-card-header">
-            <span className="cmc-label">Documents</span>
+            <span className="cmc-label">{t("documentsSection")}</span>
             <div className="flex-1" />
             <span
               className="text-[10.5px]"
               style={{ color: "var(--c-fg-3)" }}
             >
-              Sorted by upload date
+              {t("sortedBy")}
             </span>
           </div>
           {!result.ok ? (
@@ -111,7 +113,7 @@ export default async function DocumentsPage() {
                   "0.5px solid color-mix(in srgb, var(--c-sev-1) 30%, transparent)",
               }}
             >
-              <div className="font-medium">Couldn&apos;t load documents</div>
+              <div className="font-medium">{t("loadError")}</div>
               <div
                 className="mt-0.5"
                 style={{ color: "var(--c-fg-3)" }}
@@ -124,7 +126,7 @@ export default async function DocumentsPage() {
               className="p-5 text-[12px]"
               style={{ color: "var(--c-fg-3)" }}
             >
-              No documents yet. Upload one above to see it here.
+              {t("empty")}
             </div>
           ) : (
             <table className="w-full text-[12px]">
@@ -136,16 +138,16 @@ export default async function DocumentsPage() {
                   }}
                 >
                   <th className="cmc-label px-4 py-2.5 text-left font-medium">
-                    Name
+                    {t("thName")}
                   </th>
                   <th className="cmc-label px-4 py-2.5 text-left font-medium">
-                    Type
+                    {t("thType")}
                   </th>
                   <th className="cmc-label px-4 py-2.5 text-left font-medium">
-                    Size
+                    {t("thSize")}
                   </th>
                   <th className="cmc-label px-4 py-2.5 text-left font-medium">
-                    Uploaded
+                    {t("thUploaded")}
                   </th>
                   <th className="cmc-label px-4 py-2.5 font-medium" />
                 </tr>

@@ -128,7 +128,7 @@ A `—` means "not applicable to a NOT STARTED module."
 - `@Authorize('domain:action')` decorator + `AuthorizeGuard` (ALL-required; 403 + durable `rbac.access.denied` audit). Handles the guards-before-interceptors trap via `runForTenant` in the resolve path.
 - `PermissionCacheService` (Redis, fail-open, TTL 300s, invalidated on assign/remove). `RbacService` (resolve/hasPermission/listRoles/listUserRoles/assign/remove/enforce).
 - `RbacController`: roles list, user-roles list, assign/remove (gated `role:read`/`role:assign`).
-- System roles (`tenant_admin`/`operator`/`auditor`) seeded per tenant; documents `@Authorize`-protected per route. 9 e2e tests; live-validated.
+- System roles (`tenant_admin`/`operator`/`analyst`/`auditor`/`hq`) seeded per tenant; documents `@Authorize`-protected per route. 9 e2e tests; live-validated. **`analyst`** (2026-06-04) = read-only ops + analytics + AI (`llm:use`), no writes/audit. Dev seed also creates demo accounts `analyst@`/`operator@`/`auditor@cmc.local` (pwd = admin seed pwd).
 
 **Gaps vs ToR §3.3 / §6.2**
 - No ABAC / OPA / Rego (PDP/PEP/PIP, attribute policies) — RBAC only.
@@ -856,6 +856,39 @@ Structured JSON logging with `request_id`+`trace_id`+`tenantId`+`userId` (P0.3 /
 | Strengths | anchored tamper-evident audit trail (ADR-0029) + SIEM export (ADR-0030), DB-enforced tenant RLS, least-privilege RBAC + scoped API keys, MFA, encrypted-at-rest secrets, backups + restore drill, full-stack observability |
 | Technical gaps | at-rest SSE enforcement + KMS record, mTLS/prod-Vault, CI security scanning (CodeQL/Trivy/SBOM/ZAP), segregated staging + release/rollback gate, running SIEM, DR test, automated access reviews, edge WAF |
 | Org gaps (🏛) | security policy set, risk register, vendor/sub-processor inventory, HR security (onboarding/offboarding/training), defined audit period + control owners |
+
+---
+
+### Web localization plane (i18n — RU/TG · ADR-0076)
+
+| | |
+|---|---|
+| Status | ✅ **DONE (MVP) — full operator UI Russian-by-default + Tajik, switchable** (2026-06-04). UI was English-only; every page/component now localized via next-intl |
+| How | `next-intl` **no-routing** setup — active locale in the `NEXT_LOCALE` cookie (no `/ru` URL prefix), `defaultLocale = "ru"`, locales `["ru","tg"]`. `getRequestConfig` loads `messages/{locale}.json` (works anonymous → login is RU out of the box). Root layout: `<html lang={getLocale()}>` + `<NextIntlClientProvider>`. Topbar `LanguageSwitcher` writes the cookie via a server action + `router.refresh()` |
+| Done (slice 1) | Foundation (`src/i18n/{config,request,locale-actions}.ts`, `messages/{ru,tg}.json`, plugin in `next.config.ts`) + **app shell** (sidebar nav + topbar) + **login** (page + form + sign-out) + switcher |
+| Done (slice 2) | **dashboard** (KPIs, hero, trend, anomalies widget, region/type/priority cards) + **incidents** (list, filters, create form, detail, actions/edit, video widget) + **offline** page + **localized status badges** (`incidents.status.*`; StatusBadge → client `useTranslations`) + page breadcrumbs |
+| Done (slice 3) | **search** (page + box + source/type labels + error keys) + **documents** (page, upload form phases, row actions) + **map** (page + MapView layer panel/feature inspector) |
+| Done (slice 4) | **admin/\*** — overview + users (+ create/row) + roles (+ create/card) + tenant (+ identity/branding forms) + regions (+ manager) + api-keys (+ manager) + api-docs (+ swagger client). New `admin` namespace (190 keys); `common.roleAdmin` added |
+| Done (slice 5) | **chat, wiki, video, media, monitoring, imports, workflows, notifications** (pages + workspaces/editors/managers) + `notification-bell` + `pwa-register` offline badge. 9 new namespaces. (`room-stage`/`media-player` have no UI strings — LiveKit/HLS native.) **ru↔tg key parity verified 721/721** |
+| Tests | tsc ✓ + lint ✓ + `next build` ✓ (33 routes); authed live curl RU + `NEXT_LOCALE=tg` TG: `/dashboard`, `/incidents`, `/incidents/[id]`, `/search`, `/documents`, `/map`; `/offline` RU+TG (zero real leftover EN) |
+| Files | `apps/web/src/i18n/*`, `messages/{ru,tg}.json`, `components/cmc/{language-switcher,sidebar,topbar,incident-badges}.tsx`, `components/{sign-out-button,login-form}.tsx`, `next.config.ts`, `app/layout.tsx`, `app/login/page.tsx`, `app/dashboard/{page,anomalies-widget}.tsx`, `app/incidents/{page,incident-filters,create-incident-form}.tsx` + `app/incidents/[id]/{page,incident-actions,incident-video}.tsx`, `app/offline/page.tsx` |
+| Remaining (follow-on, optional) | next-intl date/number/relative-time formatting (replace ad-hoc `toLocaleString`/`fmt`); persist chosen locale to the user profile (server-side) in addition to the cookie; seed `branding.localeDefault = "ru"`; TMS workflow if a 3rd language is added. **All visible operator UI is translated.** |
+| Complexity | foundation done (S); incremental string migration M (broad but mechanical) |
+
+---
+
+### Web theming plane (light default + dark · ADR-0077)
+
+| | |
+|---|---|
+| Status | ✅ **DONE (2026-06-04)** — was dark-only; now **light by default + dark toggle** |
+| How | CSS-var token split in `globals.css`: `:root` = light palette (default), `.dark` = original dark palette; `color-scheme` per theme; Tailwind `darkMode: "class"`. Theme in a `theme` cookie (default light) read server-side in the root layout → `dark` class on `<html>` before paint (no flash). Topbar `ThemeToggle` (sun/moon) flips the class instantly + writes the cookie |
+| Tests | tsc ✓ + lint ✓ + `next build` ✓; live curl: default → no `.dark` (light), `theme=dark` → `.dark`; toggle present on authed pages (`aria-label="Тема"`) |
+| Files | `src/app/globals.css`, `src/lib/theme.ts`, `src/components/cmc/theme-toggle.tsx`, `src/app/layout.tsx`, `src/components/cmc/topbar.tsx`, `messages/{ru,tg}.json` (`topbar.theme`) |
+| Theme-aware extras (2026-06-04) | MapLibre minimal basemap backdrop follows theme + re-tints live on toggle (`MutationObserver`); PWA offline badge → CSS vars; PWA manifest colors → light `#f0f3f7` |
+| Profiles + system (ADR-0078) | ✅ **2026-06-04** — theme **+ locale persisted to the user profile** (`GET/PATCH /v1/me/preferences`; `users.ui_theme`/`ui_locale`, mig 0043; e2e 8/8); seeded into cookies on login; **`system` mode** (prefers-color-scheme, pre-paint script, live OS tracking). 3-state toggle (light/dark/system) |
+| Deferred (follow-on) | per-theme `viewport.themeColor` (`generateViewport`); live cross-device sync (now login-seeded); `<head>` pre-paint script for guaranteed zero-flash `system` |
+| Complexity | done (S + S) |
 
 ---
 

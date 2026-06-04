@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import type { ApiKey } from "@cmc/contracts";
 import { createApiKeyAction, revokeApiKeyAction } from "./actions";
 
@@ -17,6 +18,7 @@ export function ApiKeysManager({
   availableScopes: string[];
 }) {
   const router = useRouter();
+  const t = useTranslations("admin");
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [scopes, setScopes] = useState<Set<string>>(new Set());
@@ -62,7 +64,7 @@ export function ApiKeysManager({
   }
 
   async function onRevoke(id: string) {
-    if (!confirm("Revoke this key? Clients using it will stop working.")) return;
+    if (!confirm(t("apiKeys.confirmRevoke"))) return;
     const res = await revokeApiKeyAction(id);
     if (!res.ok) setError(res.error);
     else router.refresh();
@@ -80,7 +82,7 @@ export function ApiKeysManager({
           }}
         >
           <div className="cmc-label mb-1">
-            New key “{created.name}” — copy it now, it won’t be shown again
+            {t("apiKeys.newKeyLabel", { name: created.name })}
           </div>
           <div className="flex items-center gap-2">
             <code
@@ -96,10 +98,10 @@ export function ApiKeysManager({
                 setCopied(true);
               }}
             >
-              {copied ? "Copied ✓" : "Copy"}
+              {copied ? t("apiKeys.copied") : t("apiKeys.copy")}
             </button>
             <button className="cmc-btn" onClick={() => setCreated(null)}>
-              Dismiss
+              {t("apiKeys.dismiss")}
             </button>
           </div>
         </div>
@@ -109,32 +111,32 @@ export function ApiKeysManager({
       {!open ? (
         <div>
           <button className="cmc-btn cmc-btn-primary" onClick={() => setOpen(true)}>
-            + New API key
+            {t("apiKeys.newApiKey")}
           </button>
         </div>
       ) : (
         <form onSubmit={onCreate} className="cmc-card flex flex-col gap-3 p-4">
           <div className="flex flex-wrap items-end gap-3">
             <label className="flex flex-col gap-1">
-              <span className="cmc-label">Name</span>
+              <span className="cmc-label">{t("apiKeys.fName")}</span>
               <input
                 className="cmc-input"
                 style={{ width: 240 }}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="CI ingest"
+                placeholder={t("apiKeys.fNamePlaceholder")}
                 maxLength={120}
                 required
               />
             </label>
             <label className="flex flex-col gap-1">
-              <span className="cmc-label">Expires in (days, optional)</span>
+              <span className="cmc-label">{t("apiKeys.fExpiresIn")}</span>
               <input
                 className="cmc-input"
                 style={{ width: 160 }}
                 value={expiresInDays}
                 onChange={(e) => setExpiresInDays(e.target.value)}
-                placeholder="never"
+                placeholder={t("apiKeys.fExpiresPlaceholder")}
                 inputMode="numeric"
               />
             </label>
@@ -142,7 +144,7 @@ export function ApiKeysManager({
 
           <div>
             <div className="cmc-label mb-1.5">
-              Scopes ({scopes.size} selected) — limited to your own permissions
+              {t("apiKeys.scopesLabel", { count: scopes.size })}
             </div>
             <div className="flex flex-wrap gap-1.5">
               {availableScopes.map((s) => {
@@ -177,7 +179,7 @@ export function ApiKeysManager({
 
           <div className="flex items-center gap-2">
             <button type="submit" className="cmc-btn cmc-btn-primary" disabled={busy}>
-              {busy ? "Creating…" : "Create key"}
+              {busy ? t("apiKeys.creating") : t("apiKeys.createKey")}
             </button>
             <button
               type="button"
@@ -188,7 +190,7 @@ export function ApiKeysManager({
               }}
               disabled={busy}
             >
-              Cancel
+              {t("apiKeys.cancel")}
             </button>
           </div>
         </form>
@@ -198,7 +200,7 @@ export function ApiKeysManager({
       <div className="cmc-card">
         {keys.length === 0 ? (
           <div className="p-6 text-center text-[12px]" style={{ color: "var(--c-fg-3)" }}>
-            No API keys yet.
+            {t("apiKeys.noKeys")}
           </div>
         ) : (
           <table className="w-full text-[12px]">
@@ -210,11 +212,13 @@ export function ApiKeysManager({
                   borderBottom: "0.5px solid var(--c-line-2)",
                 }}
               >
-                <th className="px-4 py-2 font-medium">Name</th>
-                <th className="px-4 py-2 font-medium">Prefix</th>
-                <th className="px-4 py-2 font-medium">Scopes</th>
-                <th className="px-4 py-2 font-medium">Last used</th>
-                <th className="px-4 py-2 font-medium">Status</th>
+                <th className="px-4 py-2 font-medium">{t("apiKeys.thName")}</th>
+                <th className="px-4 py-2 font-medium">{t("apiKeys.thPrefix")}</th>
+                <th className="px-4 py-2 font-medium">{t("apiKeys.thScopes")}</th>
+                <th className="px-4 py-2 font-medium">
+                  {t("apiKeys.thLastUsed")}
+                </th>
+                <th className="px-4 py-2 font-medium">{t("apiKeys.thStatus")}</th>
                 <th className="px-4 py-2 font-medium"></th>
               </tr>
             </thead>
@@ -223,6 +227,11 @@ export function ApiKeysManager({
                 const revoked = !!k.revokedAt;
                 const expired = !!k.expiresAt && new Date(k.expiresAt) <= new Date();
                 const state = revoked ? "revoked" : expired ? "expired" : "active";
+                const stateKey = revoked
+                  ? "stateRevoked"
+                  : expired
+                    ? "stateExpired"
+                    : "stateActive";
                 return (
                   <tr key={k.id} style={{ borderBottom: "0.5px solid var(--c-line-1)" }}>
                     <td className="px-4 py-2.5" style={{ color: "var(--c-fg-1)" }}>
@@ -252,7 +261,7 @@ export function ApiKeysManager({
                               : "var(--c-bg-3)",
                         }}
                       >
-                        {state}
+                        {t(`apiKeys.${stateKey}`)}
                       </span>
                     </td>
                     <td className="px-4 py-2.5 text-right">
@@ -262,7 +271,7 @@ export function ApiKeysManager({
                           style={{ color: "var(--c-sev-1)" }}
                           onClick={() => onRevoke(k.id)}
                         >
-                          Revoke
+                          {t("apiKeys.revoke")}
                         </button>
                       )}
                     </td>

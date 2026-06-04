@@ -3,6 +3,8 @@
 import { useState, type FormEvent } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { syncPreferencesToCookies } from "@/lib/preferences";
 
 /**
  * Only accept a same-origin path: must start with `/` and not `//` (which
@@ -21,6 +23,7 @@ export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const next = safeNext(searchParams.get("next"));
+  const t = useTranslations("login");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -38,8 +41,16 @@ export function LoginForm() {
         redirect: false,
       });
       if (!res || res.error) {
-        setError("Invalid email or password.");
+        setError(t("invalidCreds"));
         return;
+      }
+      // Best-effort: seed theme/locale cookies from the saved profile
+      // (ADR-0078). NEVER let this block the redirect — a failed or stale
+      // server action must not trap the user on the login page.
+      try {
+        await syncPreferencesToCookies();
+      } catch {
+        /* ignore — preference sync is best-effort */
       }
       router.push(next);
       router.refresh();
@@ -51,7 +62,7 @@ export function LoginForm() {
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-3">
       <div>
-        <label className="cmc-label mb-1.5 block">Email or username</label>
+        <label className="cmc-label mb-1.5 block">{t("emailLabel")}</label>
         <input
           type="email"
           autoComplete="email"
@@ -65,13 +76,13 @@ export function LoginForm() {
 
       <div>
         <div className="mb-1.5 flex items-center justify-between">
-          <label className="cmc-label">Password</label>
+          <label className="cmc-label">{t("passwordLabel")}</label>
           <button
             type="button"
             className="text-[10px]"
             style={{ color: "var(--c-accent)" }}
           >
-            Need help?
+            {t("needHelp")}
           </button>
         </div>
         <input
@@ -104,7 +115,7 @@ export function LoginForm() {
         disabled={pending}
         className="cmc-btn cmc-btn-primary cmc-btn-lg mt-1.5 w-full justify-center disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {pending ? "Signing in…" : "Continue"}
+        {pending ? t("signingIn") : t("continue")}
       </button>
     </form>
   );

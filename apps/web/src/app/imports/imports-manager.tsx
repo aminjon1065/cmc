@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import type { ImportJob, ImportKind, ImportRowError } from "@cmc/contracts";
 import {
   createImportAction,
@@ -9,21 +10,21 @@ import {
   listImportsAction,
 } from "./actions";
 
-const KINDS: { value: ImportKind; label: string; accept: string }[] = [
-  { value: "csv_incidents", label: "CSV → Incidents", accept: ".csv,text/csv" },
+const KINDS: { value: ImportKind; labelKey: string; accept: string }[] = [
+  { value: "csv_incidents", labelKey: "kindCsvIncidents", accept: ".csv,text/csv" },
   {
     value: "xlsx_incidents",
-    label: "Excel → Incidents",
+    labelKey: "kindXlsxIncidents",
     accept: ".xlsx",
   },
   {
     value: "geojson_gis",
-    label: "GeoJSON → GIS layer",
+    labelKey: "kindGeojsonGis",
     accept: ".geojson,.json,application/geo+json,application/json",
   },
   {
     value: "shapefile_gis",
-    label: "Shapefile (.zip) → GIS layer",
+    labelKey: "kindShapefileGis",
     accept: ".zip,application/zip",
   },
 ];
@@ -41,6 +42,7 @@ export function ImportsManager({
   canRun: boolean;
   layers: { id: string; name: string }[];
 }) {
+  const t = useTranslations("imports");
   const [jobs, setJobs] = useState<ImportJob[]>(initialJobs);
   const [open, setOpen] = useState(false);
   const [kind, setKind] = useState<ImportKind>("csv_incidents");
@@ -58,9 +60,9 @@ export function ImportsManager({
   }
 
   async function submit() {
-    if (!file) return setMsg({ kind: "err", text: "Choose a file first." });
+    if (!file) return setMsg({ kind: "err", text: t("chooseFile") });
     if (needsLayer(kind) && !layerId)
-      return setMsg({ kind: "err", text: "Choose a target GIS layer." });
+      return setMsg({ kind: "err", text: t("chooseLayer") });
     setBusy(true);
     setMsg(null);
 
@@ -81,7 +83,7 @@ export function ImportsManager({
       setBusy(false);
       return setMsg({
         kind: "err",
-        text: e instanceof Error ? e.message : "Upload failed.",
+        text: e instanceof Error ? e.message : t("uploadFailed"),
       });
     }
 
@@ -94,7 +96,7 @@ export function ImportsManager({
     if (!created.ok) return setMsg({ kind: "err", text: created.error });
 
     setJobs((j) => [created.data, ...j]);
-    setMsg({ kind: "ok", text: "Import queued — refresh to watch progress." });
+    setMsg({ kind: "ok", text: t("importQueued") });
     setFile(null);
     setFileKey((k) => k + 1);
     setOpen(false);
@@ -117,12 +119,12 @@ export function ImportsManager({
       <div className="flex items-center gap-2">
         {canRun && !open && (
           <button className="cmc-btn" onClick={() => setOpen(true)}>
-            + New import
+            {t("newImport")}
           </button>
         )}
         <div className="flex-1" />
         <button className="cmc-btn" onClick={refresh}>
-          ↻ Refresh
+          {t("refresh")}
         </button>
       </div>
 
@@ -145,7 +147,7 @@ export function ImportsManager({
         <div className="cmc-card flex flex-col gap-3 p-4">
           <div className="flex flex-wrap items-end gap-3">
             <label className="flex flex-col gap-1">
-              <span className="cmc-label">Type</span>
+              <span className="cmc-label">{t("type")}</span>
               <select
                 className="cmc-input"
                 style={{ width: 230 }}
@@ -154,7 +156,7 @@ export function ImportsManager({
               >
                 {KINDS.map((k) => (
                   <option key={k.value} value={k.value}>
-                    {k.label}
+                    {t(k.labelKey)}
                   </option>
                 ))}
               </select>
@@ -162,14 +164,14 @@ export function ImportsManager({
 
             {needsLayer(kind) && (
               <label className="flex flex-col gap-1">
-                <span className="cmc-label">Target layer</span>
+                <span className="cmc-label">{t("targetLayer")}</span>
                 <select
                   className="cmc-input"
                   style={{ width: 200 }}
                   value={layerId}
                   onChange={(e) => setLayerId(e.target.value)}
                 >
-                  <option value="">— select —</option>
+                  <option value="">{t("selectPlaceholder")}</option>
                   {layers.map((l) => (
                     <option key={l.id} value={l.id}>
                       {l.name}
@@ -180,7 +182,7 @@ export function ImportsManager({
             )}
 
             <label className="flex flex-col gap-1">
-              <span className="cmc-label">File</span>
+              <span className="cmc-label">{t("file")}</span>
               <input
                 key={fileKey}
                 type="file"
@@ -191,7 +193,7 @@ export function ImportsManager({
             </label>
 
             <button className="cmc-btn" onClick={submit} disabled={busy}>
-              {busy ? "Uploading…" : "Start import"}
+              {busy ? t("uploading") : t("startImport")}
             </button>
             <button
               className="cmc-btn"
@@ -202,12 +204,12 @@ export function ImportsManager({
                 setFileKey((k) => k + 1);
               }}
             >
-              Cancel
+              {t("cancel")}
             </button>
           </div>
           {needsLayer(kind) && layers.length === 0 && (
             <div className="text-[11px]" style={{ color: "var(--c-fg-3)" }}>
-              No GIS layers available — create one on the map first.
+              {t("noLayersHint")}
             </div>
           )}
         </div>
@@ -219,7 +221,7 @@ export function ImportsManager({
             className="p-6 text-center text-[12px]"
             style={{ color: "var(--c-fg-3)" }}
           >
-            No imports yet.
+            {t("noImports")}
           </div>
         ) : (
           <table className="w-full text-[12px]">
@@ -231,11 +233,11 @@ export function ImportsManager({
                   borderBottom: "0.5px solid var(--c-line-2)",
                 }}
               >
-                <th className="px-4 py-2 font-medium">Type</th>
-                <th className="px-4 py-2 font-medium">Status</th>
-                <th className="px-4 py-2 font-medium">Inserted</th>
-                <th className="px-4 py-2 font-medium">Quarantined</th>
-                <th className="px-4 py-2 font-medium">Created</th>
+                <th className="px-4 py-2 font-medium">{t("thType")}</th>
+                <th className="px-4 py-2 font-medium">{t("thStatus")}</th>
+                <th className="px-4 py-2 font-medium">{t("thInserted")}</th>
+                <th className="px-4 py-2 font-medium">{t("thQuarantined")}</th>
+                <th className="px-4 py-2 font-medium">{t("thCreated")}</th>
                 <th className="px-4 py-2 font-medium" />
               </tr>
             </thead>
@@ -285,6 +287,7 @@ function JobRow({
   errors: ImportRowError[] | undefined;
   onToggle: () => void;
 }) {
+  const t = useTranslations("imports");
   return (
     <>
       <tr style={{ borderBottom: "0.5px solid var(--c-line-1)" }}>
@@ -319,7 +322,7 @@ function JobRow({
               style={{ color: "var(--c-accent)" }}
               onClick={onToggle}
             >
-              {open ? "Hide" : `View ${job.failedRows} errors`}
+              {open ? t("hide") : t("viewErrors", { count: job.failedRows })}
             </button>
           )}
         </td>
@@ -329,18 +332,18 @@ function JobRow({
           <td colSpan={6} className="px-4 py-2" style={{ background: "var(--c-bg-2)" }}>
             {!errors ? (
               <div className="text-[11px]" style={{ color: "var(--c-fg-3)" }}>
-                Loading…
+                {t("loading")}
               </div>
             ) : errors.length === 0 ? (
               <div className="text-[11px]" style={{ color: "var(--c-fg-3)" }}>
-                No quarantined rows.
+                {t("noQuarantined")}
               </div>
             ) : (
               <ul className="flex flex-col gap-1 py-1">
                 {errors.map((e, i) => (
                   <li key={i} className="text-[11px]" style={{ color: "var(--c-fg-2)" }}>
                     <span className="cmc-mono" style={{ color: "var(--c-sev-1)" }}>
-                      row {e.rowNum}
+                      {t("row", { num: e.rowNum })}
                     </span>
                     {" — "}
                     {e.reason}

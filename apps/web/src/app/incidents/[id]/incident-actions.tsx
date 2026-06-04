@@ -7,7 +7,7 @@ import {
   RESOLVING_STATUSES,
   type IncidentDetail,
 } from "@cmc/contracts";
-import { STATUS_LABEL } from "@/components/cmc/incident-badges";
+import { useTranslations } from "next-intl";
 import {
   REGION_SUGGESTIONS,
   TYPE_SUGGESTIONS,
@@ -47,6 +47,7 @@ export function IncidentActions({
   assignees: Assignee[];
 }) {
   const router = useRouter();
+  const t = useTranslations("incidents");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -70,7 +71,7 @@ export function IncidentActions({
   }
 
   async function onDelete() {
-    if (!confirm("Delete this incident? This cannot be undone.")) return;
+    if (!confirm(t("confirmDelete"))) return;
     setBusy(true);
     setError(null);
     const res = await deleteIncidentAction(incident.id);
@@ -86,7 +87,7 @@ export function IncidentActions({
     <div className="flex flex-col gap-4">
       {canWrite && reachable.length > 0 && (
         <div>
-          <div className="cmc-label mb-1.5">Advance status</div>
+          <div className="cmc-label mb-1.5">{t("advanceStatus")}</div>
           <div className="flex flex-wrap gap-1.5">
             {reachable.map((s) => (
               <button
@@ -96,7 +97,7 @@ export function IncidentActions({
                 disabled={busy}
                 onClick={() => run(transitionIncidentAction(incident.id, s))}
               >
-                → {STATUS_LABEL[s]}
+                → {t(`status.${s}`)}
               </button>
             ))}
           </div>
@@ -105,7 +106,7 @@ export function IncidentActions({
 
       {canAssign && (
         <div>
-          <div className="cmc-label mb-1.5">Assignee</div>
+          <div className="cmc-label mb-1.5">{t("assignee")}</div>
           <select
             className="cmc-input"
             style={{ width: "100%" }}
@@ -115,7 +116,7 @@ export function IncidentActions({
               run(assignIncidentAction(incident.id, e.target.value || null))
             }
           >
-            <option value="">Unassigned</option>
+            <option value="">{t("unassigned")}</option>
             {assignees.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
@@ -133,7 +134,7 @@ export function IncidentActions({
             disabled={busy}
             onClick={() => setEditing((v) => !v)}
           >
-            {editing ? "Close edit" : "Edit fields"}
+            {editing ? t("closeEdit") : t("editFields")}
           </button>
         )}
         {canDelete && (
@@ -144,7 +145,7 @@ export function IncidentActions({
             disabled={busy}
             onClick={onDelete}
           >
-            Delete
+            {t("delete")}
           </button>
         )}
       </div>
@@ -178,6 +179,7 @@ function EditForm({
   onDone: () => void;
   onError: (e: string) => void;
 }) {
+  const t = useTranslations("incidents");
   const [severity, setSeverity] = useState(incident.severity);
   const [type, setType] = useState(incident.type);
   const [region, setRegion] = useState(incident.region);
@@ -223,7 +225,7 @@ function EditForm({
     >
       <div className="flex flex-wrap items-end gap-2">
         <label className="flex flex-col gap-1">
-          <span className="cmc-label">Severity</span>
+          <span className="cmc-label">{t("fSeverity")}</span>
           <select
             className="cmc-input"
             style={{ width: 80 }}
@@ -238,7 +240,7 @@ function EditForm({
           </select>
         </label>
         <label className="flex flex-col gap-1">
-          <span className="cmc-label">Type</span>
+          <span className="cmc-label">{t("fType")}</span>
           <input
             className="cmc-input"
             style={{ width: 130 }}
@@ -253,7 +255,7 @@ function EditForm({
           </datalist>
         </label>
         <label className="flex flex-col gap-1">
-          <span className="cmc-label">Region</span>
+          <span className="cmc-label">{t("fRegion")}</span>
           <input
             className="cmc-input"
             style={{ width: 130 }}
@@ -268,7 +270,7 @@ function EditForm({
           </datalist>
         </label>
         <label className="flex flex-col gap-1">
-          <span className="cmc-label">Source</span>
+          <span className="cmc-label">{t("fSource")}</span>
           <input
             className="cmc-input"
             style={{ width: 110 }}
@@ -285,7 +287,7 @@ function EditForm({
       </div>
 
       <label className="flex flex-col gap-1">
-        <span className="cmc-label">Summary</span>
+        <span className="cmc-label">{t("fSummary")}</span>
         <input
           className="cmc-input"
           value={summary}
@@ -294,7 +296,7 @@ function EditForm({
         />
       </label>
       <label className="flex flex-col gap-1">
-        <span className="cmc-label">Description</span>
+        <span className="cmc-label">{t("fDescription")}</span>
         <textarea
           className="cmc-input"
           style={{ height: 56, paddingTop: 6 }}
@@ -305,7 +307,7 @@ function EditForm({
 
       <div className="flex flex-wrap items-end gap-2">
         <label className="flex flex-col gap-1">
-          <span className="cmc-label">Occurred at</span>
+          <span className="cmc-label">{t("fOccurred")}</span>
           <input
             className="cmc-input"
             type="datetime-local"
@@ -314,7 +316,7 @@ function EditForm({
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="cmc-label">Lat</span>
+          <span className="cmc-label">{t("eLat")}</span>
           <input
             className="cmc-input"
             style={{ width: 110 }}
@@ -324,7 +326,7 @@ function EditForm({
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="cmc-label">Lng</span>
+          <span className="cmc-label">{t("eLng")}</span>
           <input
             className="cmc-input"
             style={{ width: 110 }}
@@ -334,7 +336,7 @@ function EditForm({
           />
         </label>
         <button type="submit" className="cmc-btn cmc-btn-primary" disabled={busy}>
-          {busy ? "Saving…" : "Save"}
+          {busy ? t("saving") : t("save")}
         </button>
       </div>
     </form>

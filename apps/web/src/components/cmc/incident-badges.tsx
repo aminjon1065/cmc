@@ -1,31 +1,29 @@
+"use client";
+
 import type { IncidentStatus } from "@cmc/contracts";
+import { useTranslations } from "next-intl";
 
-/** Presentational severity/status chips, shared by list + detail (P1.5b). */
+/** Presentational severity/status chips, shared by list + detail (P1.5b).
+ *  Status labels are localized (RU/TG) via the `incidents.status.*` catalog. */
 
-const STATUS_META: Record<
-  IncidentStatus,
-  { label: string; fg: string; bg: string }
-> = {
-  reported: { label: "Reported", fg: "var(--c-sev-2)", bg: "var(--c-sev-2-soft)" },
-  triaged: { label: "Triaged", fg: "var(--c-info)", bg: "var(--c-info-soft)" },
-  in_progress: {
-    label: "In progress",
-    fg: "var(--c-accent)",
-    bg: "var(--c-accent-soft)",
-  },
-  resolved: { label: "Resolved", fg: "var(--c-ok)", bg: "var(--c-ok-soft)" },
-  closed: { label: "Closed", fg: "var(--c-fg-3)", bg: "var(--c-bg-3)" },
-  cancelled: { label: "Cancelled", fg: "var(--c-fg-4)", bg: "var(--c-bg-3)" },
+const STATUS_COLORS: Record<IncidentStatus, { fg: string; bg: string }> = {
+  reported: { fg: "var(--c-sev-2)", bg: "var(--c-sev-2-soft)" },
+  triaged: { fg: "var(--c-info)", bg: "var(--c-info-soft)" },
+  in_progress: { fg: "var(--c-accent)", bg: "var(--c-accent-soft)" },
+  resolved: { fg: "var(--c-ok)", bg: "var(--c-ok-soft)" },
+  closed: { fg: "var(--c-fg-3)", bg: "var(--c-bg-3)" },
+  cancelled: { fg: "var(--c-fg-4)", bg: "var(--c-bg-3)" },
 };
 
 export function StatusBadge({ status }: { status: IncidentStatus }) {
-  const m = STATUS_META[status] ?? STATUS_META.reported;
+  const t = useTranslations("incidents");
+  const m = STATUS_COLORS[status] ?? STATUS_COLORS.reported;
   return (
     <span
       className="cmc-chip"
       style={{ color: m.fg, background: m.bg, borderColor: "transparent" }}
     >
-      {m.label}
+      {t(`status.${status}`)}
     </span>
   );
 }
@@ -48,12 +46,3 @@ export function SeverityBadge({ severity }: { severity: number }) {
     </span>
   );
 }
-
-export const STATUS_LABEL: Record<IncidentStatus, string> = {
-  reported: "Reported",
-  triaged: "Triaged",
-  in_progress: "In progress",
-  resolved: "Resolved",
-  closed: "Closed",
-  cancelled: "Cancelled",
-};
