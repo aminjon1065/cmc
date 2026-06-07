@@ -9,7 +9,8 @@ import { AppShell } from "@/components/cmc/app-shell";
 import { getBranding } from "@/lib/branding";
 import { getMyAccess, hasPermission } from "@/lib/access";
 import { authedApiFetch, ApiError } from "@/lib/server-api";
-import { getTranslations } from "next-intl/server";
+import { getFormatter, getTranslations } from "next-intl/server";
+import { DATE_FORMAT } from "@/lib/datetime";
 import { NewSpaceButton } from "./new-space-button";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -46,6 +47,7 @@ export default async function WikiPage() {
   const { copy } = await getBranding();
   const t = await getTranslations("wiki");
   const tc = await getTranslations("common");
+  const format = await getFormatter();
   const [result, access] = await Promise.all([fetchSpaces(), getMyAccess()]);
   const canManage = hasPermission(access, "wiki:manage");
 
@@ -124,7 +126,7 @@ export default async function WikiPage() {
                   className="cmc-mono mt-2 text-[10px]"
                   style={{ color: "var(--c-fg-4)" }}
                 >
-                  {t("updatedAt", { date: new Date(s.updatedAt).toLocaleDateString() })}
+                  {t("updatedAt", { date: format.dateTime(new Date(s.updatedAt), DATE_FORMAT) })}
                 </div>
               </Link>
             ))}

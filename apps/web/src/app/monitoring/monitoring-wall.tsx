@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
+import { FormattedDate } from "@/components/cmc/formatted-date";
 import type { MonitoringSummary } from "@cmc/contracts";
 import { getMonitoringSummaryAction } from "./actions";
 
@@ -14,10 +15,6 @@ const SEV = [
   { n: "5", label: "SEV-5", color: "var(--c-fg-4)" },
 ];
 const STATUSES = ["reported", "triaged", "in_progress", "resolved", "closed"];
-
-function timeOf(iso: string): string {
-  return new Date(iso).toLocaleTimeString();
-}
 
 /**
  * Command-center wall (P4.3b / ADR-0062). Polls `monitoring/summary` every 4s
@@ -70,7 +67,7 @@ export function MonitoringWall({
           title={stale ? t("reconnecting") : t("livePolling")}
         >
           <span style={{ fontSize: 8 }}>●</span>
-          {stale ? t("stale") : t("live")} · {timeOf(s.generatedAt)}
+          {stale ? t("stale") : t("live")} · <FormattedDate value={s.generatedAt} preset="time" />
         </span>
       </div>
 
@@ -224,7 +221,7 @@ export function MonitoringWall({
                   ●
                 </span>
                 <span className="cmc-mono" style={{ color: "var(--c-fg-4)" }}>
-                  {timeOf(e.occurredAt)}
+                  <FormattedDate value={e.occurredAt} preset="time" />
                 </span>
                 <span className="truncate" style={{ color: "var(--c-fg-2)" }}>
                   {e.action}

@@ -1,5 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { and, desc, eq, lt } from "drizzle-orm";
 import { schema } from "@cmc/db";
+import type { AuditLogListResponse } from "@cmc/contracts";
 import { TenantDatabaseService } from "../database/tenant-database.service";
 import { RequestContextService } from "../../common/request-context/request-context.service";
 
@@ -73,6 +75,56 @@ export class AuditService {
         }`,
       );
     }
+  }
+
+  /**
+   * Read-only, RLS-scoped audit-log list for the audit viewer (gated
+   * `audit:read`). Newest-first by `seq` with keyset pagination (`before`) and
+   * optional action / resourceType / outcome filters. Returns a safe subset —
+   * no raw chain hashes.
+   */
+  async listLog(query: {
+    action?: string;
+    resourceType?: string;
+    outcome?: string;
+    before?: number;
+    limit?: number;
+  }): Promise<AuditLogListResponse> {
+    const limit = Math.min(Math.max(query.limit ?? 50, 1), 200);
+    return this.tenantDb.run(async (tx) => {
+      const where = and(
+        query.action ? eq(schema.auditLog.action, query.action) : undefined,
+        query.resourceType
+          ? eq(schema.auditLog.resourceType, query.resourceType)
+          : undefined,
+        query.outcome ? eq(schema.auditLog.outcome, query.outcome) : undefined,
+        query.before ? lt(schema.auditLog.seq, query.before) : undefined,
+      );
+      const rows = await tx
+        .select()
+        .from(schema.auditLog)
+        .where(where)
+        .orderBy(desc(schema.auditLog.seq))
+        .limit(limit + 1);
+      const hasMore = rows.length > limit;
+      const page = hasMore ? rows.slice(0, limit) : rows;
+      return {
+        entries: page.map((r) => ({
+          id: r.id,
+          seq: r.seq,
+          occurredAt: r.occurredAt.toISOString(),
+          actorId: r.actorId ?? null,
+          actorType: r.actorType,
+          action: r.action,
+          resourceType: r.resourceType,
+          resourceId: r.resourceId ?? null,
+          outcome: r.outcome,
+          requestId: r.requestId ?? null,
+          sealed: r.sealedAt != null,
+        })),
+        nextCursor: hasMore ? page[page.length - 1]!.seq : null,
+      };
+    });
   }
 
   private toRow(input: AuditRecordInput) {

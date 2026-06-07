@@ -77,3 +77,72 @@ the feature's layer, geometry type, and properties.
   gate; token never exposed); `/map` route reachable (`200`); web boots clean.
 - **Backend unaffected**: P2.9 is web-only (no API change) — API suite stays
   254/254 (32 suites).
+
+## Addendum (2026-06-05) — shipped a real basemap (theme-aware CARTO)
+
+**Problem.** The original "sovereign-safe default" basemap was an empty
+`minimalStyle` — a single `background` layer with a solid color and **no tiles**.
+With `NEXT_PUBLIC_MAP_STYLE_URL` unset (the normal case), `/map` rendered as a
+flat colored slab with no geographic reference, which users reasonably read as
+"the map doesn't display." A blank-by-default map is the wrong default for an
+operations console.
+
+**Decision.** Give `/map` a real basemap out of the box while preserving the
+air-gap escape hatch:
+
+- **Default:** theme-aware **CARTO raster** tiles — `light_all` on the light
+  theme, `dark_all` on the dark theme (ADR-0077). The basemap re-tints live when
+  the theme toggles, by swapping **only** the raster source/layer (GIS layers and
+  their per-layer visibility are left untouched, and the basemap is re-inserted
+  **below** the first GIS layer so features stay on top). Compact attribution
+  (`© OpenStreetMap © CARTO`) is shown, satisfying the providers' terms.
+- **Override priority (unchanged escape hatch, now documented + widened):**
+  1. `NEXT_PUBLIC_MAP_STYLE_URL` — a full self-hosted MapLibre **vector style**
+     JSON (best for production / fully offline). Used verbatim; we don't manage
+     its theming.
+  2. `NEXT_PUBLIC_MAP_RASTER_URL` — a single **raster XYZ** template used for both
+     themes (e.g. `https://tile.openstreetmap.org/{z}/{x}/{y}.png`, or a
+     self-hosted raster).
+  3. Neither set → the CARTO default above.
+
+**Trade-off / sovereignty note.** The default now makes the **browser** call a
+third-party tile host (CARTO/OSM) and therefore needs internet. This was an
+explicit product choice (operator opted for "online OSM/CARTO") to make the map
+usable immediately. A **fully offline** deployment must set one of the two env
+vars above and self-host tiles (a bundled offline tile server in the infra
+compose remains a follow-on — see the GIS gaps in the tracker).
+
+**Validation.** web `tsc` + `lint` + `next build` clean (`/map` compiles); CARTO
+`light_all`/`dark_all` tile reachability checked (HTTP 200, `image/png`); authed
+`/map` → `200` with `MapView` + layer panel server-rendered, no SSR error;
+no CSP blocks external tiles. In-browser WebGL draw remains a human check.
+
+---
+
+## Addendum (2026-06-06): user-selectable basemaps + proxied tiles
+
+The single theme-aware CARTO basemap is now a **basemap picker** with several
+options, and **all** basemap tiles are fetched through the same-origin proxy
+`app/api/map/tiles/[variant]` (the browser never calls the tile CDNs directly —
+works behind restrictive/government networks where only the server has outbound
+internet).
+
+- **Options:** Авто (theme-aware CARTO light/dark), Voyager (CARTO), Светлая,
+  Тёмная, OpenStreetMap, Спутник (Esri World Imagery), Топографическая (Esri
+  World Topo). The choice is **persisted in `localStorage`** (`cmc.basemap`) and
+  applied live by swapping only the raster source/layer (GIS layers untouched,
+  basemap re-inserted below them). `Авто` still follows the light/dark theme.
+- **Proxy registry (SSRF-safe):** `variant` must be a key in a fixed registry
+  (CARTO paths incl. Voyager's `rastertiles/voyager`; OSM; Esri imagery/topo with
+  `{z}/{y}/{x}` order) and `z/x/y` are numeric — so it can only fetch a known
+  public basemap, never an arbitrary URL. A `User-Agent` is sent (OSM policy).
+- **Override priority** is unchanged: `NEXT_PUBLIC_MAP_STYLE_URL` (vector) >
+  `NEXT_PUBLIC_MAP_RASTER_URL` (raster) > the picker. When an env override is
+  set the picker is hidden (the basemap is pinned).
+
+**Validation.** `tsc`/`lint`/`next build` clean (`/map` 6.13 kB). Proxy probes
+(Tajikistan tile z6/x44/y24): light_all/dark_all/voyager → 200 `image/png`,
+satellite/topo → 200 `image/jpeg`, osm → 200 `image/png`, bad key → 400. Live
+browser: picker shows 7 localized options; selecting **Спутник** persisted
+`cmc.basemap=satellite`, fired 24 `/api/map/tiles/satellite` requests, and the
+map rendered Esri imagery of Tajikistan (screenshot) — GIS layers stayed on top.

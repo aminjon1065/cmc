@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
+import { FormattedDate } from "@/components/cmc/formatted-date";
 import type { ImportJob, ImportKind, ImportRowError } from "@cmc/contracts";
 import {
   createImportAction,
@@ -313,7 +314,7 @@ function JobRow({
           {job.failedRows}
         </td>
         <td className="cmc-mono px-4 py-2.5 text-[10.5px]" style={{ color: "var(--c-fg-3)" }}>
-          {new Date(job.createdAt).toLocaleString()}
+          <FormattedDate value={job.createdAt} />
         </td>
         <td className="px-4 py-2.5 text-right">
           {job.failedRows > 0 && (

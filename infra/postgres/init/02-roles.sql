@@ -42,3 +42,32 @@ ALTER DEFAULT PRIVILEGES FOR ROLE cmc IN SCHEMA public
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO cmc_app;
 ALTER DEFAULT PRIVILEGES FOR ROLE cmc IN SCHEMA public
   GRANT USAGE, SELECT ON SEQUENCES TO cmc_app;
+
+-- Read-only GIS publishing role for GeoServer (ADR-0079).
+--
+-- GeoServer exposes the PostGIS GIS tables as OGC WMS/WFS to QGIS/ArcGIS + the
+-- web app. It connects with THIS role — never the superuser. SELECT-only;
+-- BYPASSRLS so it can read past the FORCE'd RLS on gis_features/gis_layers
+-- (single-site = one tenant, so reading all GIS rows is the intended scope).
+-- For multi-tenant, replace with per-tenant SECURITY-DEFINER views + drop
+-- BYPASSRLS. The actual table grants live in infra/geoserver/setup.sh because
+-- the gis_* tables don't exist yet at first-boot init time (migrations create
+-- them afterwards).
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'geoserver_ro') THEN
+    CREATE ROLE geoserver_ro
+      LOGIN
+      NOSUPERUSER
+      NOCREATEDB
+      NOCREATEROLE
+      INHERIT
+      NOREPLICATION
+      BYPASSRLS
+      PASSWORD 'cmc_dev_geoserver_change_me';
+  END IF;
+END
+$$;
+
+GRANT CONNECT ON DATABASE cmc TO geoserver_ro;
+GRANT USAGE ON SCHEMA public TO geoserver_ro;

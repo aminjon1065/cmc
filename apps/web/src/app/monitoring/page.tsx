@@ -51,7 +51,7 @@ export default async function MonitoringPage() {
 
   return (
     <AppShell
-      active="command"
+      active="monitor"
       crumbs={[t("crumbOps"), t("crumbCommandCenter")]}
       tenant={session?.tenantSlug}
       branding={{ orgName: copy.orgName, orgShort: copy.orgShort }}

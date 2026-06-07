@@ -30,7 +30,10 @@ export default auth((req) => {
     nextUrl.pathname.startsWith("/chat") ||
     nextUrl.pathname.startsWith("/video") ||
     nextUrl.pathname.startsWith("/monitoring") ||
-    nextUrl.pathname.startsWith("/media");
+    nextUrl.pathname.startsWith("/media") ||
+    nextUrl.pathname.startsWith("/ai") ||
+    nextUrl.pathname.startsWith("/audit") ||
+    nextUrl.pathname.startsWith("/analytics");
 
   if (isProtected && !isAuthed) {
     const loginUrl = new URL("/login", nextUrl);

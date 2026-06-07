@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
+import { FormattedDate } from "@/components/cmc/formatted-date";
 import type {
   ProseMirrorDoc,
   WikiComment,
@@ -670,7 +671,7 @@ function VersionList({
               {v.title}
             </div>
             <div className="cmc-mono text-[9.5px]" style={{ color: "var(--c-fg-4)" }}>
-              {new Date(v.createdAt).toLocaleString()}
+              <FormattedDate value={v.createdAt} />
             </div>
           </div>
           {v.isCurrent ? (
@@ -802,7 +803,7 @@ function CommentPanel({
               {who(c)}
             </span>
             <span className="cmc-mono text-[9px]" style={{ color: "var(--c-fg-4)" }}>
-              {new Date(c.createdAt).toLocaleString()}
+              <FormattedDate value={c.createdAt} />
             </span>
             <div className="flex-1" />
             {canDelete(c) && (

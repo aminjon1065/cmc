@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
+import { FormattedDate } from "@/components/cmc/formatted-date";
 import type { VideoRecording, VideoRoom } from "@cmc/contracts";
 import {
   closeRoomAction,
@@ -316,7 +317,7 @@ export function VideoWorkspace({
                   {room.name}
                 </div>
                 <div className="cmc-mono text-[9.5px]" style={{ color: "var(--c-fg-4)" }}>
-                  {new Date(room.createdAt).toLocaleString()}
+                  <FormattedDate value={room.createdAt} />
                 </div>
               </div>
               <button

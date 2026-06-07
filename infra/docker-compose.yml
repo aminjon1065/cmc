@@ -238,7 +238,9 @@ services:
         soft: 262144
         hard: 262144
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      # 127.0.0.1 (not localhost): in the alpine image `localhost` resolves to
+      # IPv6 ::1 but ClickHouse listens on IPv4 → wget "connection refused".
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8123/ping"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -424,7 +426,41 @@ services:
     cap_add:
       - SYS_ADMIN
 
+  # --- GeoServer — OGC GIS server (ADR-0079) ---
+  # WMS/WFS/WMTS over PostGIS so QGIS, ArcGIS Pro + the web app share ONE GIS
+  # source of truth. Connects with the least-privilege read-only `geoserver_ro`
+  # DB role (SELECT-only on gis_*, BYPASSRLS for the single site). Front with
+  # Caddy + real admin creds in production.
+  geoserver:
+    image: docker.osgeo.org/geoserver:2.26.1
+    container_name: cmc-geoserver
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      GEOSERVER_ADMIN_USER: ${GEOSERVER_ADMIN_USER:-admin}
+      GEOSERVER_ADMIN_PASSWORD: ${GEOSERVER_ADMIN_PASSWORD:-cmc_dev_geoserver_admin_change_me}
+      # Don't ship the sample data dir — we publish our own PostGIS layers.
+      SKIP_DEMO_DATA: "true"
+      # Allow the web app (and tooling) to call WMS/WFS cross-origin in dev.
+      CORS_ENABLED: "true"
+      # In prod set to the public path behind Caddy, e.g. https://<host>/geoserver
+      # PROXY_BASE_URL: http://localhost:8088/geoserver
+    ports:
+      - "${GEOSERVER_PORT:-8088}:8080"
+    volumes:
+      - geoserver_data:/opt/geoserver_data
+    healthcheck:
+      test:
+        ["CMD-SHELL", "curl -sf http://127.0.0.1:8080/geoserver/web/ >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
+
 volumes:
+  geoserver_data:
   nats_data:
   clickhouse_data:
   opensearch_data:

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   HttpCode,
@@ -17,7 +18,11 @@ import type {
   AuditProjectionFlushResponse,
   AuditProjectionStatusResponse,
   AuditSealResponse,
+  AuditLogListResponse,
 } from "@cmc/contracts";
+import { AuditLogQuerySchema } from "@cmc/contracts";
+import { ZodError } from "zod";
+import { AuditService } from "./audit.service";
 import { AuditChainService } from "./audit-chain.service";
 import { AuditExportService } from "./audit-export.service";
 import { AuditProjectionService } from "../analytics/audit-projection.service";
@@ -38,10 +43,35 @@ import type { TenantContext } from "../../common/tenant-context/tenant-context.s
 @UseGuards(JwtAuthGuard, AuthorizeGuard)
 export class AuditController {
   constructor(
+    private readonly audit: AuditService,
     private readonly chain: AuditChainService,
     private readonly exporter: AuditExportService,
     private readonly projection: AuditProjectionService,
   ) {}
+
+  /**
+   * Read-only audit-log list for the audit viewer. Gated on `audit:read` (the
+   * `auditor` role) — distinct from the `tenant:manage` chain-management ops
+   * below. RLS scopes rows to the caller's tenant; newest-first by `seq`.
+   */
+  @Get("log")
+  @Authorize("audit:read")
+  async log(@Query() query: unknown): Promise<AuditLogListResponse> {
+    let parsed;
+    try {
+      parsed = AuditLogQuerySchema.parse(query);
+    } catch (err) {
+      if (err instanceof ZodError) {
+        throw new BadRequestException(
+          `Invalid audit query — ${err.issues
+            .map((i) => `${i.path.join(".")}: ${i.message}`)
+            .join("; ")}`,
+        );
+      }
+      throw err;
+    }
+    return this.audit.listLog(parsed);
+  }
 
   /** Verify the caller's tenant chain for a UTC day (`?date=YYYY-MM-DD`, default today). */
   @Get("chain/verify")

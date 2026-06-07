@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
+import { FormattedDate } from "@/components/cmc/formatted-date";
 import type { ChatChannel, ChatMessage } from "@cmc/contracts";
 import {
   createChannelAction,
@@ -362,7 +363,7 @@ function MessageRow({
           {who}
         </span>
         <span className="cmc-mono text-[9.5px]" style={{ color: "var(--c-fg-4)" }}>
-          {new Date(m.createdAt).toLocaleTimeString()}
+          <FormattedDate value={m.createdAt} preset="time" />
         </span>
         {m.edited && (
           <span className="text-[9.5px]" style={{ color: "var(--c-fg-4)" }}>

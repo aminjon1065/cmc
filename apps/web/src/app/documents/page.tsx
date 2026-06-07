@@ -8,6 +8,7 @@ import {
 import { AppShell } from "@/components/cmc/app-shell";
 import { getBranding } from "@/lib/branding";
 import { getTranslations } from "next-intl/server";
+import { FormattedDate } from "@/components/cmc/formatted-date";
 import { UploadForm } from "./upload-form";
 import { DocumentRowActions } from "./document-row-actions";
 
@@ -190,7 +191,7 @@ export default async function DocumentsPage() {
                       className="cmc-mono px-4 py-2.5 text-[11px]"
                       style={{ color: "var(--c-fg-3)" }}
                     >
-                      {new Date(doc.createdAt).toLocaleString()}
+                      <FormattedDate value={doc.createdAt} />
                     </td>
                     <td className="px-4 py-2.5 text-right">
                       <DocumentRowActions

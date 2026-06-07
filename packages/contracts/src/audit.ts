@@ -143,3 +143,43 @@ export const AuditAnchorStatusResponseSchema = z.object({
 export type AuditAnchorStatusResponse = z.infer<
   typeof AuditAnchorStatusResponseSchema
 >;
+
+// --- Audit log viewer (read-only list, gated `audit:read`) ---
+
+/** Action outcomes recorded on every audit row. */
+export const AUDIT_OUTCOMES = ["success", "failure", "denied"] as const;
+
+/** One displayable audit-log row — a safe subset (no raw chain hashes). */
+export const AuditLogEntrySchema = z.object({
+  id: z.string().uuid(),
+  seq: z.number().int(),
+  occurredAt: z.string(),
+  actorId: z.string().uuid().nullable(),
+  actorType: z.string(),
+  action: z.string(),
+  resourceType: z.string(),
+  resourceId: z.string().nullable(),
+  outcome: z.string(),
+  requestId: z.string().nullable(),
+  /** True once the hash-chain sealer has linked this row (tamper-evident). */
+  sealed: z.boolean(),
+});
+export type AuditLogEntry = z.infer<typeof AuditLogEntrySchema>;
+
+/** Filters + keyset pagination for `GET /v1/audit/log` (coerced from query). */
+export const AuditLogQuerySchema = z.object({
+  action: z.string().max(128).optional(),
+  resourceType: z.string().max(64).optional(),
+  outcome: z.enum(AUDIT_OUTCOMES).optional(),
+  /** Keyset cursor: return rows with `seq` strictly below this. */
+  before: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+});
+export type AuditLogQuery = z.infer<typeof AuditLogQuerySchema>;
+
+export const AuditLogListResponseSchema = z.object({
+  entries: z.array(AuditLogEntrySchema),
+  /** `seq` to pass as `?before=` for the next (older) page; null when exhausted. */
+  nextCursor: z.number().int().nullable(),
+});
+export type AuditLogListResponse = z.infer<typeof AuditLogListResponseSchema>;

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
+import { FormattedDate } from "@/components/cmc/formatted-date";
 import type { MonitoringEvent } from "@cmc/contracts";
 import { getMonitoringReplayAction } from "./actions";
 
@@ -141,7 +142,7 @@ export function ReplayPanel() {
               style={{ color: "var(--c-accent)" }}
             >
               {current
-                ? new Date(current.occurredAt).toLocaleString()
+                ? <FormattedDate value={current.occurredAt} />
                 : t("start")}
             </div>
             <div
@@ -170,7 +171,7 @@ export function ReplayPanel() {
                       ●
                     </span>
                     <span className="cmc-mono" style={{ color: "var(--c-fg-4)" }}>
-                      {new Date(e.occurredAt).toLocaleTimeString()}
+                      <FormattedDate value={e.occurredAt} preset="time" />
                     </span>
                     <span className="truncate" style={{ color: "var(--c-fg-2)" }}>
                       {e.action}

@@ -11,13 +11,11 @@ import {
   LayoutDashboard,
   MessageSquare,
   Network,
-  Radio,
   Search,
   Shield,
   ShieldCheck,
   Sparkles,
   Upload,
-  Users,
   Video,
   type LucideIcon,
 } from "lucide-react";
@@ -40,12 +38,11 @@ const NAV: NavGroup[] = [
     id: "ops",
     label: "Operations",
     items: [
-      { id: "command", label: "Command Center", icon: Radio, href: "/monitoring" },
       {
         id: "monitor",
         label: "Realtime Monitoring",
         icon: Activity,
-        disabled: true,
+        href: "/monitoring",
       },
       { id: "gis", label: "GIS Map", icon: Globe2, href: "/map" },
       { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
@@ -55,8 +52,8 @@ const NAV: NavGroup[] = [
     id: "intel",
     label: "Intelligence",
     items: [
-      { id: "analytics", label: "Analytics", icon: BarChart3, disabled: true },
-      { id: "ai", label: "AI Assistant", icon: Sparkles, disabled: true },
+      { id: "analytics", label: "Analytics", icon: BarChart3, href: "/analytics" },
+      { id: "ai", label: "AI Assistant", icon: Sparkles, href: "/ai" },
       { id: "search", label: "Search", icon: Search, href: "/search" },
     ],
   },
@@ -92,8 +89,7 @@ const NAV: NavGroup[] = [
     label: "System",
     items: [
       { id: "admin", label: "Administration", icon: ShieldCheck, disabled: true },
-      { id: "audit", label: "Audit", icon: Shield, disabled: true },
-      { id: "tenant", label: "Tenants", icon: Users, disabled: true },
+      { id: "audit", label: "Audit", icon: Shield, href: "/audit" },
     ],
   },
 ];
@@ -121,6 +117,8 @@ export async function Sidebar({
   const canVideo = hasPermission(access, "video:read");
   const canMonitor = hasPermission(access, "monitoring:read");
   const canMedia = hasPermission(access, "media:read");
+  const canLlm = hasPermission(access, "llm:use");
+  const canAudit = hasPermission(access, "audit:read");
 
   // Localized nav labels (RU default + TG) — keyed by the stable group/item id.
   const tNav = await getTranslations("nav");
@@ -184,27 +182,26 @@ export async function Sidebar({
                   ? "/admin"
                   : item.id === "cases" && canIncidents
                     ? "/incidents"
-                    : item.id === "command" && canMonitor
-                      ? "/monitoring"
-                      : item.id === "media" && canMedia
-                        ? "/media"
-                        : item.id === "notif"
-                          ? "/notifications"
-                          : item.href;
+                    : item.id === "media" && canMedia
+                      ? "/media"
+                      : item.id === "notif"
+                        ? "/notifications"
+                        : item.href;
+              // Permission gate per nav id; absent ids keep their static
+              // `disabled`. `notif` is open to everyone (true).
+              const gate: Record<string, boolean> = {
+                admin: canAdmin,
+                cases: canIncidents,
+                video: canVideo,
+                monitor: canMonitor,
+                media: canMedia,
+                ai: canLlm,
+                audit: canAudit,
+                analytics: canIncidents,
+                notif: true,
+              };
               const disabled =
-                item.id === "admin"
-                  ? !canAdmin
-                  : item.id === "cases"
-                    ? !canIncidents
-                    : item.id === "video"
-                      ? !canVideo
-                      : item.id === "command"
-                        ? !canMonitor
-                        : item.id === "media"
-                          ? !canMedia
-                          : item.id === "notif"
-                            ? false
-                            : item.disabled;
+                item.id in gate ? !gate[item.id] : item.disabled;
               const content = (
                 <span
                   className="relative flex items-center gap-2.5 rounded-md px-2 py-1 text-[12px]"
