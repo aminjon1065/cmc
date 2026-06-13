@@ -75,41 +75,6 @@ const EnvSchema = z.object({
   VAULT_DB_MOUNT: z.string().default("database"),
   VAULT_DB_ROLE: emptyAsUndefined(z.string().optional()),
 
-  // --- Durable workflows / Temporal (P3.1 / ADR-0045) ---
-  // Code-defined durable workflows (first: per-case SLA-escalation timers,
-  // replacing cron). ENABLED gates BOTH the in-process worker (polls the task
-  // queue, runs workflow + activity code) AND the real client (the gated seam
-  // that starts/cancels workflows). Off by default → a Noop client + no worker,
-  // so dev/test/CI need no Temporal (the gated-seam convention used for NATS/
-  // ClickHouse/BullMQ/Vault). `@temporalio/*` is dynamic-imported, never in jest.
-  TEMPORAL_ENABLED: z
-    .string()
-    .default("false")
-    .transform((v) => v.toLowerCase() === "true"),
-  TEMPORAL_ADDRESS: z.string().default("localhost:7233"),
-  TEMPORAL_NAMESPACE: z.string().default("default"),
-  TEMPORAL_TASK_QUEUE: z.string().default("cmc-main"),
-
-  // --- Incident-response workflow (P3.2 / ADR-0046) ---
-  // The Temporal incident-response workflow auto-starts for incidents at/above
-  // this severity (1 = SEV-1; default 2 → SEV-1 + SEV-2). It pages the
-  // assignee + reporter, reminds every REMINDER_INTERVAL while the incident is
-  // unacknowledged (still "reported"), and escalates to incident:resolve holders
-  // if still unacknowledged after ACK_SLA. All gated by TEMPORAL_ENABLED (off →
-  // the scheduler is a noop). Durations are seconds.
-  INCIDENT_RESPONSE_SEVERITY_THRESHOLD: z.coerce
-    .number()
-    .int()
-    .min(1)
-    .max(5)
-    .default(2),
-  INCIDENT_ACK_SLA_SEC: z.coerce.number().int().positive().default(900),
-  INCIDENT_REMINDER_INTERVAL_SEC: z.coerce
-    .number()
-    .int()
-    .positive()
-    .default(300),
-
   // --- Search engine / OpenSearch (P3.6 / ADR-0051) ---
   // When enabled, documents are indexed into OpenSearch (best-effort) and the
   // OpenSearch-backed search path is available. Off by default → a noop index +

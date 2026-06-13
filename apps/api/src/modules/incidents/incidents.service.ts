@@ -21,7 +21,6 @@ import { TenantDatabaseService } from "../database/tenant-database.service";
 import { AuditService } from "../audit/audit.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { OutboxService } from "../events/outbox.service";
-import { IncidentResponseScheduler } from "../temporal/incident-response.scheduler";
 import {
   RegionScopeService,
   regionScopeCondition,
@@ -79,7 +78,6 @@ export class IncidentsService {
     private readonly audit: AuditService,
     private readonly notifications: NotificationsService,
     private readonly outbox: OutboxService,
-    private readonly response: IncidentResponseScheduler,
     private readonly regionScope: RegionScopeService,
     config: ConfigService<AppConfig, true>,
   ) {
@@ -151,11 +149,6 @@ export class IncidentsService {
         occurredAt: input.occurredAt,
       },
     });
-
-    // Start the incident-response workflow for severe incidents (P3.2 /
-    // ADR-0046). Severity-gated + best-effort inside the scheduler; a noop when
-    // Temporal is off.
-    await this.response.onCreated(actor.tenantId, id, input.severity);
 
     return (await this.getDetail(id))!;
   }
@@ -363,16 +356,6 @@ export class IncidentsService {
       metadata: { fields: Object.keys(changes) },
     });
 
-    // Severity change re-evaluates the response workflow (P3.2): now-severe +
-    // open → (re)start; otherwise cancel. Status is unchanged by update.
-    if (changes.severity !== undefined) {
-      await this.response.onSeverityChanged(
-        actor.tenantId,
-        id,
-        changes.severity,
-        this.isOpen(existing.status),
-      );
-    }
     return (await this.getDetail(id))!;
   }
 
@@ -436,12 +419,6 @@ export class IncidentsService {
     // notifies — P2.4). Best-effort either way (never throws).
     if (!this.natsEnabled) {
       await this.notifications.incidentTransitioned(detail, from, to, actor);
-    }
-    // Leaving the open set (resolved/closed/cancelled) ends the response
-    // choreography (P3.2). Acknowledgement (triaged/in_progress) needs no action
-    // — the workflow detects it via its own status poll.
-    if (!this.isOpen(to)) {
-      await this.response.cancel(id);
     }
     return detail;
   }

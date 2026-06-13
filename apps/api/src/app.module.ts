@@ -25,7 +25,6 @@ import { IncidentsModule } from "./modules/incidents/incidents.module";
 import { CasesModule } from "./modules/cases/cases.module";
 import { GisModule } from "./modules/gis/gis.module";
 import { SearchModule } from "./modules/search/search.module";
-import { WorkflowsModule } from "./modules/workflows/workflows.module";
 import { ImportsModule } from "./modules/imports/imports.module";
 import { ChatModule } from "./modules/chat/chat.module";
 import { RegionsModule } from "./modules/regions/regions.module";
@@ -41,7 +40,6 @@ import { MailModule } from "./common/mail/mail.module";
 import { EventsModule } from "./modules/events/events.module";
 import { AnalyticsModule } from "./modules/analytics/analytics.module";
 import { RealtimeModule } from "./modules/realtime/realtime.module";
-import { TemporalModule } from "./modules/temporal/temporal.module";
 import { TenantContextModule } from "./common/tenant-context/tenant-context.module";
 import { TenantContextMiddleware } from "./common/tenant-context/tenant-context.middleware";
 import { TenantContextService } from "./common/tenant-context/tenant-context.service";
@@ -105,7 +103,6 @@ import { loadConfig } from "./config/configuration";
     EventsModule,
     AnalyticsModule,
     RealtimeModule,
-    TemporalModule,
 
     // --- Domain modules ---
     HealthModule,
@@ -121,7 +118,6 @@ import { loadConfig } from "./config/configuration";
     CasesModule,
     GisModule,
     SearchModule,
-    WorkflowsModule,
     ImportsModule,
     ChatModule,
     RegionsModule,

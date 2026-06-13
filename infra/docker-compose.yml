@@ -246,46 +246,6 @@ services:
       retries: 10
       start_period: 10s
 
-  # Durable workflows (P3.1 / ADR-0045). Temporal server (auto-setup creates its
-  # schema in the existing Postgres — DBs `temporal` + `temporal_visibility`) and
-  # the Web UI. The API's gated worker/client connect only when TEMPORAL_ENABLED.
-  temporal:
-    image: temporalio/auto-setup:1.25.2
-    container_name: cmc-temporal
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      DB: postgres12
-      DB_PORT: 5432
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PWD: ${POSTGRES_PASSWORD}
-      POSTGRES_SEEDS: postgres
-    ports:
-      - "${TEMPORAL_PORT:-7233}:7233"
-    healthcheck:
-      # The frontend binds to the container IP, not loopback — address it by the
-      # service name (resolvable in-container), not 127.0.0.1.
-      test: ["CMD", "tctl", "--address", "temporal:7233", "cluster", "health"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 40s
-
-  temporal-ui:
-    image: temporalio/ui:2.32.0
-    container_name: cmc-temporal-ui
-    restart: unless-stopped
-    depends_on:
-      temporal:
-        condition: service_started
-    environment:
-      TEMPORAL_ADDRESS: temporal:7233
-      TEMPORAL_CORS_ORIGINS: http://localhost:3000
-    ports:
-      - "${TEMPORAL_UI_PORT:-8233}:8080"
-
   # Full-text search engine (P3.6 / ADR-0051). Single-node, security plugin off
   # (DEV ONLY). The API's gated indexer/search connect only when
   # OPENSEARCH_ENABLED; Postgres FTS remains the default search.
