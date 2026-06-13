@@ -43,4 +43,3 @@ export * from "./chat-channels";
 export * from "./chat-messages";
 export * from "./chat-reactions";
 export * from "./collab-docs";
-export * from "./media-assets";

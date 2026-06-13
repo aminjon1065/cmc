@@ -31,7 +31,6 @@ import { WikiModule } from "./modules/wiki/wiki.module";
 import { ImportsModule } from "./modules/imports/imports.module";
 import { ChatModule } from "./modules/chat/chat.module";
 import { CollabModule } from "./modules/collab/collab.module";
-import { MediaModule } from "./modules/media/media.module";
 import { RegionsModule } from "./modules/regions/regions.module";
 import { LlmModule } from "./modules/llm/llm.module";
 import { VectorModule } from "./modules/vector/vector.module";
@@ -131,7 +130,6 @@ import { loadConfig } from "./config/configuration";
     ImportsModule,
     ChatModule,
     CollabModule,
-    MediaModule,
     RegionsModule,
     LlmModule,
     VectorModule,

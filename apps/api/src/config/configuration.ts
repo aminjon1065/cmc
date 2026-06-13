@@ -295,19 +295,6 @@ const EnvSchema = z.object({
     .transform((v) => v.toLowerCase() === "true"),
   PREVIEW_MAX_DIM: z.coerce.number().int().positive().default(512),
 
-  // --- Media management (P4.5 / ADR-0063) ---
-  // Gated BullMQ worker transcodes an uploaded video document to HLS (ffmpeg,
-  // dynamic-imported) → S3. Off by default (jobs are created but not processed);
-  // ffmpeg must be in the worker image. The browser streams via the BFF proxy.
-  MEDIA_TRANSCODE_ENABLED: z
-    .string()
-    .default("false")
-    .transform((v) => v.toLowerCase() === "true"),
-  MEDIA_HLS_SEGMENT_SECONDS: z.coerce.number().int().positive().default(6),
-  // Optional TTF/OTF path for the ffmpeg `drawtext` watermark (P4.5c). Empty →
-  // rely on the image's fontconfig default (a font must still be present).
-  MEDIA_WATERMARK_FONT: z.string().default(""),
-
   // --- Bulk data import (P3.11 / ADR-0056) ---
   // BullMQ worker parses an uploaded file and bulk-inserts into a target domain
   // (CSV→incidents, GeoJSON→GIS), quarantining bad rows. ENABLED gates the queue
