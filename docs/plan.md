@@ -46,13 +46,15 @@ ClickHouse, prune docs.
       ClickHouse, the AI stack, video/media, collaborative editing, OpenSearch,
       visual workflow builder, wiki, API keys, PWA, SOC2 program, heavy
       observability. Mark every superseded ADR `Superseded by ADR-0080`.
-- [ ] **Remove non-goal modules** (one module per commit, build green each time):
+- [x] **Remove non-goal modules** (one module per commit, build green each time):
       `temporal`, `workflows` (Temporal-backed), `vector`, `rag`, `copilot`,
-      `llm`, `collab`, `video`, `media`, `previews` (if AV-only), `api-keys`,
-      `wiki`, plus the OpenSearch/federated-search and visual-workflow-builder
-      paths. For each: delete module dir + its schema files, unwire from
-      `app.module`, drop its tables via migration, remove its infra/compose
-      services, remove now-unused dependencies.
+      `llm`, `collab`, `video`, `media`, `api-keys`, `wiki`, `monitoring`, plus
+      the OpenSearch/federated-search, AI document-intelligence/extraction, and
+      visual-workflow-builder paths. `previews` was **kept** (document
+      thumbnails, not AV-only). `documents` + `search` reworked to Postgres-FTS
+      only; `incidents` + `cases` unwired from the Temporal SLA schedulers.
+      Drop migration 0044 removes the 13 descoped tables. Full e2e suite green
+      (366/366) on a fresh-migrated DB.
 - [ ] **Defer ClickHouse:** point `analytics` at PostgreSQL; remove the ClickHouse
       client wiring and its compose service; keep the projection pattern
       documented for later (ADR note, not code).
@@ -103,6 +105,9 @@ endpoint enforces RBAC + region scope, with audit entries written.
 - [ ] Incidents: state machine, severity, assignment, region scope verified
       post-descope; in-app notifications fire (no NATS).
 - [ ] Cases: lifecycle, activity log, transitions verified.
+- [ ] **Rebuild incident-response + case-SLA escalation as in-app scheduled jobs**
+      (`@nestjs/schedule`, DB state) — replaces the Temporal schedulers removed in
+      Phase 0 (ADR-0080 / ToR §6).
 - [ ] Web UI for incident and case lists/detail with server-side
       filtering/sorting/pagination.
 
