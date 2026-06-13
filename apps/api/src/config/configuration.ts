@@ -343,31 +343,6 @@ const EnvSchema = z.object({
   // one per (re)connect).
   HOCUSPOCUS_TICKET_TTL_SECONDS: z.coerce.number().int().positive().default(60),
 
-  // --- Video conferencing (LiveKit, P4.2 / ADR-0061) ---
-  // Gated lazy seam: the livekit-server-sdk is dynamic-imported and the room
-  // admin client only constructed when enabled. Token minting (pure JWT signing
-  // with the API key/secret) works regardless so it stays e2e-testable. Off by
-  // default; the browser gets a short-lived, room-scoped LiveKit token via the BFF.
-  LIVEKIT_ENABLED: z
-    .string()
-    .default("false")
-    .transform((v) => v.toLowerCase() === "true"),
-  // WS URL the browser connects to (behind Caddy in prod; direct in dev).
-  LIVEKIT_URL: z.string().default("ws://localhost:7880"),
-  // HTTP URL for the server-side RoomServiceClient (room admin/egress).
-  LIVEKIT_API_URL: z.string().default("http://localhost:7880"),
-  LIVEKIT_API_KEY: z.string().default("devkey"),
-  // LiveKit requires the secret to be ≥32 chars.
-  LIVEKIT_API_SECRET: z
-    .string()
-    .min(32, "LIVEKIT_API_SECRET must be at least 32 characters")
-    .default("devsecret_change_me_minimum_32_chars"),
-  LIVEKIT_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(3600),
-  // S3 endpoint the LiveKit **egress** container uses to upload recordings —
-  // reachable from inside docker (the API's S3_ENDPOINT may be a host URL). Bucket
-  // + creds reuse the S3_* config. Recording keys live under `recordings/`.
-  LIVEKIT_EGRESS_S3_ENDPOINT: z.string().default("http://minio:9000"),
-
   // --- Auth / JWT ---
   JWT_SECRET: z.string().min(32, "JWT_SECRET must be at least 32 characters"),
   JWT_ACCESS_TTL: z.string().default("15m"),

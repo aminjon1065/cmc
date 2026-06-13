@@ -31,7 +31,6 @@ export * from "./wiki";
 export * from "./import";
 export * from "./chat";
 export * from "./collab";
-export * from "./video";
 export * from "./media";
 export * from "./llm";
 export * from "./vector";
