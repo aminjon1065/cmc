@@ -216,36 +216,6 @@ services:
       retries: 5
       start_period: 5s
 
-  # ClickHouse — analytical store (P2.5 / ADR-0033). Only the HTTP port (8123)
-  # is published (the native 9000 collides with MinIO; @clickhouse/client uses
-  # HTTP). The init SQL in clickhouse/init creates the schema on first start.
-  clickhouse:
-    image: clickhouse/clickhouse-server:24.8-alpine
-    container_name: cmc-clickhouse
-    restart: unless-stopped
-    environment:
-      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-cmc}
-      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-cmc}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-cmc_dev_clickhouse_change_me}
-      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
-    ports:
-      - "${CLICKHOUSE_HTTP_PORT:-8123}:8123"
-    volumes:
-      - clickhouse_data:/var/lib/clickhouse
-      - ./clickhouse/init:/docker-entrypoint-initdb.d:ro
-    ulimits:
-      nofile:
-        soft: 262144
-        hard: 262144
-    healthcheck:
-      # 127.0.0.1 (not localhost): in the alpine image `localhost` resolves to
-      # IPv6 ::1 but ClickHouse listens on IPv4 → wget "connection refused".
-      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8123/ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-      start_period: 10s
-
   # Secrets management (P2.14 / ADR-0044). DEV MODE ONLY: in-memory, auto-
   # unsealed, fixed root token — never for production (a prod Vault is HA, sealed,
   # with auto-unseal + AppRole/k8s auth). The API's in-process loader reads a KV
@@ -326,7 +296,6 @@ services:
 volumes:
   geoserver_data:
   nats_data:
-  clickhouse_data:
   postgres_data:
     name: cmc-postgres-data
   redis_data:
