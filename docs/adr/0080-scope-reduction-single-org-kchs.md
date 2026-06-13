@@ -1,6 +1,6 @@
 # ADR-0080: Scope reduction to a single-organization КЧС deployment
 
-**Status:** Proposed (draft — awaiting confirmation before any removal)
+**Status:** Accepted
 **Date:** 2026-06-13
 **Implements:** `plan.md` Phase 0; `ToR.md` v2.0 §2 (non-goals), §4 (tenancy), §12 (deferred)
 **Supersedes:** see "Superseded ADRs" below
@@ -129,24 +129,23 @@ ADR-0062 (operational monitoring center), ADR-0058 (HA introduction), ADR-0065
 Each fully-/partially-superseded ADR will get a `Superseded by ADR-0080` (or
 `Amended by ADR-0080`) banner in the same commit that removes its capability.
 
-## Open Questions (to confirm before execution)
+## Resolved decisions (confirmed 2026-06-13)
 
-1. **`monitoring` module (ADR-0062).** Not named in ToR §5. It is an operational
-   "command-center wall" aggregating incidents + audit_log + **video-room count**
-   (a module being removed). It overlaps the in-scope `analytics` dashboards.
-   Proposed: **remove** (fold any wanted views into analytics later). Confirm
-   remove vs. keep-trimmed (drop the video tile).
-2. **`previews` module (ADR-0043).** Plan says remove "if AV-only". It is **not**
-   AV-only — it renders **document thumbnails** (image/PDF) for the EDMS file
-   manager; video/audio kinds are skipped unless ffmpeg is present. Proposed:
-   **keep** (drop the dormant AV branches). Confirm.
-3. **Vault (ADR-0044 loader, ADR-0065 prod).** ToR §9 requires "secrets managed
-   outside source"; the dev Vault loader is gated **off** by default. Proposed:
-   **keep the optional loader**, **defer** the production-HA Vault (ADR-0065),
-   **remove** the sovereign-airgap installer (ADR-0073). Confirm.
-4. **HA (ADR-0058).** ToR §9 keeps single-site HA (process supervision, fast
-   restart) but removes multi-region/active-active. Proposed: **retain** the
-   single-site posture, **trim** any multi-node clustering. Confirm scope.
+The four borderline calls were put to the owner and confirmed as proposed:
+
+1. **`monitoring` module (ADR-0062) → REMOVE.** Not in ToR §5; the "command-center
+   wall" aggregates incidents + audit_log + **video-room count** (a removed
+   module) and overlaps the in-scope `analytics` dashboards. Any wanted tiles are
+   re-introduced under `analytics` later. ADR-0062 → Superseded.
+2. **`previews` module (ADR-0043) → KEEP.** Not AV-only — renders **document
+   thumbnails** (image/PDF) for the EDMS file manager. The dormant video/audio
+   preview branches are dropped. ADR-0043 stays Accepted.
+3. **Vault → KEEP optional loader, DEFER prod-HA, REMOVE airgap.** The dev/secret
+   loader (ADR-0044) is gated **off** by default and satisfies ToR §9 "secrets
+   outside source"; production-HA Vault (ADR-0065) is deferred; the
+   sovereign-airgap installer (ADR-0073) is removed.
+4. **HA (ADR-0058) → single-site only.** Retain process supervision / fast restart
+   within one server (ToR §9); trim any multi-node/active-active clustering.
 
 ## Consequences
 

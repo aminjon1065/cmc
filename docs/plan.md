@@ -39,9 +39,9 @@ rather than build from zero.
 multi-tenancy and all §2 non-goal modules, swap NATS for in-process events, defer
 ClickHouse, prune docs.
 
-- [ ] Read `ToR.md` and this plan in full. Produce a module/ADR inventory mapping
+- [x] Read `ToR.md` and this plan in full. Produce a module/ADR inventory mapping
       each existing module and ADR to **KEEP / REMOVE / DEFER** per `ToR.md`.
-- [ ] Write **ADR-0080: Scope reduction to single-organization КЧС deployment**
+- [x] Write **ADR-0080: Scope reduction to single-organization КЧС deployment**
       recording: removal of multi-tenancy; removal/deferral of Temporal, NATS,
       ClickHouse, the AI stack, video/media, collaborative editing, OpenSearch,
       visual workflow builder, wiki, API keys, PWA, SOC2 program, heavy
