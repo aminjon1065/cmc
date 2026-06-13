@@ -309,6 +309,13 @@
       "when": 1780597177941,
       "tag": "0043_lowly_king_cobra",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1781361193598,
+      "tag": "0044_drop_descoped_tables",
+      "breakpoints": true
     }
   ]
 }
