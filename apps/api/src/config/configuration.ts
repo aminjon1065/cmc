@@ -209,44 +209,6 @@ const EnvSchema = z.object({
   // matching the JWT_ACCESS_TTL default.
   SESSION_CACHE_TTL_SEC: z.coerce.number().int().positive().default(900),
 
-  // --- Observability / OpenTelemetry (P0.6 / ADR-0013) ---
-  // NOTE: these are read directly from process.env by `src/tracing.ts` at
-  // process start — before Nest's ConfigModule loads — because the OTEL
-  // auto-instrumentations must patch http/express/aws-sdk/ioredis before
-  // those modules are imported. They are mirrored here purely for
-  // validation + documentation (and so anything that wants them at
-  // runtime can read them via ConfigService).
-  //
-  // Tracing is ON by default; the exporter is what's gated: set an OTLP
-  // endpoint to ship spans (P1.8 / Tempo), or OTEL_TRACES_CONSOLE=true to
-  // print them. With neither, spans are still created (trace_id flows into
-  // logs + audit, W3C context propagates) but nothing is exported.
-  OTEL_ENABLED: z
-    .string()
-    .default("true")
-    .transform((v) => v.toLowerCase() !== "false"),
-  OTEL_SERVICE_NAME: z.string().default("cmc-api"),
-  OTEL_SERVICE_VERSION: z.string().default("0.0.0"),
-  // Treat an empty string as unset (compose/k8s often pass `VAR=` to mean
-  // "no value") so an explicitly-blank endpoint doesn't fail the url() check
-  // and crash boot. `undefined` and "" both mean "no collector".
-  OTEL_EXPORTER_OTLP_ENDPOINT: emptyAsUndefined(z.string().url().optional()),
-  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: emptyAsUndefined(
-    z.string().url().optional(),
-  ),
-  OTEL_TRACES_CONSOLE: z
-    .string()
-    .default("false")
-    .transform((v) => v.toLowerCase() === "true"),
-
-  // --- Log aggregation / Loki (P1.7 / ADR-0025) ---
-  // When set, the API ALSO ships its structured pino logs to Loki (the
-  // pino-loki transport) on top of stdout — so the host-run API's logs land
-  // in Grafana, queryable by request_id/tenant. Dev: http://localhost:3100
-  // (the obs-compose Loki). Unset (or empty) → stdout only, behaviour
-  // unchanged. Gated exactly like the OTEL exporter.
-  LOKI_URL: emptyAsUndefined(z.string().url().optional()),
-
   // --- Metrics / Prometheus (P0.7 / ADR-0014) ---
   // When true, the API exposes GET /metrics (prom-client) and records the
   // HTTP RED histogram + DB transaction gauges. The endpoint itself is

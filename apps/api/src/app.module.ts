@@ -84,7 +84,6 @@ import { loadConfig } from "./config/configuration";
           config.get("LOG_LEVEL", { infer: true }),
           requestContext,
           tenantContext,
-          config.get("LOKI_URL", { infer: true }),
         ),
     }),
 

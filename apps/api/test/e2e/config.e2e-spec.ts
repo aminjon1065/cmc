@@ -8,10 +8,9 @@ import { loadConfig } from "../../src/config/configuration";
  * nothing external.
  *
  * The headline regression: compose / k8s commonly pass `VAR=` (empty string)
- * to mean "unset". An empty OTEL endpoint must NOT fail the `.url()` check and
- * crash boot — it must be treated as "no collector". This bit a containerised
- * deploy (the API restart-looped with "OTEL_EXPORTER_OTLP_ENDPOINT: Invalid
- * url") before the `emptyAsUndefined` preprocessor landed.
+ * to mean "unset". An `emptyAsUndefined()`-wrapped optional var must collapse
+ * empty / whitespace to `undefined` so an explicitly-blank env var never reaches
+ * the wrapped validator and crashes boot.
  */
 describe("loadConfig env validation", () => {
   const ORIGINAL = process.env;
@@ -33,26 +32,26 @@ describe("loadConfig env validation", () => {
     process.env = ORIGINAL;
   });
 
-  it("accepts an empty OTEL_EXPORTER_OTLP_ENDPOINT as unset (does not throw)", () => {
-    process.env.OTEL_EXPORTER_OTLP_ENDPOINT = "";
+  it("treats an empty emptyAsUndefined() var as unset (does not throw)", () => {
+    process.env.VAULT_TOKEN = "";
     const cfg = loadConfig();
-    expect(cfg.OTEL_EXPORTER_OTLP_ENDPOINT).toBeUndefined();
+    expect(cfg.VAULT_TOKEN).toBeUndefined();
   });
 
-  it("accepts a whitespace-only OTLP endpoint as unset", () => {
-    process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = "   ";
+  it("treats a whitespace-only value as unset", () => {
+    process.env.VAULT_TOKEN = "   ";
     const cfg = loadConfig();
-    expect(cfg.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT).toBeUndefined();
+    expect(cfg.VAULT_TOKEN).toBeUndefined();
   });
 
-  it("still honours a real OTLP endpoint URL", () => {
-    process.env.OTEL_EXPORTER_OTLP_ENDPOINT = "http://tempo:4318";
+  it("honours a real value", () => {
+    process.env.VAULT_TOKEN = "s.abc123";
     const cfg = loadConfig();
-    expect(cfg.OTEL_EXPORTER_OTLP_ENDPOINT).toBe("http://tempo:4318");
+    expect(cfg.VAULT_TOKEN).toBe("s.abc123");
   });
 
-  it("still rejects a non-empty, malformed OTLP endpoint", () => {
-    process.env.OTEL_EXPORTER_OTLP_ENDPOINT = "not-a-url";
+  it("still rejects a malformed required URL", () => {
+    process.env.DATABASE_URL = "not-a-url";
     expect(() => loadConfig()).toThrow(/Invalid environment configuration/);
   });
 });

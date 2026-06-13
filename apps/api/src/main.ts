@@ -1,9 +1,3 @@
-// OTEL tracing MUST be the first import: its auto-instrumentations patch
-// http / express / @nestjs/core / @aws-sdk / ioredis at require time, so
-// it has to run before any of those modules are loaded below. The module
-// loads dotenv and starts the SDK as an import side-effect (P0.6 / ADR-0013).
-import "./tracing";
-
 import "reflect-metadata";
 // Load .env before any code reads process.env. Without this, the validation
 // in main.ts (which runs before NestJS's ConfigModule) sees empty env vars.

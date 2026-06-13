@@ -1,6 +1,5 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { trace, SpanStatusCode } from "@opentelemetry/api";
 import { sql } from "drizzle-orm";
 import type { Database } from "@cmc/db";
 import { DB } from "./database.tokens";
@@ -39,12 +38,6 @@ export type TenantTx = Parameters<
 export class TenantDatabaseService {
   private readonly logger = new Logger(TenantDatabaseService.name);
   private readonly txStorage = new AsyncLocalStorage<TenantTx>();
-  // postgres-js (porsager) has no OTEL auto-instrumentation, so we emit a
-  // transaction-level span at the two GUC chokepoints below (P0.6 /
-  // ADR-0013). Each nests under the active HTTP span, giving every request
-  // a DB segment. Statement-level spans await a postgres-js instrumentation
-  // or a migration to node-postgres (`pg`) — documented in ADR-0013.
-  private readonly tracer = trace.getTracer("cmc-db");
 
   constructor(
     @Inject(DB) private readonly database: Database,
@@ -52,39 +45,26 @@ export class TenantDatabaseService {
   ) {}
 
   /**
-   * Run `body` inside a DB span named `db.tx <scope>` AND record it into
-   * the metrics registry (in-flight gauge + total counter, P0.7 /
-   * ADR-0014). This is the single chokepoint for both tenant and
-   * privileged transactions, so it is the honest place to measure DB
-   * saturation (postgres-js exposes no public live pool-stat API).
-   *
-   * With tracing disabled the tracer is a no-op — `body` runs directly,
-   * zero overhead; the metrics calls are plain counter math either way.
+   * Record a transaction into the metrics registry (in-flight gauge + total
+   * counter, P0.7 / ADR-0014). This is the single chokepoint for both tenant
+   * and privileged transactions, so it is the honest place to measure DB
+   * saturation (postgres-js exposes no public live pool-stat API). Distributed
+   * tracing was removed in ADR-0080; the metrics calls are plain counter math.
    */
-  private async withSpan<T>(
+  private async withTxMetrics<T>(
     scope: "tenant" | "privileged",
     body: () => Promise<T>,
   ): Promise<T> {
-    return this.tracer.startActiveSpan(`db.tx ${scope}`, async (span) => {
-      span.setAttribute("db.system", "postgresql");
-      span.setAttribute("cmc.db.scope", scope);
-      this.metrics.dbTxStart();
-      let outcome: "commit" | "error" = "commit";
-      try {
-        return await body();
-      } catch (err) {
-        outcome = "error";
-        span.recordException(err as Error);
-        span.setStatus({
-          code: SpanStatusCode.ERROR,
-          message: err instanceof Error ? err.message : String(err),
-        });
-        throw err;
-      } finally {
-        this.metrics.dbTxEnd(scope, outcome);
-        span.end();
-      }
-    });
+    this.metrics.dbTxStart();
+    let outcome: "commit" | "error" = "commit";
+    try {
+      return await body();
+    } catch (err) {
+      outcome = "error";
+      throw err;
+    } finally {
+      this.metrics.dbTxEnd(scope, outcome);
+    }
   }
 
   /**
@@ -128,7 +108,7 @@ export class TenantDatabaseService {
       // value that the rest of the system would not recognise as a tenant.
       throw new Error(`runForTenant called with non-UUID tenantId`);
     }
-    return this.withSpan("tenant", () =>
+    return this.withTxMetrics("tenant", () =>
       this.database.db.transaction(async (tx) => {
         // Use `set_config(name, value, is_local := true)` instead of raw
         // `SET LOCAL ... = '${x}'` so the value flows through a bind
@@ -158,7 +138,7 @@ export class TenantDatabaseService {
    * the request. The `try/finally` resets it to 'off' before returning.
    */
   async runPrivileged<T>(fn: (tx: TenantTx) => Promise<T>): Promise<T> {
-    return this.withSpan("privileged", () =>
+    return this.withTxMetrics("privileged", () =>
       this.database.db.transaction(async (tx) => {
         await tx.execute(sql`select set_config('app.bypass_rls', 'on', true)`);
         try {
