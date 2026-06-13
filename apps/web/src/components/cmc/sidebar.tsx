@@ -1,22 +1,16 @@
 import Link from "next/link";
 import {
-  Activity,
   BarChart3,
   Briefcase,
   FileText,
-  Files,
-  Film,
   Globe2,
   Inbox,
   LayoutDashboard,
   MessageSquare,
-  Network,
   Search,
   Shield,
   ShieldCheck,
-  Sparkles,
   Upload,
-  Video,
   type LucideIcon,
 } from "lucide-react";
 import { getTranslations } from "next-intl/server";
@@ -38,12 +32,6 @@ const NAV: NavGroup[] = [
     id: "ops",
     label: "Operations",
     items: [
-      {
-        id: "monitor",
-        label: "Realtime Monitoring",
-        icon: Activity,
-        href: "/monitoring",
-      },
       { id: "gis", label: "GIS Map", icon: Globe2, href: "/map" },
       { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
     ],
@@ -53,7 +41,6 @@ const NAV: NavGroup[] = [
     label: "Intelligence",
     items: [
       { id: "analytics", label: "Analytics", icon: BarChart3, href: "/analytics" },
-      { id: "ai", label: "AI Assistant", icon: Sparkles, href: "/ai" },
       { id: "search", label: "Search", icon: Search, href: "/search" },
     ],
   },
@@ -61,7 +48,6 @@ const NAV: NavGroup[] = [
     id: "work",
     label: "Work",
     items: [
-      { id: "workflow", label: "Workflows", icon: Network, href: "/workflows" },
       { id: "imports", label: "Data Import", icon: Upload, href: "/imports" },
       { id: "cases", label: "Cases & Incidents", icon: Briefcase, disabled: true },
     ],
@@ -71,8 +57,6 @@ const NAV: NavGroup[] = [
     label: "Knowledge",
     items: [
       { id: "docs", label: "Documents", icon: FileText, href: "/documents" },
-      { id: "media", label: "Media", icon: Film, href: "/media" },
-      { id: "wiki", label: "Knowledge Base", icon: Files, href: "/wiki" },
     ],
   },
   {
@@ -80,7 +64,6 @@ const NAV: NavGroup[] = [
     label: "Communication",
     items: [
       { id: "chat", label: "Chat", icon: MessageSquare, href: "/chat" },
-      { id: "video", label: "Video", icon: Video, href: "/video" },
       { id: "notif", label: "Notifications", icon: Inbox, disabled: true },
     ],
   },
@@ -114,10 +97,6 @@ export async function Sidebar({
   const access = await getMyAccess();
   const canAdmin = isAdmin(access);
   const canIncidents = hasPermission(access, "incident:read");
-  const canVideo = hasPermission(access, "video:read");
-  const canMonitor = hasPermission(access, "monitoring:read");
-  const canMedia = hasPermission(access, "media:read");
-  const canLlm = hasPermission(access, "llm:use");
   const canAudit = hasPermission(access, "audit:read");
 
   // Localized nav labels (RU default + TG) — keyed by the stable group/item id.
@@ -182,20 +161,14 @@ export async function Sidebar({
                   ? "/admin"
                   : item.id === "cases" && canIncidents
                     ? "/incidents"
-                    : item.id === "media" && canMedia
-                      ? "/media"
-                      : item.id === "notif"
-                        ? "/notifications"
-                        : item.href;
+                    : item.id === "notif"
+                      ? "/notifications"
+                      : item.href;
               // Permission gate per nav id; absent ids keep their static
               // `disabled`. `notif` is open to everyone (true).
               const gate: Record<string, boolean> = {
                 admin: canAdmin,
                 cases: canIncidents,
-                video: canVideo,
-                monitor: canMonitor,
-                media: canMedia,
-                ai: canLlm,
                 audit: canAudit,
                 analytics: canIncidents,
                 notif: true,

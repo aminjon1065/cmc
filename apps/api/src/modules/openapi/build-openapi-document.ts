@@ -81,7 +81,6 @@ const RESPONSE_SCHEMA: Record<string, string> = {
   "get /v1/notifications/preferences": "NotificationPrefsResponse",
   // documents
   "get /v1/documents": "ListDocumentsResponse",
-  "get /v1/documents/search": "DocumentSearchResponse",
   "get /v1/documents/{id}": "DocumentResponse",
   "post /v1/documents/upload-init": "UploadInitResponse",
   "post /v1/documents/multipart/init": "MultipartInitResponse",
@@ -100,8 +99,6 @@ const RESPONSE_SCHEMA: Record<string, string> = {
   "post /v1/documents/retention/sweep": "RetentionSweepResponse",
   "post /v1/documents/{id}/retention": "DocumentResponse",
   "post /v1/documents/{id}/legal-hold": "DocumentResponse",
-  // search reindex (P3.6)
-  "post /v1/documents/reindex": "ReindexResponse",
   // folders (P3.3)
   "get /v1/folders": "FoldersListResponse",
   "post /v1/folders": "FolderResponse",
@@ -112,32 +109,6 @@ const RESPONSE_SCHEMA: Record<string, string> = {
   "patch /v1/folders/{id}/restrict": "FolderResponse",
   "get /v1/folders/{id}/grants": "FolderGrantsListResponse",
   "post /v1/folders/{id}/grants": "FolderGrantResponse",
-  // workflows (P3.8)
-  "get /v1/workflows": "WorkflowsListResponse",
-  "post /v1/workflows": "WorkflowResponse",
-  "post /v1/workflows/validate": "ValidateWorkflowResponse",
-  "get /v1/workflows/runs/{runId}": "WorkflowRunResponse",
-  "get /v1/workflows/{id}": "WorkflowResponse",
-  "patch /v1/workflows/{id}": "WorkflowResponse",
-  "get /v1/workflows/{id}/runs": "WorkflowRunsListResponse",
-  "post /v1/workflows/{id}/run": "WorkflowRunResponse",
-  // api keys (P3.9)
-  "get /v1/api-keys": "ApiKeysListResponse",
-  "post /v1/api-keys": "ApiKeyCreatedResponse",
-  // wiki (P3.10)
-  "get /v1/wiki/spaces": "WikiSpacesListResponse",
-  "post /v1/wiki/spaces": "WikiSpaceResponse",
-  "get /v1/wiki/spaces/{id}": "WikiSpaceResponse",
-  "patch /v1/wiki/spaces/{id}": "WikiSpaceResponse",
-  "get /v1/wiki/spaces/{id}/pages": "WikiPagesListResponse",
-  "post /v1/wiki/pages": "WikiPageResponse",
-  "get /v1/wiki/pages/{id}": "WikiPageResponse",
-  "patch /v1/wiki/pages/{id}": "WikiPageResponse",
-  "post /v1/wiki/pages/{id}/move": "WikiPageResponse",
-  "get /v1/wiki/pages/{id}/versions": "WikiPageVersionsListResponse",
-  "post /v1/wiki/pages/{id}/versions/{versionNo}/restore": "WikiPageResponse",
-  "get /v1/wiki/pages/{id}/comments": "WikiCommentsListResponse",
-  "post /v1/wiki/pages/{id}/comments": "WikiCommentResponse",
   // bulk data import (P3.11)
   "post /v1/imports/upload-init": "ImportUploadInitResponse",
   "post /v1/imports": "ImportJobResponse",

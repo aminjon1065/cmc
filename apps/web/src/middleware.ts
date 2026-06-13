@@ -24,14 +24,8 @@ export default auth((req) => {
     nextUrl.pathname.startsWith("/incidents") ||
     nextUrl.pathname.startsWith("/notifications") ||
     nextUrl.pathname.startsWith("/search") ||
-    nextUrl.pathname.startsWith("/workflows") ||
-    nextUrl.pathname.startsWith("/wiki") ||
     nextUrl.pathname.startsWith("/imports") ||
     nextUrl.pathname.startsWith("/chat") ||
-    nextUrl.pathname.startsWith("/video") ||
-    nextUrl.pathname.startsWith("/monitoring") ||
-    nextUrl.pathname.startsWith("/media") ||
-    nextUrl.pathname.startsWith("/ai") ||
     nextUrl.pathname.startsWith("/audit") ||
     nextUrl.pathname.startsWith("/analytics");
 
