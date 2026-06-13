@@ -1,18 +1,16 @@
 import { Module } from "@nestjs/common";
-import { IncidentsModule } from "../incidents/incidents.module";
 import { NotificationsModule } from "../notifications/notifications.module";
-import { IncidentNotificationsConsumer } from "./incident-notifications.consumer";
-import { IncidentNotificationsSubscriber } from "./incident-notifications.subscriber";
+import { IncidentNotificationsListener } from "./incident-notifications.listener";
 
 /**
- * Leaf module bridging incident events → notifications (P2.4 / ADR-0032).
- * Imports both domain modules (avoiding a cycle — neither imports this);
- * `EventDedupService` comes from the global EventsModule. The subscriber drives
- * the consumer from a durable JetStream consumer when `NATS_ENABLED`.
+ * Leaf module bridging incident events → notifications (ADR-0032). Listens to
+ * the in-process domain events emitted by IncidentsService (ADR-0080) via
+ * `@OnEvent` and dispatches notifications. Imports only NotificationsModule —
+ * the event carries the incident detail, so there is no dependency on
+ * IncidentsService (and no module cycle).
  */
 @Module({
-  imports: [IncidentsModule, NotificationsModule],
-  providers: [IncidentNotificationsConsumer, IncidentNotificationsSubscriber],
-  exports: [IncidentNotificationsConsumer],
+  imports: [NotificationsModule],
+  providers: [IncidentNotificationsListener],
 })
 export class IncidentNotificationsModule {}

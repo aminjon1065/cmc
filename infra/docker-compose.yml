@@ -85,32 +85,6 @@ services:
       retries: 10
       start_period: 5s
 
-  # NATS JetStream — the event plane (P2.1 / ADR-0031). `-js` enables
-  # JetStream; `-sd` is the durable store dir; `-m` exposes the monitoring
-  # port for the healthcheck. The outbox relay publishes here; consumers
-  # subscribe to `tenant.{id}.{aggregate}.{event}.v{n}`.
-  nats:
-    image: nats:2.10-alpine
-    container_name: cmc-nats
-    restart: unless-stopped
-    command:
-      - "-js"
-      - "-sd"
-      - "/data"
-      - "-m"
-      - "8222"
-    ports:
-      - "${NATS_PORT:-4222}:4222"
-      - "${NATS_MONITOR_PORT:-8222}:8222"
-    volumes:
-      - nats_data:/data
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-      start_period: 5s
-
   minio:
     image: minio/minio:RELEASE.2024-12-18T13-15-44Z
     container_name: cmc-minio
@@ -295,7 +269,6 @@ services:
 
 volumes:
   geoserver_data:
-  nats_data:
   postgres_data:
     name: cmc-postgres-data
   redis_data:

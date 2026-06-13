@@ -3,13 +3,15 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import { and, desc, eq, ilike, inArray, isNull, sql } from "drizzle-orm";
 import { schema } from "@cmc/db";
 import {
   canTransition,
+  EVENT_ENVELOPE_VERSION,
   INCIDENT_OPEN_STATUSES,
   type CreateIncidentRequest,
+  type EventEnvelope,
   type IncidentDetail,
   type IncidentStatsResponse,
   type IncidentStatus,
@@ -19,13 +21,16 @@ import {
 } from "@cmc/contracts";
 import { TenantDatabaseService } from "../database/tenant-database.service";
 import { AuditService } from "../audit/audit.service";
-import { NotificationsService } from "../notifications/notifications.service";
 import { OutboxService } from "../events/outbox.service";
+import {
+  DomainEvent,
+  type IncidentAssignedEvent,
+  type IncidentTransitionedEvent,
+} from "../events/domain-events";
 import {
   RegionScopeService,
   regionScopeCondition,
 } from "../regions/region-scope.service";
-import type { AppConfig } from "../../config/configuration";
 
 type Actor = {
   userId: string;
@@ -65,24 +70,13 @@ const ACTIVE_STATUSES: IncidentStatus[] = [
  */
 @Injectable()
 export class IncidentsService {
-  /**
-   * When the event plane is on, incident notifications are dispatched by the
-   * event consumer (P2.4) — so the inline dispatch below is skipped to avoid a
-   * double-fire. When NATS is off (dev/test default), the inline dispatch is the
-   * only path, preserving behaviour with zero regression.
-   */
-  private readonly natsEnabled: boolean;
-
   constructor(
     private readonly tenantDb: TenantDatabaseService,
     private readonly audit: AuditService,
-    private readonly notifications: NotificationsService,
     private readonly outbox: OutboxService,
     private readonly regionScope: RegionScopeService,
-    config: ConfigService<AppConfig, true>,
-  ) {
-    this.natsEnabled = config.get("NATS_ENABLED", { infer: true });
-  }
+    private readonly events: EventEmitter2,
+  ) {}
 
   /** Open statuses keep the incident-response workflow active (P3.2). */
   private isOpen(status: string): boolean {
@@ -406,20 +400,38 @@ export class IncidentsService {
       metadata: { from, to, note: opts.note ?? null },
     });
 
-    await this.outbox.publish({
+    const payload = { from, to, by: actor.userId, note: opts.note ?? null };
+    const eventId = await this.outbox.publish({
       tenantId: actor.tenantId,
       aggregateType: "incident",
       aggregateId: id,
       eventType: "transitioned",
-      payload: { from, to, by: actor.userId, note: opts.note ?? null },
+      payload,
     });
 
     const detail = (await this.getDetail(id))!;
-    // Inline dispatch only when the event plane is off (else the event consumer
-    // notifies — P2.4). Best-effort either way (never throws).
-    if (!this.natsEnabled) {
-      await this.notifications.incidentTransitioned(detail, from, to, actor);
-    }
+    // Emit the in-process domain event (ADR-0080). @OnEvent listeners
+    // (notifications, realtime fan-out) run synchronously inside this request
+    // transaction; `detail` is passed so they never re-fetch in a separate tx.
+    const envelope: EventEnvelope = {
+      id: eventId,
+      tenantId: actor.tenantId,
+      aggregateType: "incident",
+      aggregateId: id,
+      eventType: "transitioned",
+      version: EVENT_ENVELOPE_VERSION,
+      payload,
+      occurredAt: new Date().toISOString(),
+      traceId: null,
+      causationId: null,
+    };
+    await this.events.emitAsync(DomainEvent.IncidentTransitioned, {
+      envelope,
+      detail,
+      from,
+      to,
+      actor,
+    } satisfies IncidentTransitionedEvent);
     return detail;
   }
 
@@ -469,20 +481,33 @@ export class IncidentsService {
       metadata: { assignedTo: userId },
     });
 
-    await this.outbox.publish({
+    const payload = { assignedTo: userId, by: actor.userId };
+    const eventId = await this.outbox.publish({
       tenantId: actor.tenantId,
       aggregateType: "incident",
       aggregateId: id,
       eventType: "assigned",
-      payload: { assignedTo: userId, by: actor.userId },
+      payload,
     });
 
     const detail = (await this.getDetail(id))!;
-    // Inline dispatch only when the event plane is off (else the event consumer
-    // notifies — P2.4). Best-effort either way (never throws).
-    if (!this.natsEnabled) {
-      await this.notifications.incidentAssigned(detail, actor);
-    }
+    const envelope: EventEnvelope = {
+      id: eventId,
+      tenantId: actor.tenantId,
+      aggregateType: "incident",
+      aggregateId: id,
+      eventType: "assigned",
+      version: EVENT_ENVELOPE_VERSION,
+      payload,
+      occurredAt: new Date().toISOString(),
+      traceId: null,
+      causationId: null,
+    };
+    await this.events.emitAsync(DomainEvent.IncidentAssigned, {
+      envelope,
+      detail,
+      actor,
+    } satisfies IncidentAssignedEvent);
     return detail;
   }
 

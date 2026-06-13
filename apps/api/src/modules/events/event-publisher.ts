@@ -1,21 +1,22 @@
-import type { ConfigService } from "@nestjs/config";
 import type { EventEnvelope } from "@cmc/contracts";
-import type { AppConfig } from "../../config/configuration";
 
-/** DI token for the event-bus publisher (P2.1b / ADR-0031). */
+/** DI token for the outbox relay's broker publisher. */
 export const EVENT_PUBLISHER = Symbol("EVENT_PUBLISHER");
 
 /**
- * Publishes outbox events to the event bus (NATS JetStream). The seam the
- * relay e2e fakes — the real `nats` client is only loaded + connected in
- * production, and exercised in the live smoke.
+ * Publishes outbox events to an external broker. The transactional outbox + the
+ * relay remain in place as the durability seam (ADR-0080), but cross-module
+ * reactions now run **in-process** (Nest `EventEmitter`) — so the default
+ * publisher is the **noop**: nothing is shipped anywhere and the relay idles. A
+ * real broker publisher (e.g. NATS) is reintroduced only when a module is
+ * actually extracted into a separate service. The relay e2e fakes this seam.
  */
 export interface EventPublisher {
-  /** True when the publisher can actually deliver (NATS enabled). */
+  /** True when the publisher can actually deliver (a broker is configured). */
   readonly active: boolean;
-  /** Connect + ensure the JetStream stream exists. Idempotent. */
+  /** Connect + ensure the destination exists. Idempotent. */
   init(): Promise<void>;
-  /** Publish one envelope to its subject; `msgId` is the JetStream dedup key. */
+  /** Publish one envelope to its subject; `msgId` is the dedup key. */
   publish(
     subject: string,
     envelope: EventEnvelope,
@@ -33,20 +34,10 @@ export class NoopEventPublisher implements EventPublisher {
 }
 
 /**
- * Factory: a real NATS publisher when enabled, else the noop. The `nats`
- * package is **dynamically imported** only when enabled, so it's never loaded
- * under jest (where NATS_ENABLED is false and the relay e2e overrides this
- * token with a fake).
+ * Factory: the noop publisher (no broker by default — ADR-0080). The outbox
+ * still fills inside each transaction; the relay simply doesn't drain it until a
+ * broker publisher is wired in on service extraction.
  */
-export async function createEventPublisher(
-  config: ConfigService<AppConfig, true>,
-): Promise<EventPublisher> {
-  if (!config.get("NATS_ENABLED", { infer: true })) {
-    return new NoopEventPublisher();
-  }
-  const { NatsEventPublisher } = await import("./nats-event-publisher");
-  return new NatsEventPublisher(
-    config.get("NATS_URL", { infer: true }),
-    config.get("NATS_STREAM", { infer: true }),
-  );
+export function createEventPublisher(): EventPublisher {
+  return new NoopEventPublisher();
 }

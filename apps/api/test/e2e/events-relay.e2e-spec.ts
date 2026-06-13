@@ -146,12 +146,13 @@ describe("Outbox→NATS relay", () => {
     ]);
   });
 
-  it("status reports pending + active + stream", async () => {
+  it("status reports pending + active (broker seam off by default)", async () => {
     await emit("incident", "i", "created", {});
     const before = await relay.status();
-    expect(before.active).toBe(true);
+    expect(before.active).toBe(true); // fake publisher injected by this suite
     expect(before.pending).toBe(1);
-    expect(before.stream).toBe("CMC_EVENTS");
+    // No broker by default (ADR-0080) → no stream name.
+    expect(before.stream).toBe("");
 
     await relay.flush();
     expect((await relay.status()).pending).toBe(0);

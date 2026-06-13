@@ -1,7 +1,5 @@
-import { randomUUID } from "node:crypto";
 import type { INestApplication } from "@nestjs/common";
 import type { Redis } from "ioredis";
-import type { EventEnvelope } from "@cmc/contracts";
 import { buildTestApp } from "../helpers/test-app";
 import { ownerSql, truncateAll } from "../helpers/test-db";
 import {
@@ -12,21 +10,19 @@ import {
 } from "../helpers/test-fixtures";
 import { loginAs, authed } from "../helpers/test-auth";
 import { REDIS } from "../../src/modules/redis/redis.tokens";
-import { IncidentNotificationsConsumer } from "../../src/modules/incident-notifications/incident-notifications.consumer";
 
 const OCCURRED = "2026-05-01T08:00:00.000Z";
 
 /**
- * Incident events → notifications consumer (P2.4 / ADR-0032). Tests `handle()`
- * directly (NATS subscription is P2.4b). The assignee is set via SQL so the
- * consumer path is isolated from the inline dispatch (which fires here because
- * NATS is off in tests).
+ * Incident events → notifications (ADR-0032; in-process events per ADR-0080).
+ * IncidentsService emits a domain event on assign/transition; the
+ * IncidentNotificationsListener (@OnEvent) dispatches notifications synchronously
+ * within the request transaction. Driven end-to-end through the HTTP API.
  */
-describe("Incident notifications consumer", () => {
+describe("Incident notifications (in-process events)", () => {
   let app: INestApplication;
   let sql: ReturnType<typeof ownerSql>;
   let redis: Redis;
-  let consumer: IncidentNotificationsConsumer;
   let tenant: TestTenant;
   let admin: TestUser;
   let member: TestUser;
@@ -34,7 +30,6 @@ describe("Incident notifications consumer", () => {
 
   beforeAll(async () => {
     app = await buildTestApp();
-    consumer = app.get(IncidentNotificationsConsumer);
     sql = ownerSql();
     redis = app.get<Redis>(REDIS);
   });
@@ -64,30 +59,11 @@ describe("Incident notifications consumer", () => {
         severity: 2,
         type: "Flood",
         region: "Khatlon",
-        summary: "Consumer test incident",
+        summary: "Notification test incident",
         occurredAt: OCCURRED,
       })
       .expect(201);
     return res.body.incident.id as string;
-  }
-
-  function envelope(
-    incidentId: string,
-    eventType: string,
-    payload: Record<string, unknown>,
-  ): EventEnvelope {
-    return {
-      id: randomUUID(),
-      tenantId: tenant.id,
-      aggregateType: "incident",
-      aggregateId: incidentId,
-      eventType,
-      version: 1,
-      payload,
-      occurredAt: new Date().toISOString(),
-      traceId: null,
-      causationId: null,
-    };
   }
 
   function notifsFor(userId: string) {
@@ -95,61 +71,7 @@ describe("Incident notifications consumer", () => {
       SELECT kind FROM notifications WHERE user_id = ${userId} ORDER BY created_at`;
   }
 
-  it("handle(assigned) notifies the assignee and is idempotent", async () => {
-    const id = await createIncident();
-    // Set the assignee directly (bypass assign() so the inline path doesn't fire).
-    await sql`UPDATE incidents SET assigned_to = ${member.id} WHERE id = ${id}`;
-
-    const env = envelope(id, "assigned", {
-      assignedTo: member.id,
-      by: admin.id,
-    });
-
-    await consumer.handle(env);
-    let rows = await notifsFor(member.id);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]!.kind).toBe("incident.assigned");
-
-    // Redelivery of the same event → claim fails → no duplicate.
-    await consumer.handle(env);
-    rows = await notifsFor(member.id);
-    expect(rows).toHaveLength(1);
-  });
-
-  it("handle(transitioned) notifies reporter + assignee, excluding the actor", async () => {
-    const id = await createIncident(); // reporter = admin
-    await sql`UPDATE incidents SET assigned_to = ${member.id} WHERE id = ${id}`;
-
-    await consumer.handle(
-      envelope(id, "transitioned", {
-        from: "reported",
-        to: "triaged",
-        by: admin.id, // actor = admin (the reporter) → excluded
-      }),
-    );
-
-    // Admin is the actor → not notified; member (assignee) is.
-    expect(await notifsFor(admin.id)).toHaveLength(0);
-    const memberRows = await notifsFor(member.id);
-    expect(memberRows).toHaveLength(1);
-    expect(memberRows[0]!.kind).toBe("incident.transitioned");
-  });
-
-  it("ignores events it doesn't handle", async () => {
-    const id = await createIncident();
-    await consumer.handle(envelope(id, "created", { severity: 2 }));
-    await consumer.handle({
-      ...envelope(id, "assigned", { assignedTo: member.id, by: admin.id }),
-      aggregateType: "user",
-    });
-    // Nothing claimed, nothing dispatched.
-    const claims = await sql`SELECT 1 FROM consumed_events`;
-    expect(claims).toHaveLength(0);
-    expect(await notifsFor(member.id)).toHaveLength(0);
-  });
-
-  it("inline dispatch still fires when the event plane is off (no regression)", async () => {
-    // NATS is off in tests → IncidentsService dispatches inline on assign().
+  it("assign() emits an event that notifies the assignee", async () => {
     const id = await createIncident();
     await authed(app, token)
       .post(`/v1/incidents/${id}/assign`)
@@ -159,5 +81,22 @@ describe("Incident notifications consumer", () => {
     const rows = await notifsFor(member.id);
     expect(rows).toHaveLength(1);
     expect(rows[0]!.kind).toBe("incident.assigned");
+  });
+
+  it("transition() emits an event that notifies reporter + assignee, excluding the actor", async () => {
+    const id = await createIncident(); // reporter = admin
+    // Assign to member directly so both reporter (admin) + assignee (member) exist.
+    await sql`UPDATE incidents SET assigned_to = ${member.id} WHERE id = ${id}`;
+
+    await authed(app, token)
+      .post(`/v1/incidents/${id}/transition`)
+      .send({ to: "triaged" })
+      .expect(200);
+
+    // Admin is the actor (and reporter) → excluded; member (assignee) is notified.
+    expect(await notifsFor(admin.id)).toHaveLength(0);
+    const memberRows = await notifsFor(member.id);
+    expect(memberRows).toHaveLength(1);
+    expect(memberRows[0]!.kind).toBe("incident.transitioned");
   });
 });

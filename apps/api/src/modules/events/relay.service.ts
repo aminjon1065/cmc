@@ -29,10 +29,10 @@ const RELAY_LOCK_KEY = 40_211_300;
  * Polls unpublished outbox rows in `seq` order, publishes each to its subject
  * via the `EventPublisher`, and stamps `published_at` — in the SAME transaction,
  * so a publish failure rolls the stamp back and the row re-ships next run.
- * At-least-once; JetStream dedups on the event id (`msgID`), so the stream sees
- * each event once. `flush()` is the unit of work (interval / endpoint / test);
- * `NATS_ENABLED` gates only the background interval, and `publisher.active`
- * guards against stamping rows we never actually delivered.
+ * At-least-once; the broker dedups on the event id (`msgID`). `flush()` is the
+ * unit of work (interval / endpoint / test); `publisher.active` guards against
+ * stamping rows we never actually delivered. Off by default (ADR-0080): the
+ * publisher is the noop, so the relay idles and the outbox simply fills.
  */
 @Injectable()
 export class RelayService implements OnModuleInit, OnModuleDestroy {
@@ -49,10 +49,13 @@ export class RelayService implements OnModuleInit, OnModuleDestroy {
     @Inject(EVENT_PUBLISHER) private readonly publisher: EventPublisher,
     config: ConfigService<AppConfig, true>,
   ) {
-    this.enabled = config.get("NATS_ENABLED", { infer: true });
+    // No broker by default (ADR-0080): the publisher is the noop, so the relay
+    // idles regardless. The interval/batch config stays for when a broker
+    // publisher is reintroduced on service extraction.
+    this.enabled = false;
     this.intervalSec = config.get("EVENTS_RELAY_INTERVAL_SEC", { infer: true });
     this.batchSize = config.get("EVENTS_RELAY_BATCH_SIZE", { infer: true });
-    this.stream = config.get("NATS_STREAM", { infer: true });
+    this.stream = "";
     this.isTest = config.get("NODE_ENV", { infer: true }) === "test";
   }
 

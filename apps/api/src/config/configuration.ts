@@ -82,19 +82,11 @@ const EnvSchema = z.object({
   API_KEY_RATE_LIMIT: z.coerce.number().int().positive().default(120),
   API_KEY_TENANT_RATE_LIMIT: z.coerce.number().int().positive().default(600),
 
-  // --- Event plane / NATS JetStream (P2.1 / ADR-0031) ---
-  // The outbox relay publishes to NATS; consumers subscribe. Used by the relay
-  // (P2.1b) — the outbox write side (P2.1a) is pure Postgres and needs no
-  // connection. Default points at the dev compose NATS.
-  NATS_URL: z.string().url().default("nats://localhost:4222"),
-  // Gate the relay's NATS connection + background interval. Off by default so
-  // dev/test/CI don't require a running NATS; the outbox still fills (the relay
-  // simply doesn't drain it). Set true wherever a NATS is reachable.
-  NATS_ENABLED: z
-    .string()
-    .default("false")
-    .transform((v) => v.toLowerCase() === "true"),
-  NATS_STREAM: z.string().default("CMC_EVENTS"),
+  // --- Event plane / outbox relay (P2.1 / ADR-0031; ADR-0080) ---
+  // Cross-module reactions run in-process (Nest EventEmitter). The transactional
+  // outbox still fills inside each transaction as the durability seam, but the
+  // relay has no broker by default (noop publisher), so it idles. These bound a
+  // future relay run when a broker publisher is reintroduced on extraction.
   EVENTS_RELAY_INTERVAL_SEC: z.coerce.number().int().min(0).default(5),
   EVENTS_RELAY_BATCH_SIZE: z.coerce.number().int().positive().default(200),
 

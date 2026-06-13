@@ -2,6 +2,7 @@ import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
 import { APP_INTERCEPTOR } from "@nestjs/core";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { ScheduleModule } from "@nestjs/schedule";
+import { EventEmitterModule } from "@nestjs/event-emitter";
 import { LoggerModule } from "nestjs-pino";
 import { HealthModule } from "./modules/health/health.module";
 import { DatabaseModule } from "./modules/database/database.module";
@@ -63,6 +64,10 @@ import { loadConfig } from "./config/configuration";
 
     // Cron scheduler (P1.11b / ADR-0029) — daily audit Merkle anchoring.
     ScheduleModule.forRoot(),
+
+    // In-process event bus (ADR-0080) — cross-module reactions via @OnEvent,
+    // replacing the NATS broker. Synchronous emit inside the request tx.
+    EventEmitterModule.forRoot(),
 
     // Structured logging (P0.3 / ADR-0010). Reads NODE_ENV + LOG_LEVEL
     // from config; pretty in dev, JSON in prod; injects request_id +
