@@ -59,8 +59,10 @@ ClickHouse, prune docs.
       client wiring and its compose service; keep the projection pattern
       documented for later (ADR note, not code). Dashboard repointed to Postgres;
       anomaly/projection planes removed; full e2e green (47 suites / 348 tests).
-- [ ] **Swap NATS → in-process events** (Nest `EventEmitter`); keep outbox code
-      but off by default; remove NATS from compose.
+- [x] **Swap NATS → in-process events** (Nest `EventEmitter`); keep outbox code
+      but off by default; remove NATS from compose. Domain events carry the
+      in-tx detail so @OnEvent listeners (notifications, realtime fan-out) never
+      re-fetch in a separate tx; full e2e green (47 suites / 346 tests).
 - [ ] **Remove multi-tenancy** *(highest-risk step — do incrementally, tests green
       after each sub-step)*:
   - [ ] Drop `tenants` and `tenant-branding` modules + schema.
