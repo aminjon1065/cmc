@@ -27,10 +27,8 @@ import { GisModule } from "./modules/gis/gis.module";
 import { SearchModule } from "./modules/search/search.module";
 import { WorkflowsModule } from "./modules/workflows/workflows.module";
 import { ApiKeysModule } from "./modules/api-keys/api-keys.module";
-import { WikiModule } from "./modules/wiki/wiki.module";
 import { ImportsModule } from "./modules/imports/imports.module";
 import { ChatModule } from "./modules/chat/chat.module";
-import { CollabModule } from "./modules/collab/collab.module";
 import { RegionsModule } from "./modules/regions/regions.module";
 import { LlmModule } from "./modules/llm/llm.module";
 import { VectorModule } from "./modules/vector/vector.module";
@@ -126,10 +124,8 @@ import { loadConfig } from "./config/configuration";
     SearchModule,
     WorkflowsModule,
     ApiKeysModule,
-    WikiModule,
     ImportsModule,
     ChatModule,
-    CollabModule,
     RegionsModule,
     LlmModule,
     VectorModule,

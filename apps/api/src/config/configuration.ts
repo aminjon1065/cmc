@@ -307,29 +307,6 @@ const EnvSchema = z.object({
   // Hard cap on rows processed per job (protects the worker from huge files).
   IMPORT_MAX_ROWS: z.coerce.number().int().positive().default(50000),
 
-  // --- Realtime collaboration (Hocuspocus / Yjs) (P4.1 / ADR-0060) ---
-  // ENABLED gates the dedicated Hocuspocus WebSocket server (separate from the
-  // P2.3 realtime gateway). Off by default + never in jest; the persistence
-  // service (CollabService) is tested directly. PORT is the server's listen port.
-  HOCUSPOCUS_ENABLED: z
-    .string()
-    .default("false")
-    .transform((v) => v.toLowerCase() === "true"),
-  HOCUSPOCUS_PORT: z.coerce.number().int().positive().default(3002),
-  // Debounce (ms) before snapshotting the live Y.Doc back to the domain row.
-  HOCUSPOCUS_SNAPSHOT_DEBOUNCE_MS: z.coerce
-    .number()
-    .int()
-    .positive()
-    .default(2000),
-  // Public WS URL the browser opens for collaboration (behind Caddy in prod,
-  // e.g. wss://app.example/collab → api:3002; direct in dev).
-  HOCUSPOCUS_PUBLIC_URL: z.string().default("ws://localhost:3002"),
-  // Lifetime of a single-use collaboration connection ticket. Short: it only
-  // needs to survive from BFF mint to WS handshake (the client fetches a fresh
-  // one per (re)connect).
-  HOCUSPOCUS_TICKET_TTL_SECONDS: z.coerce.number().int().positive().default(60),
-
   // --- Auth / JWT ---
   JWT_SECRET: z.string().min(32, "JWT_SECRET must be at least 32 characters"),
   JWT_ACCESS_TTL: z.string().default("15m"),
