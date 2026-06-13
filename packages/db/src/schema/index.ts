@@ -32,7 +32,6 @@ export * from "./cases";
 export * from "./case-activity";
 export * from "./workflows";
 export * from "./workflow-runs";
-export * from "./api-keys";
 export * from "./import-jobs";
 export * from "./import-row-errors";
 export * from "./chat-channels";

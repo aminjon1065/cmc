@@ -12,7 +12,6 @@ import {
 } from "./tenant-context.service";
 import { TenantDatabaseService } from "../../modules/database/tenant-database.service";
 import { SessionCacheService } from "../session-cache/session-cache.service";
-import { hashApiKey, isApiKey } from "../../modules/api-keys/api-key.crypto";
 
 /**
  * Validates the Authorization Bearer JWT (if present), confirms the
@@ -41,21 +40,6 @@ export class TenantContextMiddleware implements NestMiddleware {
 
   async use(req: Request, _res: Response, next: NextFunction) {
     const header = req.headers.authorization;
-
-    // API-key path (P3.9 / ADR-0054): an `X-API-Key` header, or an
-    // `Authorization: Bearer cmc_...` whose token has the API-key prefix.
-    // Checked before JWT so a key in the Bearer slot isn't parsed as a token.
-    const apiKeyHeader = req.headers["x-api-key"];
-    let apiKeySecret: string | undefined;
-    if (typeof apiKeyHeader === "string" && apiKeyHeader.trim()) {
-      apiKeySecret = apiKeyHeader.trim();
-    } else if (header?.startsWith("Bearer ")) {
-      const t = header.slice("Bearer ".length).trim();
-      if (isApiKey(t)) apiKeySecret = t;
-    }
-    if (apiKeySecret && isApiKey(apiKeySecret)) {
-      return this.useApiKey(req, apiKeySecret, next);
-    }
 
     if (!header?.startsWith("Bearer ")) {
       return next();
@@ -159,89 +143,6 @@ export class TenantContextMiddleware implements NestMiddleware {
       email: claims.email,
     };
 
-    req.tenantContext = context;
-    this.tenantContext.run(context, () => next());
-  }
-
-  /**
-   * Authenticate an API key (P3.9 / ADR-0054). Indexed lookup by SHA-256 hash
-   * (privileged — the tenant isn't known yet, same as the session check).
-   * Invalid / revoked / expired / orphaned (no creator) keys fall through as
-   * anonymous; a valid one yields an api-key principal whose permissions are the
-   * key's scopes. Best-effort `last_used_at` bump (fire-and-forget).
-   */
-  private async useApiKey(req: Request, secret: string, next: NextFunction) {
-    const keyHash = hashApiKey(secret);
-    let row:
-      | {
-          id: string;
-          tenantId: string;
-          tenantSlug: string;
-          scopes: unknown;
-          createdBy: string | null;
-          expiresAt: Date | null;
-          revokedAt: Date | null;
-        }
-      | null;
-    try {
-      row = await this.tenantDb.runPrivileged(async (tx) => {
-        const rows = await tx
-          .select({
-            id: schema.apiKeys.id,
-            tenantId: schema.apiKeys.tenantId,
-            tenantSlug: schema.tenants.slug,
-            scopes: schema.apiKeys.scopes,
-            createdBy: schema.apiKeys.createdBy,
-            expiresAt: schema.apiKeys.expiresAt,
-            revokedAt: schema.apiKeys.revokedAt,
-          })
-          .from(schema.apiKeys)
-          .innerJoin(
-            schema.tenants,
-            eq(schema.tenants.id, schema.apiKeys.tenantId),
-          )
-          .where(eq(schema.apiKeys.keyHash, keyHash))
-          .limit(1);
-        return rows[0] ?? null;
-      });
-    } catch (err) {
-      this.logger.error(
-        `API key lookup failed; treating request as anonymous: ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-      );
-      return next();
-    }
-
-    if (
-      !row ||
-      row.revokedAt ||
-      !row.createdBy ||
-      (row.expiresAt && row.expiresAt.getTime() <= Date.now())
-    ) {
-      return next(); // invalid → anonymous; the guard rejects protected routes
-    }
-
-    // Best-effort usage timestamp; never block the request on it.
-    void this.tenantDb
-      .runPrivileged((tx) =>
-        tx
-          .update(schema.apiKeys)
-          .set({ lastUsedAt: sql`now()` })
-          .where(eq(schema.apiKeys.id, row!.id)),
-      )
-      .catch(() => undefined);
-
-    const context: TenantContext = {
-      userId: row.createdBy,
-      tenantId: row.tenantId,
-      tenantSlug: row.tenantSlug,
-      email: "api-key",
-      sessionId: `apikey:${row.id}`,
-      principalType: "apikey",
-      apiKeyId: row.id,
-      apiKeyScopes: (row.scopes ?? []) as string[],
-    };
     req.tenantContext = context;
     this.tenantContext.run(context, () => next());
   }

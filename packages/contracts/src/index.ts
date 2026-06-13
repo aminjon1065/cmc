@@ -26,7 +26,6 @@ export * from "./gis";
 export * from "./search";
 export * from "./folder";
 export * from "./workflow";
-export * from "./api-key";
 export * from "./import";
 export * from "./chat";
 export * from "./llm";

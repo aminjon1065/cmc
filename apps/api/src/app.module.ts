@@ -26,7 +26,6 @@ import { CasesModule } from "./modules/cases/cases.module";
 import { GisModule } from "./modules/gis/gis.module";
 import { SearchModule } from "./modules/search/search.module";
 import { WorkflowsModule } from "./modules/workflows/workflows.module";
-import { ApiKeysModule } from "./modules/api-keys/api-keys.module";
 import { ImportsModule } from "./modules/imports/imports.module";
 import { ChatModule } from "./modules/chat/chat.module";
 import { RegionsModule } from "./modules/regions/regions.module";
@@ -123,7 +122,6 @@ import { loadConfig } from "./config/configuration";
     GisModule,
     SearchModule,
     WorkflowsModule,
-    ApiKeysModule,
     ImportsModule,
     ChatModule,
     RegionsModule,

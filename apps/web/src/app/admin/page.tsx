@@ -4,7 +4,6 @@ import { getTranslations } from "next-intl/server";
 import {
   Building2,
   FileJson2,
-  KeyRound,
   MapPin,
   ShieldCheck,
   Users,
@@ -80,15 +79,6 @@ const SECTIONS: {
     icon: FileJson2,
     available: true,
     phase: "P1.10b",
-  },
-  {
-    id: "api-keys",
-    titleKey: "secApiKeysTitle",
-    descKey: "secApiKeysDesc",
-    href: "/admin/api-keys",
-    icon: KeyRound,
-    available: true,
-    phase: "P3.9",
   },
 ];
 
