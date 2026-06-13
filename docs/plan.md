@@ -55,9 +55,10 @@ ClickHouse, prune docs.
       only; `incidents` + `cases` unwired from the Temporal SLA schedulers.
       Drop migration 0044 removes the 13 descoped tables. Full e2e suite green
       (366/366) on a fresh-migrated DB.
-- [ ] **Defer ClickHouse:** point `analytics` at PostgreSQL; remove the ClickHouse
+- [x] **Defer ClickHouse:** point `analytics` at PostgreSQL; remove the ClickHouse
       client wiring and its compose service; keep the projection pattern
-      documented for later (ADR note, not code).
+      documented for later (ADR note, not code). Dashboard repointed to Postgres;
+      anomaly/projection planes removed; full e2e green (47 suites / 348 tests).
 - [ ] **Swap NATS → in-process events** (Nest `EventEmitter`); keep outbox code
       but off by default; remove NATS from compose.
 - [ ] **Remove multi-tenancy** *(highest-risk step — do incrementally, tests green
