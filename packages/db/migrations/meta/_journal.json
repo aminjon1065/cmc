@@ -316,6 +316,13 @@
       "when": 1781361193598,
       "tag": "0044_drop_descoped_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1781364652292,
+      "tag": "0045_drop_projection_cursors",
+      "breakpoints": true
     }
   ]
 }
