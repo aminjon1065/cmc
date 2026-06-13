@@ -110,33 +110,6 @@ const EnvSchema = z.object({
     .transform((v) => v.toLowerCase() !== "false"),
   REALTIME_MAX_SUBSCRIPTIONS: z.coerce.number().int().positive().default(100),
 
-  // --- ClickHouse — analytical store (P2.5 / ADR-0033) ---
-  // The incident projection consumer (P2.5b) writes events to ClickHouse for
-  // analytics. Gated by CLICKHOUSE_ENABLED so dev/test/CI don't require it.
-  // @clickhouse/client talks the HTTP interface (8123).
-  CLICKHOUSE_ENABLED: z
-    .string()
-    .default("false")
-    .transform((v) => v.toLowerCase() === "true"),
-  CLICKHOUSE_URL: z.string().url().default("http://localhost:8123"),
-  CLICKHOUSE_DATABASE: z.string().default("cmc"),
-  CLICKHOUSE_USER: z.string().default("cmc"),
-  CLICKHOUSE_PASSWORD: z.string().default("cmc_dev_clickhouse_change_me"),
-  // Audit→ClickHouse projection (P2.2 / ADR-0034). Cursor-tail of audit_log.
-  // Interval gates the background worker; flush always runs. 0 disables timer.
-  AUDIT_PROJECTION_INTERVAL_SEC: z.coerce.number().int().min(0).default(15),
-  AUDIT_PROJECTION_BATCH_SIZE: z.coerce.number().int().positive().default(1000),
-
-  // P4.8b: proactive realtime-anomaly detector. When enabled (and ClickHouse is
-  // active), a background scan flags incident-volume anomalies and notifies
-  // `monitoring:read` holders (once per tenant/day/direction). Off by default →
-  // the /v1/analytics/anomalies endpoint still works on-demand.
-  ANALYTICS_ANOMALY_DETECTOR_ENABLED: z
-    .string()
-    .default("false")
-    .transform((v) => v.toLowerCase() === "true"),
-  ANALYTICS_ANOMALY_INTERVAL_SEC: z.coerce.number().int().min(0).default(300),
-
   S3_ENDPOINT: z.string().url(),
   S3_PUBLIC_ENDPOINT: z.string().url().optional(),
   S3_REGION: z.string().default("us-east-1"),

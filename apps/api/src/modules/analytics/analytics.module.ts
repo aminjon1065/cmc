@@ -1,43 +1,19 @@
-import { Global, Module } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
-import {
-  CLICKHOUSE_CLIENT,
-  createClickHouseClient,
-} from "./clickhouse.client";
-import { IncidentProjectionConsumer } from "./incident-projection.consumer";
-import { IncidentProjectionSubscriber } from "./incident-projection.subscriber";
-import { AuditProjectionService } from "./audit-projection.service";
+import { Module } from "@nestjs/common";
 import { DashboardAnalyticsService } from "./dashboard-analytics.service";
-import { AnomalyAlertService } from "./anomaly-alert.service";
 import { AnalyticsController } from "./analytics.controller";
+import { RegionsModule } from "../regions/regions.module";
 
 /**
- * Analytics plane (P2.5 / ADR-0033). Provides the ClickHouse client (real when
- * `CLICKHOUSE_ENABLED`, else a noop) globally + the incident projection consumer
- * that feeds ClickHouse from the event bus (its subscriber runs when both NATS
- * and ClickHouse are enabled).
+ * Analytics plane (ToR v2.0 §5). Operational dashboards computed from
+ * **PostgreSQL** — the incident-volume trend, RLS + region scoped. ClickHouse,
+ * the audit/incident projections, and the realtime-anomaly detector were removed
+ * in ADR-0080 (ClickHouse returns only as a read-only downstream sink if Postgres
+ * aggregation becomes a measured bottleneck — ToR §12).
  */
-@Global()
 @Module({
+  imports: [RegionsModule],
   controllers: [AnalyticsController],
-  providers: [
-    {
-      provide: CLICKHOUSE_CLIENT,
-      inject: [ConfigService],
-      useFactory: createClickHouseClient,
-    },
-    IncidentProjectionConsumer,
-    IncidentProjectionSubscriber,
-    AuditProjectionService,
-    DashboardAnalyticsService,
-    AnomalyAlertService,
-  ],
-  exports: [
-    CLICKHOUSE_CLIENT,
-    IncidentProjectionConsumer,
-    AuditProjectionService,
-    DashboardAnalyticsService,
-    AnomalyAlertService,
-  ],
+  providers: [DashboardAnalyticsService],
+  exports: [DashboardAnalyticsService],
 })
 export class AnalyticsModule {}

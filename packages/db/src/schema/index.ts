@@ -13,7 +13,6 @@ export * from "./audit-chain-anchor";
 export * from "./audit-export-cursor";
 export * from "./outbox";
 export * from "./consumed-events";
-export * from "./projection-cursors";
 export * from "./folders";
 export * from "./folder-grants";
 export * from "./documents";

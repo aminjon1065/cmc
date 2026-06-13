@@ -15,8 +15,6 @@ import type {
   AuditChainVerifyResponse,
   AuditExportFlushResponse,
   AuditExportStatusResponse,
-  AuditProjectionFlushResponse,
-  AuditProjectionStatusResponse,
   AuditSealResponse,
   AuditLogListResponse,
 } from "@cmc/contracts";
@@ -25,7 +23,6 @@ import { ZodError } from "zod";
 import { AuditService } from "./audit.service";
 import { AuditChainService } from "./audit-chain.service";
 import { AuditExportService } from "./audit-export.service";
-import { AuditProjectionService } from "../analytics/audit-projection.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { AuthorizeGuard } from "../../common/authz/authorize.guard";
 import { Authorize } from "../../common/authz/authorize.decorator";
@@ -46,7 +43,6 @@ export class AuditController {
     private readonly audit: AuditService,
     private readonly chain: AuditChainService,
     private readonly exporter: AuditExportService,
-    private readonly projection: AuditProjectionService,
   ) {}
 
   /**
@@ -138,21 +134,6 @@ export class AuditController {
   @Authorize("tenant:manage")
   async exportFlush(): Promise<AuditExportFlushResponse> {
     return this.exporter.flush();
-  }
-
-  /** Audit→ClickHouse projection status: cursor, pending, CH reachable. */
-  @Get("projection/status")
-  @Authorize("tenant:manage")
-  async projectionStatus(): Promise<AuditProjectionStatusResponse> {
-    return this.projection.status();
-  }
-
-  /** Project the next batch of audit rows into ClickHouse. */
-  @Post("projection/flush")
-  @HttpCode(HttpStatus.OK)
-  @Authorize("tenant:manage")
-  async projectionFlush(): Promise<AuditProjectionFlushResponse> {
-    return this.projection.flush();
   }
 
   private resolveDay(date?: string): string {

@@ -64,28 +64,6 @@ export type AuditExportStatusResponse = z.infer<
   typeof AuditExportStatusResponseSchema
 >;
 
-/** Audit → ClickHouse projection status (P2.2 / ADR-0034). */
-export const AuditProjectionStatusResponseSchema = z.object({
-  /** Whether ClickHouse is reachable (projection can run). */
-  active: z.boolean(),
-  /** Highest `audit_log.seq` already projected to ClickHouse. */
-  cursorSeq: z.number().int(),
-  /** Audit rows awaiting projection (`seq > cursor`). */
-  pending: z.number().int(),
-});
-export type AuditProjectionStatusResponse = z.infer<
-  typeof AuditProjectionStatusResponseSchema
->;
-
-export const AuditProjectionFlushResponseSchema = z.object({
-  /** Rows projected to ClickHouse by this flush. */
-  projected: z.number().int(),
-  cursorSeq: z.number().int(),
-});
-export type AuditProjectionFlushResponse = z.infer<
-  typeof AuditProjectionFlushResponseSchema
->;
-
 export const AuditExportFlushResponseSchema = z.object({
   /** Rows shipped by this flush. */
   exported: z.number().int(),

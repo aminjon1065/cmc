@@ -131,8 +131,6 @@ const RESPONSE_SCHEMA: Record<string, string> = {
   "get /v1/audit/anchor/status": "AuditAnchorStatusResponse",
   "get /v1/audit/export/status": "AuditExportStatusResponse",
   "post /v1/audit/export/flush": "AuditExportFlushResponse",
-  "get /v1/audit/projection/status": "AuditProjectionStatusResponse",
-  "post /v1/audit/projection/flush": "AuditProjectionFlushResponse",
   // events relay
   "get /v1/events/relay/status": "EventRelayStatusResponse",
   "post /v1/events/relay/flush": "EventRelayFlushResponse",

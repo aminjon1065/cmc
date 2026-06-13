@@ -5,17 +5,12 @@ import { ownerSql, truncateAll } from "../helpers/test-db";
 import { createTenantWithAdmin, createUser } from "../helpers/test-fixtures";
 import { loginAs, authed } from "../helpers/test-auth";
 import { REDIS } from "../../src/modules/redis/redis.tokens";
-import {
-  CLICKHOUSE_CLIENT,
-  type ClickHouseClient,
-} from "../../src/modules/analytics/clickhouse.client";
-import { DashboardAnalyticsService } from "../../src/modules/analytics/dashboard-analytics.service";
 import { buildDailyTrend } from "../../src/modules/analytics/dashboard-trend";
 
 /**
- * Dashboard analytics (P2.6 / ADR-0036). ClickHouse is faked so the suite never
- * touches CH. Covers the pure gap-fill, the tenant-scoped query, RBAC gating,
- * and graceful degradation when ClickHouse is off.
+ * Dashboard analytics (ToR v2.0 §5; ADR-0080) — now **PostgreSQL**-backed (the
+ * ClickHouse store + anomaly plane were removed). Covers the pure gap-fill, the
+ * RLS + region-scoped incident-trend query, window clamping, and RBAC gating.
  */
 describe("buildDailyTrend (pure)", () => {
   it("gap-fills a continuous window, oldest → newest", () => {
@@ -42,58 +37,38 @@ describe("buildDailyTrend (pure)", () => {
   });
 });
 
-describe("DashboardAnalyticsService — ClickHouse off", () => {
-  it("degrades to source=unavailable with an empty trend", async () => {
-    const noop: ClickHouseClient = {
-      active: false,
-      insert: async () => {},
-      query: async () => [],
-      ping: async () => false,
-      close: async () => {},
-    };
-    const svc = new DashboardAnalyticsService(noop);
-    const res = await svc.dashboard(
-      "11111111-1111-1111-1111-111111111111",
-      14,
-    );
-    expect(res.source).toBe("unavailable");
-    expect(res.windowDays).toBe(14);
-    expect(res.incidentTrend).toEqual([]);
-  });
-});
-
-describe("GET /v1/analytics/dashboard", () => {
+describe("GET /v1/analytics/dashboard (Postgres)", () => {
   let app: INestApplication;
   let sql: ReturnType<typeof ownerSql>;
   let redis: Redis;
   let token: string;
   let tenantId: string;
-  const queries: string[] = [];
 
-  const fakeCh: ClickHouseClient = {
-    active: true,
-    insert: async () => {},
-    query: async <T = Record<string, unknown>>(sql: string): Promise<T[]> => {
-      queries.push(sql);
-      // Return "today" so the point always falls inside the window (robust
-      // regardless of when the suite runs). Count as a string, like CH UInt64.
-      const today = new Date().toISOString().slice(0, 10);
-      return [{ bucket: today, count: "4" }] as unknown as T[];
-    },
-    ping: async () => true,
-    close: async () => {},
+  /** ISO timestamp `offset` whole days before now (UTC). */
+  const daysAgo = (offset: number): string => {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - offset);
+    return d.toISOString();
   };
 
   beforeAll(async () => {
-    app = await buildTestApp((b) =>
-      b.overrideProvider(CLICKHOUSE_CLIENT).useValue(fakeCh),
-    );
+    app = await buildTestApp();
     sql = ownerSql();
     redis = app.get<Redis>(REDIS);
     await truncateAll(sql, redis);
     const { tenant, user } = await createTenantWithAdmin(sql);
     tenantId = tenant.id;
     token = (await loginAs(app, user)).accessToken;
+    // 2 incidents today, 1 yesterday (both inside a 7-day window), 1 thirty
+    // days ago (outside). Inserted via the owner connection (bypasses RLS).
+    await sql`
+      INSERT INTO incidents (tenant_id, severity, type, region, summary, occurred_at)
+      VALUES
+        (${tenantId}, 2, 'fire',  'Dushanbe', 'a', ${daysAgo(0)}),
+        (${tenantId}, 3, 'flood', 'Sughd',    'b', ${daysAgo(0)}),
+        (${tenantId}, 1, 'quake', 'GBAO',     'c', ${daysAgo(1)}),
+        (${tenantId}, 4, 'storm', 'Khatlon',  'd', ${daysAgo(30)})
+    `;
   });
 
   afterAll(async () => {
@@ -101,25 +76,20 @@ describe("GET /v1/analytics/dashboard", () => {
     await sql.end({ timeout: 2 });
   });
 
-  beforeEach(() => {
-    queries.length = 0;
-  });
-
-  it("returns a gap-filled, tenant-scoped trend from ClickHouse", async () => {
+  it("returns a gap-filled, RLS-scoped incident trend from Postgres", async () => {
     const res = await authed(app, token).get("/v1/analytics/dashboard?days=7");
     expect(res.status).toBe(200);
-    expect(res.body.source).toBe("clickhouse");
+    expect(res.body.source).toBe("postgres");
     expect(res.body.windowDays).toBe(7);
     expect(res.body.incidentTrend).toHaveLength(7);
-    // The 2026-06-01 datapoint (count 4) is present; the rest are gap-filled 0.
+    // Only the 3 in-window incidents count; the 30-day-old one is excluded.
     const total = res.body.incidentTrend.reduce(
       (a: number, p: { count: number }) => a + p.count,
       0,
     );
-    expect(total).toBe(4);
-    // Tenant isolation: the query filters on this tenant + the daily MV.
-    expect(queries[0]).toContain(tenantId);
-    expect(queries[0]).toContain("incident_daily_stats_by_region");
+    expect(total).toBe(3);
+    // Newest point (today) carries the 2 incidents occurred today.
+    expect(res.body.incidentTrend.at(-1).count).toBe(2);
   });
 
   it("clamps the window (default 14, max 90)", async () => {

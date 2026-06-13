@@ -51,7 +51,6 @@ export async function truncateAll(
       audit_export_cursor,
       outbox,
       consumed_events,
-      projection_cursors,
       sessions,
       document_versions,
       documents,

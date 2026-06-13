@@ -4,8 +4,6 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { authedApiFetch } from "@/lib/server-api";
 import {
-  type AnomaliesResponse,
-  AnomaliesResponseSchema,
   type DashboardAnalyticsResponse,
   DashboardAnalyticsResponseSchema,
   type IncidentStatsResponse,
@@ -19,7 +17,6 @@ import { KPI } from "@/components/cmc/kpi";
 import { PercentBar } from "@/components/cmc/percent-bar";
 import { TrendChart } from "@/components/cmc/trend-chart";
 import { SeverityBadge } from "@/components/cmc/incident-badges";
-import { AnomaliesWidget } from "./anomalies-widget";
 import { getTranslations } from "next-intl/server";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -66,22 +63,11 @@ async function fetchPriority(): Promise<IncidentSummary[]> {
   }
 }
 
-/** ClickHouse-backed incident trend over the last 14 days (P2.6 / ADR-0036). */
+/** Postgres-backed incident trend over the last 14 days (ToR §5; ADR-0080). */
 async function fetchTrend(): Promise<DashboardAnalyticsResponse | null> {
   try {
     const raw = await authedApiFetch<unknown>("/analytics/dashboard?days=14");
     const parsed = DashboardAnalyticsResponseSchema.safeParse(raw);
-    return parsed.success ? parsed.data : null;
-  } catch {
-    return null;
-  }
-}
-
-/** ClickHouse-backed realtime anomalies (P4.8 / ADR-0066) — widget seed. */
-async function fetchAnomalies(): Promise<AnomaliesResponse | null> {
-  try {
-    const raw = await authedApiFetch<unknown>("/analytics/anomalies");
-    const parsed = AnomaliesResponseSchema.safeParse(raw);
     return parsed.success ? parsed.data : null;
   } catch {
     return null;
@@ -93,13 +79,12 @@ export default async function DashboardPage() {
   const { copy } = await getBranding();
   const t = await getTranslations("dashboard");
   const tc = await getTranslations("common");
-  const [stats, priority, trend, anomalies] = await Promise.all([
+  const [stats, priority, trend] = await Promise.all([
     fetchStats(),
     fetchPriority(),
     fetchTrend(),
-    fetchAnomalies(),
   ]);
-  const trendOk = trend?.source === "clickhouse" && trend.incidentTrend.length > 0;
+  const trendOk = trend?.source === "postgres" && trend.incidentTrend.length > 0;
   const trendTotal = trend?.incidentTrend.reduce((a, p) => a + p.count, 0) ?? 0;
 
   const activeTotal = stats?.activeTotal ?? 0;
@@ -199,11 +184,6 @@ export default async function DashboardPage() {
             )}
           </div>
         </div>
-      </div>
-
-      {/* Realtime anomalies — ClickHouse Z-score detector (P4.8 / ADR-0066) */}
-      <div className="px-5 pt-2.5">
-        <AnomaliesWidget initial={anomalies} />
       </div>
 
       {/* Main grid */}
