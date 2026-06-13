@@ -18,7 +18,6 @@ export * from "./folders";
 export * from "./folder-grants";
 export * from "./documents";
 export * from "./document-versions";
-export * from "./document-embeddings";
 export * from "./rbac";
 export * from "./mfa";
 export * from "./password-resets";

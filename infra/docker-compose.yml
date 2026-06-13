@@ -246,38 +246,6 @@ services:
       retries: 10
       start_period: 10s
 
-  # Full-text search engine (P3.6 / ADR-0051). Single-node, security plugin off
-  # (DEV ONLY). The API's gated indexer/search connect only when
-  # OPENSEARCH_ENABLED; Postgres FTS remains the default search.
-  opensearch:
-    image: opensearchproject/opensearch:2.17.1
-    container_name: cmc-opensearch
-    restart: unless-stopped
-    environment:
-      discovery.type: single-node
-      DISABLE_SECURITY_PLUGIN: "true"
-      DISABLE_INSTALL_DEMO_CONFIG: "true"
-      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
-      bootstrap.memory_lock: "true"
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
-      nofile:
-        soft: 65536
-        hard: 65536
-    ports:
-      - "${OPENSEARCH_PORT:-9200}:9200"
-    volumes:
-      - opensearch_data:/usr/share/opensearch/data
-    healthcheck:
-      test:
-        ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 40s
-
   # Secrets management (P2.14 / ADR-0044). DEV MODE ONLY: in-memory, auto-
   # unsealed, fixed root token — never for production (a prod Vault is HA, sealed,
   # with auto-unseal + AppRole/k8s auth). The API's in-process loader reads a KV
@@ -359,7 +327,6 @@ volumes:
   geoserver_data:
   nats_data:
   clickhouse_data:
-  opensearch_data:
   postgres_data:
     name: cmc-postgres-data
   redis_data:

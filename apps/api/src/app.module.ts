@@ -28,10 +28,6 @@ import { SearchModule } from "./modules/search/search.module";
 import { ImportsModule } from "./modules/imports/imports.module";
 import { ChatModule } from "./modules/chat/chat.module";
 import { RegionsModule } from "./modules/regions/regions.module";
-import { LlmModule } from "./modules/llm/llm.module";
-import { VectorModule } from "./modules/vector/vector.module";
-import { RagModule } from "./modules/rag/rag.module";
-import { CopilotModule } from "./modules/copilot/copilot.module";
 import { BackupsModule } from "./modules/backups/backups.module";
 import { NotificationsModule } from "./modules/notifications/notifications.module";
 import { IncidentNotificationsModule } from "./modules/incident-notifications/incident-notifications.module";
@@ -121,10 +117,6 @@ import { loadConfig } from "./config/configuration";
     ImportsModule,
     ChatModule,
     RegionsModule,
-    LlmModule,
-    VectorModule,
-    RagModule,
-    CopilotModule,
     BackupsModule,
     NotificationsModule,
     IncidentNotificationsModule,
