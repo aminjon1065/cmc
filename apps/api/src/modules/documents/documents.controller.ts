@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -16,14 +15,12 @@ import {
 import type {
   Document,
   DocumentResponse,
-  DocumentSearchResponse,
   DocumentVersionsListResponse,
   DownloadUrlResponse,
   FinalizeUploadResponse,
   InitVersionResponse,
   ListDocumentsResponse,
   MultipartInitResponse,
-  ReindexResponse,
   RetentionSweepResponse,
   UploadInitResponse,
 } from "@cmc/contracts";
@@ -130,25 +127,6 @@ export class DocumentsController {
       documents: result.items.map(toContract),
       total: result.total,
     };
-  }
-
-  /**
-   * OpenSearch-backed document search, post-filtered by folder access (P3.6b).
-   * Declared before `:id` so the literal path isn't captured by the UUID route.
-   */
-  @Get("search")
-  @Authorize("document:read")
-  async search(
-    @Query("q") q?: string,
-    @Query("limit") limit?: string,
-  ): Promise<DocumentSearchResponse> {
-    const query = q?.trim();
-    if (!query) throw new BadRequestException("Query parameter `q` is required.");
-    const r = await this.documents.searchDocuments(
-      query,
-      parsePositiveInt(limit),
-    );
-    return { documents: r.documents.map(toContract), backend: r.backend };
   }
 
   @Get(":id")
@@ -373,16 +351,6 @@ export class DocumentsController {
   ): Promise<DocumentResponse> {
     const doc = await this.documents.setLegalHold(id, body.hold);
     return { document: toContract(doc) };
-  }
-
-  // ---------- search reindex (P3.6) ----------
-
-  /** Re-push the tenant's ready documents into the search index (maintenance). */
-  @Post("reindex")
-  @Authorize("document:write")
-  @HttpCode(HttpStatus.OK)
-  async reindex(): Promise<ReindexResponse> {
-    return this.documents.reindex();
   }
 
   @Delete(":id")

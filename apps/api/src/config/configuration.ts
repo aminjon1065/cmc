@@ -183,18 +183,6 @@ const EnvSchema = z.object({
   RAG_TOP_K: z.coerce.number().int().positive().max(20).default(5),
   RAG_CONTEXT_CHAR_BUDGET: z.coerce.number().int().positive().default(6000),
 
-  // P5.6: document intelligence (text extraction / OCR). Gated seam — when off
-  // (dev/test/CI default), the extractor is a no-op. The real extractor (PDF
-  // text-layer + Tesseract OCR for scans) is a CPU/sovereign live boundary: its
-  // libs (pdf-parse, tesseract.js) are installed on the serving host only.
-  // OCR_LANG is Tesseract's language pack ("eng+rus" for the TJ КЧС by default).
-  DOC_EXTRACT_ENABLED: z
-    .string()
-    .default("false")
-    .transform((v) => v.toLowerCase() === "true"),
-  DOC_EXTRACT_MAX_CHARS: z.coerce.number().int().positive().default(200_000),
-  DOC_EXTRACT_OCR_LANG: z.string().default("eng+rus"),
-
   S3_ENDPOINT: z.string().url(),
   S3_PUBLIC_ENDPOINT: z.string().url().optional(),
   S3_REGION: z.string().default("us-east-1"),

@@ -19,7 +19,6 @@ export * from "./folder-grants";
 export * from "./documents";
 export * from "./document-versions";
 export * from "./document-embeddings";
-export * from "./document-text";
 export * from "./rbac";
 export * from "./mfa";
 export * from "./password-resets";
