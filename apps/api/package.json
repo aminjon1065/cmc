@@ -12,6 +12,7 @@
     "test:watch": "NODE_OPTIONS=--experimental-vm-modules jest --config ./test/jest-e2e.config.js --watch",
     "test:e2e": "NODE_OPTIONS=--experimental-vm-modules jest --config ./test/jest-e2e.config.js",
     "seed": "tsx src/scripts/seed.ts",
+    "seed:demo": "tsx src/scripts/seed-demo.ts",
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {

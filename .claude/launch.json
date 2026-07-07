@@ -3,9 +3,10 @@
   "configurations": [
     {
       "name": "web",
-      "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@cmc/web", "dev"],
-      "port": 3000
+      "runtimeExecutable": "corepack",
+      "runtimeArgs": ["pnpm", "--filter", "@cmc/web", "dev"],
+      "port": 3000,
+      "autoPort": false
     }
   ]
 }
