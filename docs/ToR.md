@@ -36,8 +36,7 @@ The platform is a single, coherent workspace for КЧС ГО РТ that unifies:
   retention, approvals, with a hierarchical file manager.
 - **Operational coordination** — incidents and cases, task delegation along the
   organizational hierarchy (chief → subordinate), notifications.
-- **Internal communication** — chat and notifications now; audio/video later via
-  an integrated self-hosted server (not built in-house).
+- **Internal communication** — chat, notifications, audio/video calls, and meeting recordings via integrated self-hosted server (LiveKit).
 - **Discovery** — fast full-text search across platform objects.
 
 Everything runs **on-premise** on infrastructure controlled by КЧС. No data
@@ -61,7 +60,6 @@ to operate and reason about.
 | **NATS / Kafka event bus** | Cross-module reactions run on an **in-process event emitter**. A network broker is added only if and when a module is extracted into a separate service. |
 | **ClickHouse (OLAP)** | Analytics run on **PostgreSQL** to start. ClickHouse returns later, if and only if Postgres aggregation latency on real data becomes the bottleneck, and then only as a **read-only downstream analytics/log sink** — never the system of record, never under EDMS. |
 | **AI stack** — LLM gateway, vector pipeline, semantic search, RAG, copilot, document intelligence | The AI-based emergency forecasting is explicitly a *later* goal. `pgvector` stays available in Postgres so embeddings can be added later without a new datastore, but no AI module ships now. |
-| **In-house video conferencing & media pipeline** | Audio/video, group meetings, and recording are a large separate product. When needed, integrate a **self-hosted Jitsi (+ Jibri for recording)**, on-prem. Not built in-house. |
 | **Real-time collaborative document editing** | Out of scope for v2.0. Versioned documents + locking are sufficient. |
 | **OpenSearch + federated search** | **PostgreSQL full-text search** covers discovery at this scale. OpenSearch returns only if FTS proves insufficient on real data volume. |
 | **Visual workflow builder, wiki/knowledge base, API-key platform, PWA mobile companion** | None are core to the analyst mission. Deferred; revisit per §12. |
@@ -156,14 +154,12 @@ references go through public APIs or in-process events, never shared tables.
   via the WebSocket gateway.
 - **Realtime gateway** — authenticated WebSocket for presence, notifications,
   live updates.
+- **Video & Media** — self-hosted LiveKit integration for 1:1 and group conferences, screen sharing, and recording.
 
 **Operations**
 - **Health, metrics, backups** — health probes, Prometheus metrics, scheduled
   PostgreSQL backups + restore tooling.
 - **OpenAPI + API versioning** — generated API contract.
-
-> *Video/audio calls* are intentionally **not** a module here — see §2 and §12
-> (integrate self-hosted Jitsi later).
 
 ---
 
@@ -177,8 +173,8 @@ references go through public APIs or in-process events, never shared tables.
   (PostGIS), and document-metadata data. Redis for cache/queues. MinIO for blobs.
 - **Idempotent command handlers and event consumers.** State-mutating actions
   append to the audit log.
-- **Separate processes only where unavoidable, later:** Jitsi (video) and a
-  Python/FastAPI service (ML forecasting) — both out of v2.0 scope.
+- **Separate processes only where unavoidable:** LiveKit (video) and a
+  Python/FastAPI service (ML forecasting) — ML is out of v2.0 scope.
 
 ---
 
@@ -270,7 +266,6 @@ Removed now; each returns only when its trigger is met (and via an ADR).
 | NATS/Kafka broker | A module is actually extracted into a separate service |
 | Temporal | Workflow complexity genuinely exceeds in-app state machines + scheduled jobs |
 | AI: vector / semantic search / RAG / copilot / forecasting | Core platform is in production with real data flowing, and there is a concrete analyst use case to train/serve |
-| Video / audio calls (Jitsi + Jibri) | Real-time AV becomes an operational requirement |
 | Real-time collaborative editing | Multi-user simultaneous editing becomes a real need |
 | Mobile companion (PWA / native) | Field data collection on mobile is prioritized |
 | Wiki / API keys / visual workflow builder | A concrete need is identified and prioritized |

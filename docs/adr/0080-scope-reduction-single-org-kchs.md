@@ -59,7 +59,6 @@ migration, remove infra/compose services, prune now-unused dependencies:
 | `temporal`, `workflows` (Temporal-backed) | Durable-workflow runtime removed; approval/SLA flows are in-app DB state + scheduled jobs. |
 | `llm`, `vector`, `rag`, `copilot` | AI stack (gateway/embeddings/semantic search/RAG/copilot/doc-intelligence) is a *later* goal. `pgvector` stays in Postgres so embeddings can be added later without a new datastore. |
 | `collab` | Real-time collaborative editing out of scope; versioned docs + locking suffice. |
-| `video`, `media` | In-house video/media pipeline removed; integrate self-hosted Jitsi later if AV becomes a requirement. |
 | `api-keys` | No external API-key platform need now. |
 | `wiki` | No wiki/knowledge-base need now. |
 | OpenSearch + federated-search paths | Postgres FTS covers discovery at this scale. |
@@ -92,12 +91,12 @@ control mapping + evidence register) and the sovereign-airgap installer.
 ### 7. Defer PWA mobile companion
 Returns when field data collection on mobile is prioritized (ToR §12).
 
-### Kept as-is (ToR §5 in-scope)
+Kept as-is (ToR §5 in-scope)
 Auth, MFA, password-reset, RBAC, regions, users, audit, database/redis/storage
 plumbing, incidents, cases, notifications, incident-notifications, documents,
 folders, imports, gis (+ vector tile server) / geoserver OGC interop, search
 (Postgres FTS), analytics (re-pointed to Postgres), chat, realtime gateway,
-health/metrics/backups, openapi/versioning, web i18n/theming/preferences.
+video, media, previews, health/metrics/backups, openapi/versioning, web i18n/theming/preferences.
 Tasks/board is **new build** (ToR §5; not yet in code) — added in Phase 3, not here.
 
 ## Superseded ADRs
@@ -109,8 +108,8 @@ aggregation), ADR-0026 (Tempo alerting), ADR-0031 (NATS event plane), ADR-0033
 ADR-0036 (dashboards from ClickHouse), ADR-0045 (Temporal workflows), ADR-0046
 (incident-response Temporal workflow), ADR-0051 (OpenSearch search), ADR-0052
 (federated search), ADR-0053 (visual workflow builder), ADR-0054 (API keys),
-ADR-0055 (wiki), ADR-0060 (realtime collaboration), ADR-0061 (video
-conferencing), ADR-0063 (media management), ADR-0066 (realtime analytics),
+ADR-0055 (wiki), ADR-0060 (realtime collaboration),
+ADR-0066 (realtime analytics),
 ADR-0067 (LLM gateway), ADR-0068 (vector pipeline), ADR-0069 (semantic search),
 ADR-0070 (RAG framework), ADR-0071 (copilot framework), ADR-0072 (document
 intelligence), ADR-0073 (sovereign airgap installer), ADR-0075 (PWA companion).
@@ -136,10 +135,9 @@ Each fully-/partially-superseded ADR will get a `Superseded by ADR-0080` (or
    (a module being removed). It overlaps the in-scope `analytics` dashboards.
    Proposed: **remove** (fold any wanted views into analytics later). Confirm
    remove vs. keep-trimmed (drop the video tile).
-2. **`previews` module (ADR-0043).** Plan says remove "if AV-only". It is **not**
-   AV-only — it renders **document thumbnails** (image/PDF) for the EDMS file
-   manager; video/audio kinds are skipped unless ffmpeg is present. Proposed:
-   **keep** (drop the dormant AV branches). Confirm.
+2. **`previews` module (ADR-0043).** It renders **document thumbnails** (image/PDF) for the EDMS file
+   manager; video/audio kinds are skipped unless ffmpeg is present. Decision:
+   **keep** this module.
 3. **Vault (ADR-0044 loader, ADR-0065 prod).** ToR §9 requires "secrets managed
    outside source"; the dev Vault loader is gated **off** by default. Proposed:
    **keep the optional loader**, **defer** the production-HA Vault (ADR-0065),
